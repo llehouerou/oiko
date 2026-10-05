@@ -61,7 +61,7 @@ Function computed by Oiko from member Functions of the same kind. A member may i
 _Avoid_: Group (reserved for the Bridge's), helper, virtual device
 
 **Flag**:
-Binary Function held by Oiko itself, with no Device or Bridge: on or off, set by a Command from anyone (a Person, a Kiosk, a Program, an Automation) and remembered across restarts. Created, renamed and deleted by a Person; starts off. Always online. Has no Area unless assigned one, and may be a member of an Aggregate of Flags. State private to a single automation is not a Flag.
+Binary Function held by Oiko itself, with no Device or Bridge: on or off, set by a Command from anyone (a Person, a Kiosk, a Program, an Automation) and remembered across restarts. Created, renamed and deleted by an Admin; starts off. Always online. Has no Area unless assigned one, and may be a member of an Aggregate of Flags. State private to a single automation is not a Flag.
 _Avoid_: Mode, helper, input_boolean, variable, virtual switch
 
 **Capability**:
@@ -103,7 +103,7 @@ _Avoid_: outage, hole
 ### Automation
 
 **Automation**:
-Graph of Steps, created and named by a Person, that reacts to what happens in the home by issuing Commands. Refers to Targets by identity, never by Name, and may watch any of them. Enabled or disabled; broken while a Target it refers to is gone, and runaway once it runs too often in a short time. A broken Automation never runs until edited, a runaway one until re-enabled.
+Graph of Steps, created and named by an Admin, that reacts to what happens in the home by issuing Commands. Refers to Targets by identity, never by Name, and may watch any of them. Enabled or disabled; broken while a Target it refers to is gone, and runaway once it runs too often in a short time. A broken Automation never runs until edited, a runaway one until re-enabled.
 _Avoid_: Flow, Rule, Scenario, Script
 
 **Step**:
@@ -111,7 +111,7 @@ One box of an Automation's graph: a trigger, a condition, a timer or an action, 
 _Avoid_: Node, Block
 
 **Code Step**:
-Step running a Starlark `run(trigger, state)` written by a Person. It reaches targets only through aliases bound to them in its params, and fires the output handles it declares. A call that fails issues nothing, fires nothing and keeps its previous state; the error goes into the Trace.
+Step running a Starlark `run(trigger, state)` written by an Admin. It reaches targets only through aliases bound to them in its params, and fires the output handles it declares. A call that fails issues nothing, fires nothing and keeps its previous state; the error goes into the Trace.
 _Avoid_: Function node, Script
 
 **Manual trigger**:
@@ -133,7 +133,7 @@ _Avoid_: alert, message, push
 ### Home
 
 **Area**:
-Room or zone of the home, created and named by a Person, in an order of their choosing. Areas are flat: none contains another. A Device has an Area or none; each of its Functions inherits it unless assigned another one. A Flag or an Aggregate may be assigned one too. Deleting an Area leaves what it held without one. The dashboard shows one section per Area, in their order, and everything without one last.
+Room or zone of the home, created and named by an Admin, in an order of their choosing. Areas are flat: none contains another. A Device has an Area or none; each of its Functions inherits it unless assigned another one. A Flag or an Aggregate may be assigned one too. Deleting an Area leaves what it held without one. The dashboard shows one section per Area, in their order, and everything without one last.
 
 **Area Aggregate**:
 Aggregate Oiko derives for an Area and an aggregated kind (lights, occupancy, doors, temperature, humidity, CO2) from the Functions of that kind in the Area, under a rule fixed per kind: a room's temperature and humidity are its mean, its CO2 its highest. Its members are never stored, its Name is derived, and it exists while it has at least one member, coming back under the same identity when it has one again.
@@ -152,7 +152,7 @@ Display label of a Device, an Aggregate, a Flag, an Area, a Person, a Kiosk or a
 _Avoid_: entity_id, slug as identifier
 
 **Icon**:
-Picture the dashboard shows for a Device or an Aggregate, picked by a Person among the dashboard's own, known to Oiko by its name only. Without one, a light shows a bulb and an Aggregate of lights several. Like a Name, a label: never a reference, never written back to the Bridge.
+Picture the dashboard shows for a Device or an Aggregate, picked by an Admin among the dashboard's own, known to Oiko by its name only. Without one, a light shows a bulb and an Aggregate of lights several. Like a Name, a label: never a reference, never written back to the Bridge.
 _Avoid_: symbol, image
 
 ### Access
@@ -168,3 +168,7 @@ _Avoid_: panel, display, shared device, household account
 **Program**:
 External software, such as Node-RED or a script, calling Oiko's HTTP API under its own identity rather than a Person's. It outlives whoever created it, and what it does is its own doing.
 _Avoid_: Integration, API client, service account, app, token (its credential, not its identity)
+
+**Access level**:
+What a Person, a Kiosk or a Program may do in Oiko: Guest, Member or Admin, a list fixed by Oiko, each allowing everything the one below it does; whoever holds one is called by it (a Guest, an Admin). A Guest observes the home as it is now, issues Commands except on configuration Capabilities, and starts Manual triggers; a Member also reads the home's past (History, Traces, the Commands issued); an Admin also edits the home (Devices, configuration Capabilities, Areas, Layouts, Aggregates, Flags, Automations), sees the Build and Releases, and manages access: Persons, Kiosks, Programs, their credentials and Access levels. A Kiosk is a Guest or a Member, never an Admin; a Program may be an Admin but never manages access, which only a Person does; the last Admin Person can be neither demoted nor removed. Everyone signed in manages their own credentials and Name, never their own Access level.
+_Avoid_: role (reserved for a Capability's), permission, group, right
