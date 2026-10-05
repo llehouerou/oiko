@@ -5,7 +5,7 @@
 //	h := bridgetest.New(b)
 //	go b.Run(ctx, h.Port()) // or hand h.Port() to the part under test
 //	…
-//	if v, _ := h.Value("0xbulb", "light", "state"); v != true { … }
+//	if v, _ := h.Value("0xbulb", "light", "state"); v.Data != true { … }
 //	if err := h.Command("0xbulb", "light", map[string]any{"state": false}); err != nil { … }
 //
 // Env builds what Oiko hands a type's Module.New, to test its creation.
@@ -22,6 +22,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/llehouerou/oiko/bridge"
 	"github.com/llehouerou/oiko/internal/home"
@@ -120,15 +121,22 @@ func (h *Home) Availability(address string) bridge.Availability {
 	return bridge.Unknown
 }
 
+// Value is a Capability's data as Oiko holds it, and when the device sent
+// it: the at of the Report that brought it.
+type Value struct {
+	Data any
+	At   time.Time
+}
+
 // Value is the current Value of Capability capability of Function function
 // ("" for the Device itself) of the Device at address; false if unknown.
-func (h *Home) Value(address, function, capability string) (any, bool) {
+func (h *Home) Value(address, function, capability string) (Value, bool) {
 	s := h.snapshot()
 	return find(s, s.Values, address, function, capability)
 }
 
 // Event is the last occurrence of Stateless Capability capability, as Value.
-func (h *Home) Event(address, function, capability string) (any, bool) {
+func (h *Home) Event(address, function, capability string) (Value, bool) {
 	s := h.snapshot()
 	return find(s, s.Events, address, function, capability)
 }
@@ -181,16 +189,16 @@ func device(s home.Snapshot, address string) (home.DeviceID, bool) {
 	return "", false
 }
 
-func find(s home.Snapshot, values []home.RefValue, address, function, capability string) (any, bool) {
+func find(s home.Snapshot, values []home.RefValue, address, function, capability string) (Value, bool) {
 	id, ok := device(s, address)
 	if !ok {
-		return nil, false
+		return Value{}, false
 	}
 	ref := home.TargetDevice(id, function).Ref(capability)
 	for _, v := range values {
 		if v.Ref == ref {
-			return v.Value.Data, true
+			return Value{v.Value.Data, v.Value.At}, true
 		}
 	}
-	return nil, false
+	return Value{}, false
 }

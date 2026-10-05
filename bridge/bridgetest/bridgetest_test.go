@@ -67,11 +67,12 @@ func TestHomeAppliesOikosRules(t *testing.T) {
 	}
 
 	p.SetOnline(true)
-	p.Report("0xlamp", []bridge.Reading{{Function: "light", Capability: "state", Data: false}, {Function: "light", Capability: "pressed", Data: "single"}}, time.Now())
-	if v, _ := h.Value("0xlamp", "light", "state"); v != false || h.Availability("0xlamp") != bridge.Online {
-		t.Errorf("state %v, availability %s", v, h.Availability("0xlamp"))
+	sent := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC) // when the device sent it, not now
+	p.Report("0xlamp", []bridge.Reading{{Function: "light", Capability: "state", Data: false}, {Function: "light", Capability: "pressed", Data: "single"}}, sent)
+	if v, _ := h.Value("0xlamp", "light", "state"); v.Data != false || !v.At.Equal(sent) || h.Availability("0xlamp") != bridge.Online {
+		t.Errorf("state %+v, availability %s", v, h.Availability("0xlamp"))
 	}
-	if e, _ := h.Event("0xlamp", "light", "pressed"); e != "single" {
+	if e, _ := h.Event("0xlamp", "light", "pressed"); e.Data != "single" || !e.At.Equal(sent) {
 		t.Errorf("event %v", e)
 	}
 	if d := h.Devices(); len(d) != 1 || d[0].Name != "Lamp" || len(d[0].Functions[0].Capabilities) != 3 {
@@ -91,7 +92,7 @@ func TestHomeAppliesOikosRules(t *testing.T) {
 	if err := h.Command("0xlamp", "light", map[string]any{"state": true}); err != nil {
 		t.Errorf("Command: %v", err)
 	}
-	if v, _ := h.Value("0xlamp", "light", "state"); v != true {
+	if v, _ := h.Value("0xlamp", "light", "state"); v.Data != true {
 		t.Errorf("state %v after the Command", v)
 	}
 	l.broken = true
