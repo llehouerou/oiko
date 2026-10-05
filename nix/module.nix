@@ -55,9 +55,9 @@ in
           latitude = 48.86;
           longitude = 2.35;
         };
-        bridges.netatmo = {
-          clientId = "…";
-          clientSecretFile = "/run/credentials/oiko.service/netatmo_client_secret";
+        telegram = {
+          tokenFile = "/run/credentials/oiko.service/telegram_token";
+          chatIdFile = "/run/credentials/oiko.service/telegram_chat_id";
         };
       };
       description = ''
@@ -72,7 +72,8 @@ in
       type = lib.types.attrsOf lib.types.str; # strings, so no secret lands in the store
       default = { };
       example = {
-        netatmo_client_secret = "/run/secrets/netatmo";
+        telegram_token = "/run/secrets/telegram-token";
+        telegram_chat_id = "/run/secrets/telegram-chat-id";
       };
       description = ''
         Files holding secrets, by name, that the service reads as
