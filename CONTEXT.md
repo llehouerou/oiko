@@ -193,6 +193,10 @@ _Avoid_: magic link, login link, login code, token, invitation
 The single-use link a fresh Oiko prints to its log while it has no Admin; whoever opens it becomes its first Admin. It stays valid until used or until Oiko restarts.
 _Avoid_: setup code, claim link, invitation
 
+**Public URL**:
+The HTTPS address at which a household reaches its Oiko, through a reverse proxy, and the only one where anyone signs in (`http://localhost` aside); its host is what the Passkeys are bound to. Every Oiko needs one to sign anyone in, even one never exposed to the internet.
+_Avoid_: base URL, external URL, origin, domain
+
 **Session**:
 A browser signed in to the dashboard as a Person or a Kiosk, from sign-in until it is signed out, revoked or expires. One device may hold several, one per browser.
 _Avoid_: login, signed-in device (as the term), token, cookie
