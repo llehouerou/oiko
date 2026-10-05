@@ -131,7 +131,7 @@ Record of one Run: its trigger, each Step it went through with the evidence for 
 _Avoid_: Log, Execution, History (reserved for a Target's past)
 
 **Notification**:
-Message an Automation sends on Telegram: a title and a text, which may name the Target that started its Run. Sent once, never retried, after the Run: its Trace shows what was sent, and one Telegram refuses is only logged. Without Telegram configured, it fails its Run.
+Message an Automation sends to the home's one Telegram chat, never to a Person: a title and a text, which may name the Target that started its Run. Sent once, never retried, after the Run: its Trace shows what was sent, and one Telegram refuses is only logged. Without Telegram configured, it fails its Run.
 _Avoid_: alert, message, push
 
 ### Home
