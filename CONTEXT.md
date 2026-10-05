@@ -180,3 +180,7 @@ _Avoid_: password, key, token, login
 **Sign-in link**:
 A single-use link, or its QR code, that signs one Person in on one device and expires 15 minutes after a signed-in device creates it.
 _Avoid_: magic link, login link, login code, token
+
+**Session**:
+A browser signed in to the dashboard as a Person or a Kiosk, from sign-in until it is signed out, revoked or expires. One device may hold several, one per browser.
+_Avoid_: login, signed-in device (as the term), token, cookie
