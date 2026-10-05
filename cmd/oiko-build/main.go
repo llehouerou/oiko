@@ -1,7 +1,7 @@
 // Command oiko-build builds an Oiko with types of Bridge added to the
 // built-in ones (ADR 0017):
 //
-//	go run github.com/llehouerou/oiko/cmd/oiko-build@v0.1.0 \
+//	go run github.com/llehouerou/oiko/cmd/oiko-build@v0.3.0 \
 //		-with example.com/oiko-hue@v1.2.0 -o oiko
 //
 // It builds the Oiko it comes from, unless -oiko names another version, or a

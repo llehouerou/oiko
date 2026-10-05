@@ -111,10 +111,14 @@ make dev                           # API on :8080 + UI with hot reload on http:/
 make test
 make build                         # single ./oiko binary with the UI embedded
 go test -run=^$ -bench=. ./internal/zigbee2mqtt   # hot-path latency
-scripts/release v0.2.0             # tags a release carrying the built web client (ADR 0018)
+scripts/release v0.3.1             # tags a release carrying the built web client (ADR 0018)
 ```
 
 ### Add a type of Bridge
+
+Types written outside Oiko, such as `github.com/llehouerou/oiko-arlo` for Arlo cameras, are
+listed in the [catalogue](https://llehouerou.github.io/oiko-catalogue/), with what to paste
+to add each one.
 
 A type of Bridge is a Go package of its own implementing `bridge.Bridge`, which registers
 itself from `init` (package [`bridge`](bridge/bridge.go), ADR 0017; `internal/netatmo` is a
@@ -122,10 +126,10 @@ small example). `oiko-build` builds an Oiko with it, given the version of its mo
 1.27 needed):
 
 ```sh
-go run github.com/llehouerou/oiko/cmd/oiko-build@v0.1.0 -with example.com/oiko-hue@v1.2.0 -o oiko
+go run github.com/llehouerou/oiko/cmd/oiko-build@v0.3.0 -with example.com/oiko-hue@v1.2.0 -o oiko
 ```
 
-It builds the Oiko of its own version, or `-oiko v0.2.0`. While developing, give
+It builds the Oiko of its own version, or `-oiko v0.3.1`. While developing, give
 directories instead: `-oiko ../oiko -with example.com/oiko-hue=../oiko-hue` (a checkout's
 web client is there once `make build` has run in it).
 
