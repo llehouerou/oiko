@@ -1,0 +1,25 @@
+{
+  "name": "Night mode",
+  "enabled": true,
+  "steps": [
+    {"id": "lights-off", "kind": "valueTrigger", "name": "Lights off", "params": {"target": "aggregate:all-but-veranda", "capability": "state", "op": "eq", "value": false}},
+    {"id": "night-window", "kind": "timeWindow", "name": "Night?", "params": {"from": "21:00", "to": "06:00"}},
+    {"id": "delay", "kind": "timer", "name": "15 min", "params": {"duration": 900, "reentry": "keep"}},
+    {"id": "still-night", "kind": "timeWindow", "name": "Still night?", "params": {"from": "21:00", "to": "06:00"}},
+    {"id": "no-guest", "kind": "valueCondition", "name": "No guest?", "params": {"target": "flag:guest", "capability": "on", "op": "eq", "value": false}},
+    {"id": "night-on", "kind": "command", "name": "Night on", "params": {"targets": ["flag:night"], "values": {"on": true}}},
+    {"id": "lights-on", "kind": "valueTrigger", "name": "A light on", "params": {"target": "aggregate:all-but-veranda", "capability": "state", "op": "eq", "value": true}},
+    {"id": "morning", "kind": "timeTrigger", "name": "06:00", "params": {"at": "06:00", "catchUp": true}},
+    {"id": "night-off", "kind": "command", "name": "Night off", "params": {"targets": ["flag:night"], "values": {"on": false}}}
+  ],
+  "edges": [
+    {"from": {"step": "lights-off", "handle": "out"}, "to": {"step": "night-window", "handle": "in"}},
+    {"from": {"step": "night-window", "handle": "true"}, "to": {"step": "delay", "handle": "start"}},
+    {"from": {"step": "delay", "handle": "fired"}, "to": {"step": "still-night", "handle": "in"}},
+    {"from": {"step": "still-night", "handle": "true"}, "to": {"step": "no-guest", "handle": "in"}},
+    {"from": {"step": "no-guest", "handle": "true"}, "to": {"step": "night-on", "handle": "in"}},
+    {"from": {"step": "lights-on", "handle": "out"}, "to": {"step": "delay", "handle": "cancel"}},
+    {"from": {"step": "lights-on", "handle": "out"}, "to": {"step": "night-off", "handle": "in"}},
+    {"from": {"step": "morning", "handle": "out"}, "to": {"step": "night-off", "handle": "in"}}
+  ]
+}

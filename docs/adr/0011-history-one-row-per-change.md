@@ -1,0 +1,21 @@
+# History: one row per change in the history database
+
+The History of every Target lives in the SQLite database of ADR 0006 (`history.db`). It is written by the same single writer, through the same bounded buffer, as Traces and Commands, and it is kept indefinitely. Commands are no longer purged; Traces keep their 30 days. Measured volume (about 4 M changes and under 100 MB a year) puts no pressure on storage, so v1 stores every change exactly: no compression, no rollups, no chunked blobs. Every derived view is computed at read time.
+
+**Layout.** `series(id INTEGER PRIMARY KEY, target TEXT, capability TEXT, UNIQUE (target, capability))` and `points(series, ts, value, PRIMARY KEY (series, ts)) WITHOUT ROWID`, so the points of a series are clustered in time order and a range is one seek and one scan. All series share that one table: a Capability's Values, a stateless Capability's Events (the value is the Event, e.g. `double`), and a Target's Availability, which is the series with the empty capability key `''`, a key no Capability can have. `value` relies on SQLite's per-row typing: REAL for numeric, 0/1 for binary, TEXT for enum and text, JSON TEXT for composite and list. The Capability's type tells the reader how to decode it. `ts` is Unix nanoseconds, like `runs` and `commands`.
+
+**What gets written.** The writer keeps the last recorded point of each series in memory and receives every Value Update, refreshes included, through `Home.Follow` and a hand-off that never waits. It records a Value or an Availability only when it differs from the last *recorded* one, and an Event on every occurrence. A stamp at or before the series' last point is clamped to that point plus 1 ns, so `ts` strictly increases per series and never collides. Comparing against what was recorded rather than trusting Home's change flag repairs a dropped point at the next refresh, and it also gives the "only if it differs" rule for Replayed Values. The writer starts from Follow's Updates and ignores the Snapshot.
+
+**Gaps.** `gaps(start, end, lost)`. The writer updates a single-row `alive` mark every minute and at a clean stop. At start, it records a Gap from that mark to now, so after a crash the Gap starts up to a minute early. Points dropped by the hand-off (buffer full) or by a failed insert become one Gap spanning the first to the last drop, with their count. A lost Trace or Command is not a Gap. A Replayed point stamped inside a Gap is kept at its reported time.
+
+**Lifecycle.** The History follows a Replace or a Delete Home applied through Home's Updates, never dropped (ADR 0016; until then, the API handler queued it and waited for room). Replace merges the temporary Device's series into the kept identity's series with the same Function and Capability keys, and moves the rest under the kept identity. Delete removes the Target's series and points in one transaction.
+
+**Budget.** On the write side, the hand-off never waits; there is no drop during a burst of 1000 reports or zigbee2mqtt's startup replay; the writer sustains 100 changes/s. On the read side, against a synthetic 3-year database (~12 M points, ~300 series) on the home server: one Function's year, bucketed, under 100 ms; the 24 h mini-series of every tile under 200 ms; a Timeline week of every Function under 300 ms; per-day energy over a month under 50 ms. The write side is held by tests, the read side by a benchmark run before the read API is built.
+
+## Considered Options
+
+- **A table per kind of series** (numeric, text, Events, Availability): typed columns, but four write paths and four range queries for what is one shape.
+- **Unix seconds in 4 bytes**: saves about 16 MB a year, but hits 2038 and needs another key for Events within one second.
+- **Trusting Home's ValueChanged**: fewer hand-offs, but a dropped change stays wrong until the next real change.
+- **A separate database file or a second writer**: isolates the indefinite data from Trace churn, at the cost of two files to back up, cross-file reads to put Commands over a curve, or two writers contending for SQLite's single write lock.
+- **auto_vacuum**: the file only grows, and the pages freed by the Trace purge are reused, so there is nothing to give back.

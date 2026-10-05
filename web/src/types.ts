@@ -1,0 +1,252 @@
+// Mirrors the JSON of internal/home.
+
+export type Availability = 'online' | 'offline' | 'unknown'
+
+export interface Capability {
+  key: string
+  label: string
+  type: 'binary' | 'numeric' | 'enum' | 'text' | 'composite' | 'list'
+  unit?: string
+  min?: number
+  max?: number
+  step?: number
+  options?: string[]
+  fields?: Capability[]
+  access: { observable: boolean; settable: boolean; queryable: boolean }
+  category: 'primary' | 'config' | 'diagnostic'
+  stateless?: boolean
+  counter?: boolean // a numeric running total, rising except on reset
+}
+
+export interface Fn {
+  key: string
+  kind: string
+  area?: string // its Device's when absent
+  capabilities: Capability[]
+}
+
+// A room or zone of the home; Areas come in the occupant's order.
+export interface Area {
+  id: string
+  name: string
+  hidden?: Target[] // tiles the dashboard folds away
+  hiddenAggregates?: string[] // kinds whose Area Aggregate its header leaves out
+  columns?: number // of its Layout; the dashboard's default when absent
+  layout?: Placement[] // the tiles the occupant placed
+}
+
+// Where a tile sits in its Area's Layout: its first cell, from 0, and how many columns and rows it spans.
+export interface Placement {
+  tile: Target
+  col: number
+  row: number
+  width: number
+  height?: number // one row when absent
+}
+
+export interface Device {
+  id: string
+  name: string
+  icon?: string // the dashboard's default when absent
+  area?: string
+  nativeAddress: string
+  model?: string
+  vendor?: string
+  detached?: boolean
+  functions: Fn[] | null
+  capabilities: Capability[] | null
+}
+
+export type { Target } from './targets'
+import type { Target } from './targets'
+
+// A Capability of a Target.
+export interface Ref {
+  target: Target
+  capability: string
+}
+
+export interface Aggregate {
+  id: string
+  name: string
+  icon?: string // the dashboard's default when absent
+  area?: string
+  derived?: boolean // an Area Aggregate: it follows its Area, members and name included
+  members: Target[] // Functions, Flags or nested Aggregates
+  binary: 'any' | 'all'
+  numeric: 'mean' | 'min' | 'max' | 'sum'
+  kind?: string
+  capabilities?: Capability[]
+}
+
+// A binary Function held by Oiko itself: kind 'flag', one Capability 'on'.
+export interface Flag {
+  id: string
+  name: string
+  area?: string
+  kind: string
+  capabilities: Capability[]
+}
+
+export interface Value {
+  data: unknown
+  at: string // when last reported
+  since?: string // when it took its data: how long a state has held; an Event has none
+}
+
+export type CommandStatus = 'pending' | 'confirmed' | 'failed' | 'timed_out' | 'superseded'
+
+export interface CommandState {
+  id: string
+  target: Target
+  status: CommandStatus
+  origin?: Origin
+  error?: string
+}
+
+// What issued a Command: a Step of an Automation in one of its Runs, or the API.
+export type Origin = 'api' | { automation: string; step: string; run: string }
+
+// Mirrors home.CommandRecord: a Command as the Command history keeps it.
+export interface CommandRecord extends CommandState {
+  values?: Record<string, unknown>
+  transition?: number
+  time: string
+}
+
+// Mirrors home.RunEnd.
+export interface RunEnd {
+  automation: string
+  run: string
+  time: string
+  outcome: 'acted' | 'nothing' | 'error'
+  trigger: RunTrigger
+  commands: number // how many it issued
+}
+
+// Mirrors home.Trigger: what started a Run.
+export interface RunTrigger {
+  step: string // the trigger, or the timing Step whose deadline came due
+  kind: string
+  target: Target // '' for a time trigger
+  capability: string
+  value: unknown // the Value, or the Event for an event trigger
+  time: string // when it happened, or was scheduled
+  catchUp?: boolean
+  skipped?: number
+}
+
+// Mirrors automation.Trace: a Run's trigger, then each Step it reached, in order.
+export interface Trace {
+  run: string
+  automation: string
+  time: string
+  outcome: RunEnd['outcome']
+  trigger: RunTrigger
+  steps: Reached[]
+}
+
+// Mirrors automation.Reached: a Step a Run went through, with its evidence.
+export interface Reached {
+  step: string
+  fired: string[] | null
+  read?: unknown
+  at?: string // when the Value read was reported
+  unknown?: boolean
+  action?: string
+  until?: string
+  commands?: { target: Target; id?: string; values?: Record<string, unknown>; refused?: string; status?: CommandStatus }[]
+  error?: string
+  print?: string
+  notification?: { title: string; message: string } // what a notify Step sent
+}
+
+// Mirrors automation.StepState: what a Step remembers between Runs.
+export interface StepState {
+  step: string
+  kind: string
+  deadline?: string
+  passed?: { target?: Target; at: string }[]
+  last?: string
+  enabled?: boolean
+  schedule?: { at: string; on: boolean }[]
+  state?: unknown
+}
+
+// Mirrors home.AutomationStatus.
+export interface AutomationStatus {
+  id: string
+  status: 'enabled' | 'disabled' | 'broken' | 'runaway'
+  reason?: string // why it is broken
+  step?: string // the Step it is broken at
+  since?: string // when it became runaway
+}
+
+// Mirrors build.Build, served with Oiko's Install and the type of each Bridge of the configuration.
+export interface Build {
+  version?: string // Oiko's; none when unknown
+  types: { type: string; builtIn: boolean; package: string; module?: string; version?: string }[]
+  install: 'nixos' | 'docker' | 'binary' // how this Oiko runs on its host (OIKO_INSTALL)
+  bridges: Record<string, string> // each one's type, by name
+}
+// Mirrors release.Status: what the module proxy lists of a module built into Oiko, Oiko's first.
+export interface ReleaseStatus {
+  module: string
+  current?: string // the version built in; none when unknown
+  newest?: string // its newest Release that cannot break current; none when unknown
+  breaking?: string // its newest Release that may break current, if any
+  newer: boolean // newest is newer than current
+}
+
+export interface Snapshot {
+  kind: 'snapshot'
+  seq: number
+  bridges: Record<string, boolean> // whether each is online, by name
+  devices: Device[]
+  aggregates: Aggregate[]
+  flags: Flag[]
+  areas: Area[]
+  availability: Record<Target, Availability> // of each Device, Aggregate and Flag
+  values: { ref: Ref; value: Value }[]
+  events: { ref: Ref; value: Value }[]
+  automations: AutomationStatus[]
+  releases: ReleaseStatus[]
+}
+
+// Sent again each time a check finds something else; not an Update.
+export interface Releases {
+  kind: 'releases'
+  releases: ReleaseStatus[]
+}
+
+export interface Update {
+  seq: number
+  kind:
+    | 'devices'
+    | 'aggregates'
+    | 'flags'
+    | 'areas'
+    | 'value'
+    | 'refresh'
+    | 'event'
+    | 'availability'
+    | 'bridge'
+    | 'command'
+    | 'automations'
+    | 'run'
+    | 'deleted'
+    | 'replaced'
+  ref?: Ref
+  value?: Value
+  target?: Target // with availability: a Device, an Aggregate or a Flag
+  availability?: Availability
+  bridge?: string // with bridgeOnline
+  bridgeOnline?: boolean
+  command?: CommandState
+  devices?: Device[]
+  aggregates?: Aggregate[]
+  flags?: Flag[]
+  areas?: Area[]
+  automations?: AutomationStatus[]
+  run?: RunEnd
+}

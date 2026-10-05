@@ -1,0 +1,18 @@
+{
+  "name": "Bedroom Bob switch",
+  "enabled": true,
+  "steps": [
+    {"id": "on", "kind": "eventTrigger", "name": "Dimmer on", "params": {"target": "device:switch-bob/button", "capability": "action", "events": ["on_press_release"]}},
+    {"id": "on-lights", "kind": "command", "name": "Lights on", "params": {"targets": ["device:lamp-bob/light", "device:ceiling-bob/light"], "values": {"state": true, "brightness": 254, "color_temp": 200}, "transition": 0.5}},
+    {"id": "on-plug", "kind": "command", "name": "Floor lamp on", "params": {"targets": ["device:plug-floor-lamp-bob/switch"], "values": {"state": true}}},
+    {"id": "off", "kind": "eventTrigger", "name": "Dimmer off", "params": {"target": "device:switch-bob/button", "capability": "action", "events": ["off_press_release"]}},
+    {"id": "off-lights", "kind": "command", "name": "Lights off", "params": {"targets": ["device:lamp-bob/light", "device:ceiling-bob/light"], "values": {"state": false}, "transition": 0.5}},
+    {"id": "off-plug", "kind": "command", "name": "Floor lamp off", "params": {"targets": ["device:plug-floor-lamp-bob/switch"], "values": {"state": false}}}
+  ],
+  "edges": [
+    {"from": {"step": "on", "handle": "out"}, "to": {"step": "on-lights", "handle": "in"}},
+    {"from": {"step": "on", "handle": "out"}, "to": {"step": "on-plug", "handle": "in"}},
+    {"from": {"step": "off", "handle": "out"}, "to": {"step": "off-lights", "handle": "in"}},
+    {"from": {"step": "off", "handle": "out"}, "to": {"step": "off-plug", "handle": "in"}}
+  ]
+}

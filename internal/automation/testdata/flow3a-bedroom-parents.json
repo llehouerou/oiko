@@ -1,0 +1,24 @@
+{
+  "name": "Parents' bedroom switch",
+  "enabled": true,
+  "steps": [
+    {"id": "on", "kind": "eventTrigger", "name": "Dimmer on", "params": {"target": "device:switch-parents/button", "capability": "action", "events": ["on_press_release"]}},
+    {"id": "on-both", "kind": "command", "name": "Bedsides on", "params": {"targets": ["device:bedside-dave/light", "device:bedside-carol/light"], "values": {"state": true, "brightness": 254, "color_temp": 500}, "transition": 0.5}},
+    {"id": "off", "kind": "eventTrigger", "name": "Dimmer off", "params": {"target": "device:switch-parents/button", "capability": "action", "events": ["off_press_release"]}},
+    {"id": "off-both", "kind": "command", "name": "Bedsides off", "params": {"targets": ["device:bedside-dave/light", "device:bedside-carol/light"], "values": {"state": false}, "transition": 0.5}},
+    {"id": "up-hold", "kind": "eventTrigger", "name": "Dimmer up held", "params": {"target": "device:switch-parents/button", "capability": "action", "events": ["up_hold_release"]}},
+    {"id": "dave-off", "kind": "command", "name": "Bedside Dave off", "params": {"targets": ["device:bedside-dave/light"], "values": {"state": false}, "transition": 0.5}},
+    {"id": "carol-nightlight", "kind": "command", "name": "Nightlight Carol", "params": {"targets": ["device:bedside-carol/light"], "values": {"state": true, "brightness": 1, "color_temp": 500}, "transition": 0.5}},
+    {"id": "down-hold", "kind": "eventTrigger", "name": "Dimmer down held", "params": {"target": "device:switch-parents/button", "capability": "action", "events": ["down_hold_release"]}},
+    {"id": "carol-off", "kind": "command", "name": "Bedside Carol off", "params": {"targets": ["device:bedside-carol/light"], "values": {"state": false}, "transition": 0.5}},
+    {"id": "dave-nightlight", "kind": "command", "name": "Nightlight Dave", "params": {"targets": ["device:bedside-dave/light"], "values": {"state": true, "brightness": 1, "color_temp": 500}, "transition": 0.5}}
+  ],
+  "edges": [
+    {"from": {"step": "on", "handle": "out"}, "to": {"step": "on-both", "handle": "in"}},
+    {"from": {"step": "off", "handle": "out"}, "to": {"step": "off-both", "handle": "in"}},
+    {"from": {"step": "up-hold", "handle": "out"}, "to": {"step": "dave-off", "handle": "in"}},
+    {"from": {"step": "up-hold", "handle": "out"}, "to": {"step": "carol-nightlight", "handle": "in"}},
+    {"from": {"step": "down-hold", "handle": "out"}, "to": {"step": "carol-off", "handle": "in"}},
+    {"from": {"step": "down-hold", "handle": "out"}, "to": {"step": "dave-nightlight", "handle": "in"}}
+  ]
+}

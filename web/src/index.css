@@ -1,0 +1,9 @@
+@import 'tailwindcss';
+
+/* A span being dragged across a History curve. */
+.uplot .u-select {
+  background: rgb(251 191 36 / 0.15);
+  box-shadow:
+    inset 1px 0 #fbbf24,
+    inset -1px 0 #fbbf24;
+}

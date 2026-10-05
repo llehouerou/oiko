@@ -1,0 +1,8 @@
+/oiko
+/result
+/data/
+/.direnv/
+web/node_modules/
+web/tsconfig.tsbuildinfo
+web/dist/*
+!web/dist/.gitkeep

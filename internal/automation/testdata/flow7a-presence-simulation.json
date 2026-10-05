@@ -1,0 +1,24 @@
+{
+  "name": "Presence simulation",
+  "enabled": true,
+  "steps": [
+    {"id": "holiday-on", "kind": "valueTrigger", "name": "Holiday on", "params": {"target": "flag:holiday", "capability": "on", "op": "eq", "value": true}},
+    {"id": "holiday-off", "kind": "valueTrigger", "name": "Holiday off", "params": {"target": "flag:holiday", "capability": "on", "op": "eq", "value": false}},
+    {"id": "veranda", "kind": "presenceSimulation", "name": "Veranda", "params": {"from": "18:00", "to": "21:00", "minBlocks": 4, "maxBlocks": 6, "minDuration": 1800, "maxDuration": 2700}},
+    {"id": "living", "kind": "presenceSimulation", "name": "Living room", "params": {"from": "18:00", "to": "22:00", "minBlocks": 4, "maxBlocks": 6, "minDuration": 1800, "maxDuration": 2700}},
+    {"id": "veranda-on", "kind": "command", "name": "Veranda on", "params": {"targets": ["aggregate:veranda"], "values": {"state": true, "brightness": 254}, "transition": 1}},
+    {"id": "veranda-off", "kind": "command", "name": "Veranda off", "params": {"targets": ["aggregate:veranda"], "values": {"state": false}, "transition": 15}},
+    {"id": "living-on", "kind": "command", "name": "Living room on", "params": {"targets": ["device:light-living/light", "device:light-entrance/light", "device:ceiling-entrance/light", "device:ceiling-living/light"], "values": {"state": true, "brightness": 254}, "transition": 1}},
+    {"id": "living-off", "kind": "command", "name": "Living room off", "params": {"targets": ["device:light-living/light", "device:light-entrance/light", "device:ceiling-entrance/light", "device:ceiling-living/light"], "values": {"state": false}, "transition": 15}}
+  ],
+  "edges": [
+    {"from": {"step": "holiday-on", "handle": "out"}, "to": {"step": "veranda", "handle": "enable"}},
+    {"from": {"step": "holiday-on", "handle": "out"}, "to": {"step": "living", "handle": "enable"}},
+    {"from": {"step": "holiday-off", "handle": "out"}, "to": {"step": "veranda", "handle": "disable"}},
+    {"from": {"step": "holiday-off", "handle": "out"}, "to": {"step": "living", "handle": "disable"}},
+    {"from": {"step": "veranda", "handle": "on"}, "to": {"step": "veranda-on", "handle": "in"}},
+    {"from": {"step": "veranda", "handle": "off"}, "to": {"step": "veranda-off", "handle": "in"}},
+    {"from": {"step": "living", "handle": "on"}, "to": {"step": "living-on", "handle": "in"}},
+    {"from": {"step": "living", "handle": "off"}, "to": {"step": "living-off", "handle": "in"}}
+  ]
+}

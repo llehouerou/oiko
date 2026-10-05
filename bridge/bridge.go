@@ -1,0 +1,228 @@
+// Package bridge is the contract between Oiko and its Bridges (ADR 0017, and
+// CONTEXT.md for the vocabulary): what a Bridge implements, the Port through
+// which it feeds Oiko, the terms its Devices are described in, and the
+// registry through which a type of Bridge is compiled into Oiko. It depends
+// on the standard library only.
+//
+// A type of Bridge is a Go package that registers its Module from init:
+//
+//	func init() {
+//		bridge.Register(bridge.Module{Type: "hue", New: newBridge})
+//	}
+//
+// An Oiko built with it imports that package for its side effect and runs
+// oiko.Main; the configuration then creates its Bridges by type.
+package bridge
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"maps"
+	"net/url"
+	"runtime"
+	"slices"
+	"strings"
+	"time"
+)
+
+// Bridge is an external system that makes Devices known to Oiko and relays
+// their messages.
+type Bridge interface {
+	// Run follows the external system and feeds Oiko through port until ctx
+	// is cancelled. It reconnects by itself and reports trouble through
+	// port.SetOnline and its own logs: Oiko never restarts it.
+	Run(ctx context.Context, port Port)
+	// Send transmits a Command's values, keyed by Capability key, to
+	// Function function ("" for the Device itself) of the Device at address,
+	// with the transition requested (0 for none). Oiko only sends values the
+	// Capabilities accept, a toggle already resolved to true or false, and
+	// one Send at a time per Function or Device; Sends for different ones may
+	// run concurrently. An error fails the Command; otherwise it waits for a
+	// Report confirming it.
+	Send(address, function string, values map[string]any, transition time.Duration) error
+}
+
+// Port is how one Bridge feeds Oiko: what it describes and reports concerns
+// its own Devices only. Its methods are safe for concurrent use.
+type Port interface {
+	// SyncDevices hands Oiko the full list of the Bridge's Devices. Those it
+	// no longer lists become Detached; reports for a Device not listed yet
+	// are ignored.
+	SyncDevices(devices []Device)
+	// SetOnline tells whether the external system is reachable; while it is
+	// not, the Availability of each of its Devices is unknown, and Commands
+	// to them are refused. A Bridge starts offline.
+	SetOnline(online bool)
+	// SetAvailability records the reachability of the Device at address.
+	SetAvailability(address string, a Availability)
+	// Report records Values and Events of the Device at address as of at,
+	// when the device sent them, and confirms the Commands they satisfy.
+	Report(address string, readings []Reading, at time.Time)
+	// Replayed tells Oiko the Bridge has handed it its Replay: its Devices'
+	// state is as known as it will get. Oiko's automations wait for every
+	// Bridge's, at most about 10 s. Later calls change nothing.
+	Replayed()
+}
+
+// Device is a physical device as its Bridge describes it. Oiko gives it its
+// identity, and keeps its Name, Icon and Areas, by NativeAddress.
+type Device struct {
+	NativeAddress string // its identifier within the Bridge
+	Name          string // its label in the Bridge, the Name of a new Device in Oiko
+	Model         string
+	Vendor        string
+	Functions     []Function
+	Capabilities  []Capability // device-level: configuration and diagnostics
+}
+
+// Function is what a Device does for the occupant. Key is kind + endpoint,
+// e.g. "light" or "switch/l2", unique within its Device; Kind ("light",
+// "occupancy", "temperature"…) and the Capability keys shape its Tile
+// (ADR 0014).
+type Function struct {
+	Key          string
+	Kind         string
+	Capabilities []Capability
+}
+
+// Reading is a Capability's value reported by a Bridge: of Function
+// Function, or of the Device itself when Function is "". Data is typed as
+// the Capability's Type says; a Stateless Capability's reading is an Event.
+type Reading struct {
+	Function   string
+	Capability string
+	Data       any
+}
+
+// Availability is the reachability of a Device.
+type Availability string
+
+const (
+	Online  Availability = "online"
+	Offline Availability = "offline"
+	Unknown Availability = "unknown"
+)
+
+// ValueType is the type of a Capability's values, and of their Go
+// representation.
+type ValueType string
+
+const (
+	Binary    ValueType = "binary"    // bool
+	Numeric   ValueType = "numeric"   // float64
+	Enum      ValueType = "enum"      // string, one of the Options
+	Text      ValueType = "text"      // string
+	Composite ValueType = "composite" // map[string]any, keyed by the Fields' keys
+	List      ValueType = "list"      // []any
+)
+
+type Category string
+
+const (
+	Primary    Category = "primary"
+	Config     Category = "config"
+	Diagnostic Category = "diagnostic"
+)
+
+type Access struct {
+	Observable bool `json:"observable"` // reported by the device
+	Settable   bool `json:"settable"`
+	Queryable  bool `json:"queryable"`
+}
+
+// Capability is a typed property of a Function, or of a Device for
+// configuration and diagnostic properties. Key is unique within its owner.
+type Capability struct {
+	Key       string       `json:"key"`
+	Label     string       `json:"label"`
+	Type      ValueType    `json:"type"`
+	Unit      string       `json:"unit,omitempty"`
+	Min       *float64     `json:"min,omitempty"`
+	Max       *float64     `json:"max,omitempty"`
+	Step      *float64     `json:"step,omitempty"`
+	Options   []string     `json:"options,omitempty"`  // Enum values
+	Triggers  []string     `json:"triggers,omitempty"` // Options that trigger a one-off action, never reported as the Value
+	Fields    []Capability `json:"fields,omitempty"`   // Composite members
+	Access    Access       `json:"access"`
+	Category  Category     `json:"category"`
+	Stateless bool         `json:"stateless,omitempty"` // emits Events, has no Value
+	Counter   bool         `json:"counter,omitempty"`   // a numeric running total that only rises, except on reset
+}
+
+// Env is what Oiko hands a Bridge it creates, or one of its Commands.
+type Env struct {
+	Name    string          // the Bridge's name in the configuration, recorded on its Devices
+	Config  json.RawMessage // its section of the configuration, "type" included
+	DataDir string          // a directory of its own, for what it keeps: tokens, sessions, pairings
+}
+
+// Module is a type of Bridge compiled into Oiko.
+type Module struct {
+	Type string // what the configuration names it by
+	// New creates a Bridge, which Oiko then runs. It reports a configuration
+	// it cannot work with, so that Oiko refuses to start.
+	New func(env Env) (Bridge, error)
+	// Commands are run by name from the command line, on a Bridge of this
+	// type, while Oiko is not serving: `oiko <bridge> <command> [args]`.
+	Commands map[string]func(env Env, args []string) error
+}
+
+// registered is a Module and the package that registered it.
+type registered struct {
+	Module
+	pkg string
+}
+
+var modules = map[string]registered{}
+
+// Register makes a type of Bridge known to Oiko. It is called from init and
+// panics on a type registered twice. The package calling it is recorded as
+// the type's: Oiko reports the module and version it comes from.
+func Register(m Module) {
+	if _, dup := modules[m.Type]; dup || m.Type == "" || m.New == nil {
+		panic(fmt.Sprintf("bridge: Register %q: duplicate, or no type or New", m.Type))
+	}
+	pc := make([]uintptr, 1)
+	runtime.Callers(2, pc)
+	frame, _ := runtime.CallersFrames(pc).Next()
+	modules[m.Type] = registered{m, packageOf(frame.Function)}
+}
+
+// packageOf is the package path of fn, a function's qualified name such as
+// "example.com/oiko-hue.init.0", where Go escapes the dots of the path's last
+// element as %2e.
+func packageOf(fn string) string {
+	slash := strings.LastIndex(fn, "/") + 1
+	dot := strings.Index(fn[slash:], ".")
+	if dot < 0 {
+		return fn
+	}
+	pkg, err := url.PathUnescape(fn[:slash+dot])
+	if err != nil {
+		return fn[:slash+dot]
+	}
+	return pkg
+}
+
+// Lookup finds the Module registered under type t.
+func Lookup(t string) (Module, bool) {
+	r, ok := modules[t]
+	return r.Module, ok
+}
+
+// Registered is a type of Bridge compiled into Oiko and the Go package that
+// registered it.
+type Registered struct {
+	Type    string
+	Package string
+}
+
+// Types lists the types of Bridge compiled into Oiko, by type.
+func Types() []Registered {
+	var types []Registered
+	for _, t := range slices.Sorted(maps.Keys(modules)) {
+		types = append(types, Registered{t, modules[t].pkg})
+	}
+	return types
+}

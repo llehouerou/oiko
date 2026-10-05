@@ -1,0 +1,11 @@
+{
+  "name": "Siren auto-reset",
+  "enabled": true,
+  "steps": [
+    {"id": "ringing", "kind": "valueTrigger", "name": "Siren on for 5 min", "params": {"target": "device:alarm/alarm", "capability": "alarm", "op": "eq", "value": true, "heldFor": 300}},
+    {"id": "off", "kind": "command", "name": "Siren off", "params": {"targets": ["device:alarm/alarm"], "values": {"alarm": false}}}
+  ],
+  "edges": [
+    {"from": {"step": "ringing", "handle": "out"}, "to": {"step": "off", "handle": "in"}}
+  ]
+}

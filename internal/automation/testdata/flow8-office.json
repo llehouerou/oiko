@@ -1,0 +1,16 @@
+{
+  "name": "Office button",
+  "enabled": true,
+  "steps": [
+    {"id": "single", "kind": "eventTrigger", "name": "Single", "params": {"target": "device:button-office/button", "capability": "action", "events": ["single"]}},
+    {"id": "toggle", "kind": "command", "name": "Toggle strip and lamp, each on its own", "params": {"targets": ["device:office-strip/light", "device:lamp-office/light"], "values": {"state": "toggle"}}},
+    {"id": "long", "kind": "eventTrigger", "name": "Long", "params": {"target": "device:button-office/button", "capability": "action", "events": ["long"]}},
+    {"id": "work-strip", "kind": "command", "name": "Work: strip", "params": {"targets": ["device:office-strip/light"], "values": {"state": true, "brightness": 254, "color_temp": 199}, "transition": 0.5}},
+    {"id": "work-lamp", "kind": "command", "name": "Work: lamp", "params": {"targets": ["device:lamp-office/light"], "values": {"state": true, "brightness": 254, "color_temp": 195}, "transition": 0.5}}
+  ],
+  "edges": [
+    {"from": {"step": "single", "handle": "out"}, "to": {"step": "toggle", "handle": "in"}},
+    {"from": {"step": "long", "handle": "out"}, "to": {"step": "work-strip", "handle": "in"}},
+    {"from": {"step": "long", "handle": "out"}, "to": {"step": "work-lamp", "handle": "in"}}
+  ]
+}

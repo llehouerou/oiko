@@ -1,0 +1,14 @@
+{
+  "name": "Vacuum charger by the sun",
+  "enabled": true,
+  "steps": [
+    {"id": "dusk", "kind": "sunTrigger", "name": "Dusk", "params": {"event": "dusk", "catchUp": true}},
+    {"id": "off", "kind": "command", "name": "Charger off", "params": {"targets": ["device:plug-vacuum-charger/switch"], "values": {"state": false}}},
+    {"id": "dawn", "kind": "sunTrigger", "name": "Dawn", "params": {"event": "dawn", "catchUp": true}},
+    {"id": "on", "kind": "command", "name": "Charger on", "params": {"targets": ["device:plug-vacuum-charger/switch"], "values": {"state": true}}}
+  ],
+  "edges": [
+    {"from": {"step": "dusk", "handle": "out"}, "to": {"step": "off", "handle": "in"}},
+    {"from": {"step": "dawn", "handle": "out"}, "to": {"step": "on", "handle": "in"}}
+  ]
+}

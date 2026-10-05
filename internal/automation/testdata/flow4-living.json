@@ -1,0 +1,24 @@
+{
+  "name": "Living room switch",
+  "enabled": true,
+  "steps": [
+    {"id": "on", "kind": "eventTrigger", "name": "On", "params": {"target": "device:switch-living/button", "capability": "action", "events": ["on_press_release"]}},
+    {"id": "living-on", "kind": "command", "name": "Living room on", "params": {"targets": ["device:light-living/light", "device:light-entrance/light", "device:ceiling-entrance/light", "device:ceiling-living/light"], "values": {"state": true, "brightness": 254, "color_temp": 303}, "transition": 0.5}},
+    {"id": "office-on", "kind": "command", "name": "Office on", "params": {"targets": ["device:office-strip/light", "device:lamp-office/light", "device:ceiling-office/light"], "values": {"state": true}, "transition": 0.5}},
+    {"id": "off", "kind": "eventTrigger", "name": "Off", "params": {"target": "device:switch-living/button", "capability": "action", "events": ["off_press_release"]}},
+    {"id": "all-off", "kind": "command", "name": "Office and living off", "params": {"targets": ["device:office-strip/light", "device:lamp-office/light", "device:ceiling-office/light", "device:light-living/light", "device:light-entrance/light", "device:ceiling-entrance/light", "device:ceiling-living/light"], "values": {"state": false}, "transition": 0.5}},
+    {"id": "on-hold", "kind": "eventTrigger", "name": "On held", "params": {"target": "device:switch-living/button", "capability": "action", "events": ["on_hold_release"]}},
+    {"id": "tv-living", "kind": "command", "name": "TV in the evening: living", "params": {"targets": ["device:light-living/light"], "values": {"state": true, "brightness": 254, "color_temp": 284}, "transition": 0.5}},
+    {"id": "tv-off", "kind": "command", "name": "TV in the evening: the rest off", "params": {"targets": ["device:ceiling-office/light", "device:ceiling-entrance/light", "device:ceiling-living/light", "device:light-entrance/light"], "values": {"state": false}, "transition": 0.5}},
+    {"id": "off-hold", "kind": "eventTrigger", "name": "Off held", "params": {"target": "device:switch-living/button", "capability": "action", "events": ["off_hold_release"]}},
+    {"id": "late-evening", "kind": "command", "name": "Toggle Late evening", "params": {"targets": ["flag:late-evening"], "values": {"on": "toggle"}}}
+  ],
+  "edges": [
+    {"from": {"step": "on", "handle": "out"}, "to": {"step": "living-on", "handle": "in"}},
+    {"from": {"step": "on", "handle": "out"}, "to": {"step": "office-on", "handle": "in"}},
+    {"from": {"step": "off", "handle": "out"}, "to": {"step": "all-off", "handle": "in"}},
+    {"from": {"step": "on-hold", "handle": "out"}, "to": {"step": "tv-living", "handle": "in"}},
+    {"from": {"step": "on-hold", "handle": "out"}, "to": {"step": "tv-off", "handle": "in"}},
+    {"from": {"step": "off-hold", "handle": "out"}, "to": {"step": "late-evening", "handle": "in"}}
+  ]
+}

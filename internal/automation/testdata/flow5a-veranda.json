@@ -1,0 +1,36 @@
+{
+  "name": "Veranda motion lighting",
+  "enabled": true,
+  "steps": [
+    {"id": "motion", "kind": "valueTrigger", "name": "Motion", "params": {"target": "aggregate:motion-veranda", "capability": "occupancy", "op": "eq", "value": true}},
+    {"id": "lit", "kind": "valueCondition", "name": "Lights on?", "params": {"target": "aggregate:veranda", "capability": "state", "op": "eq", "value": true}},
+    {"id": "dark", "kind": "valueCondition", "name": "Dark?", "params": {"target": "device:lux-sensor/illuminance", "capability": "illuminance", "op": "lt", "value": 100}},
+    {"id": "late-evening", "kind": "valueCondition", "name": "Late evening?", "params": {"target": "flag:late-evening", "capability": "on", "op": "eq", "value": true}},
+    {"id": "guest", "kind": "valueCondition", "name": "Guest?", "params": {"target": "flag:guest", "capability": "on", "op": "eq", "value": true}},
+    {"id": "day", "kind": "timeWindow", "name": "Day?", "params": {"from": "06:00", "to": "21:00"}},
+    {"id": "all-on", "kind": "command", "name": "All on", "params": {"targets": ["aggregate:veranda"], "values": {"state": true, "brightness": 254, "color_temp": 200}, "transition": 0.5}},
+    {"id": "long", "kind": "timer", "name": "15 min", "params": {"duration": 900, "reentry": "restart"}},
+    {"id": "fade-slow", "kind": "command", "name": "Off over 15 min", "params": {"targets": ["aggregate:veranda"], "values": {"state": false}, "transition": 900}},
+    {"id": "partial-on", "kind": "command", "name": "Veranda 1 and 2 on", "params": {"targets": ["device:veranda-1/light", "device:veranda-2/light"], "values": {"state": true, "brightness": 254, "color_temp": 200}, "transition": 0.5}},
+    {"id": "short", "kind": "timer", "name": "5 min", "params": {"duration": 300, "reentry": "restart"}},
+    {"id": "fade-fast", "kind": "command", "name": "Off over 1 min", "params": {"targets": ["aggregate:veranda"], "values": {"state": false}, "transition": 60}}
+  ],
+  "edges": [
+    {"from": {"step": "motion", "handle": "out"}, "to": {"step": "lit", "handle": "in"}},
+    {"from": {"step": "lit", "handle": "true"}, "to": {"step": "late-evening", "handle": "in"}},
+    {"from": {"step": "lit", "handle": "false"}, "to": {"step": "dark", "handle": "in"}},
+    {"from": {"step": "dark", "handle": "true"}, "to": {"step": "late-evening", "handle": "in"}},
+    {"from": {"step": "late-evening", "handle": "true"}, "to": {"step": "all-on", "handle": "in"}},
+    {"from": {"step": "late-evening", "handle": "false"}, "to": {"step": "guest", "handle": "in"}},
+    {"from": {"step": "guest", "handle": "true"}, "to": {"step": "all-on", "handle": "in"}},
+    {"from": {"step": "guest", "handle": "false"}, "to": {"step": "day", "handle": "in"}},
+    {"from": {"step": "day", "handle": "true"}, "to": {"step": "all-on", "handle": "in"}},
+    {"from": {"step": "day", "handle": "false"}, "to": {"step": "partial-on", "handle": "in"}},
+    {"from": {"step": "all-on", "handle": "then"}, "to": {"step": "long", "handle": "start"}},
+    {"from": {"step": "all-on", "handle": "then"}, "to": {"step": "short", "handle": "cancel"}},
+    {"from": {"step": "partial-on", "handle": "then"}, "to": {"step": "short", "handle": "start"}},
+    {"from": {"step": "partial-on", "handle": "then"}, "to": {"step": "long", "handle": "cancel"}},
+    {"from": {"step": "long", "handle": "fired"}, "to": {"step": "fade-slow", "handle": "in"}},
+    {"from": {"step": "short", "handle": "fired"}, "to": {"step": "fade-fast", "handle": "in"}}
+  ]
+}

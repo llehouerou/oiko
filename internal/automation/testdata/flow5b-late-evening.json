@@ -1,0 +1,11 @@
+{
+  "name": "Late evening ends at 06:00",
+  "enabled": true,
+  "steps": [
+    {"id": "morning", "kind": "timeTrigger", "name": "06:00", "params": {"at": "06:00", "catchUp": true}},
+    {"id": "off", "kind": "command", "name": "Late evening off", "params": {"targets": ["flag:late-evening"], "values": {"on": false}}}
+  ],
+  "edges": [
+    {"from": {"step": "morning", "handle": "out"}, "to": {"step": "off", "handle": "in"}}
+  ]
+}

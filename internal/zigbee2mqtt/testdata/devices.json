@@ -1,0 +1,95 @@
+[
+  {"ieee_address": "0x00124b0000000000", "type": "Coordinator", "friendly_name": "Coordinator", "definition": null},
+  {
+    "ieee_address": "0x0017880100000001", "type": "Router", "friendly_name": "kitchen_bulb",
+    "definition": {"model": "9290022166", "vendor": "Philips", "exposes": [
+      {"type": "light", "features": [
+        {"type": "binary", "name": "state", "label": "State", "property": "state", "value_on": "ON", "value_off": "OFF", "value_toggle": "TOGGLE", "access": 7},
+        {"type": "numeric", "name": "brightness", "label": "Brightness", "property": "brightness", "value_min": 0, "value_max": 254, "access": 7},
+        {"type": "numeric", "name": "color_temp", "label": "Color temp", "property": "color_temp", "unit": "mired", "value_min": 153, "value_max": 500, "access": 7},
+        {"type": "numeric", "name": "color_temp_startup", "label": "Color temp startup", "property": "color_temp_startup", "unit": "mired", "value_min": 153, "value_max": 500, "access": 7, "presets": [{"name": "previous", "value": 65535, "description": "Restore previous color_temp on cold power on"}]},
+        {"type": "composite", "name": "color_xy", "label": "Color (X/Y)", "property": "color", "access": 7, "features": [
+          {"type": "numeric", "name": "x", "label": "X", "property": "x", "access": 7},
+          {"type": "numeric", "name": "y", "label": "Y", "property": "y", "access": 7}]},
+        {"type": "composite", "name": "color_hs", "label": "Color (HS)", "property": "color", "access": 7, "features": [
+          {"type": "numeric", "name": "hue", "label": "Hue", "property": "hue", "access": 7},
+          {"type": "numeric", "name": "saturation", "label": "Saturation", "property": "saturation", "access": 7}]}
+      ]},
+      {"type": "enum", "name": "effect", "label": "Effect", "property": "effect", "values": ["blink", "breathe", "okay"], "access": 2},
+      {"type": "enum", "name": "power_on_behavior", "label": "Power-on behavior", "property": "power_on_behavior", "values": ["off", "on", "toggle", "previous"], "access": 7, "category": "config"},
+      {"type": "numeric", "name": "linkquality", "label": "Linkquality", "property": "linkquality", "unit": "lqi", "value_min": 0, "value_max": 255, "access": 1, "category": "diagnostic"}
+    ]}
+  },
+  {
+    "ieee_address": "0xa4c1380000000002", "type": "Router", "friendly_name": "desk_plug",
+    "definition": {"model": "TS011F_plug_1", "vendor": "Tuya", "exposes": [
+      {"type": "switch", "features": [
+        {"type": "binary", "name": "state", "label": "State", "property": "state", "value_on": "ON", "value_off": "OFF", "value_toggle": "TOGGLE", "access": 7}]},
+      {"type": "numeric", "name": "power", "label": "Power", "property": "power", "unit": "W", "access": 5},
+      {"type": "numeric", "name": "energy", "label": "Energy", "property": "energy", "unit": "kWh", "access": 5},
+      {"type": "numeric", "name": "produced_energy", "label": "Produced energy", "property": "produced_energy", "unit": "kWh", "access": 5},
+      {"type": "binary", "name": "child_lock", "label": "Child lock", "property": "child_lock", "value_on": "LOCK", "value_off": "UNLOCK", "access": 3},
+      {"type": "numeric", "name": "linkquality", "label": "Linkquality", "property": "linkquality", "unit": "lqi", "access": 1, "category": "diagnostic"}
+    ]}
+  },
+  {
+    "ieee_address": "0x00158d0000000003", "type": "EndDevice", "friendly_name": "living_room_climate",
+    "definition": {"model": "WSDCGQ11LM", "vendor": "Aqara", "exposes": [
+      {"type": "numeric", "name": "temperature", "label": "Temperature", "property": "temperature", "unit": "°C", "access": 1},
+      {"type": "numeric", "name": "humidity", "label": "Humidity", "property": "humidity", "unit": "%", "access": 1},
+      {"type": "numeric", "name": "pressure", "label": "Pressure", "property": "pressure", "unit": "hPa", "access": 1},
+      {"type": "numeric", "name": "battery", "label": "Battery", "property": "battery", "unit": "%", "value_min": 0, "value_max": 100, "access": 1, "category": "diagnostic"},
+      {"type": "numeric", "name": "voltage", "label": "Voltage", "property": "voltage", "unit": "mV", "access": 1, "category": "diagnostic"},
+      {"type": "numeric", "name": "linkquality", "label": "Linkquality", "property": "linkquality", "unit": "lqi", "access": 1, "category": "diagnostic"}
+    ]}
+  },
+  {
+    "ieee_address": "0x00158d0000000004", "type": "Router", "friendly_name": "hallway_switch",
+    "definition": {"model": "QBKG03LM", "vendor": "Aqara", "exposes": [
+      {"type": "switch", "endpoint": "left", "features": [
+        {"type": "binary", "name": "state", "label": "State", "property": "state_left", "endpoint": "left", "value_on": "ON", "value_off": "OFF", "access": 7}]},
+      {"type": "switch", "endpoint": "right", "features": [
+        {"type": "binary", "name": "state", "label": "State", "property": "state_right", "endpoint": "right", "value_on": "ON", "value_off": "OFF", "access": 7}]},
+      {"type": "enum", "name": "operation_mode", "label": "Operation mode", "property": "operation_mode_left", "endpoint": "left", "values": ["control_relay", "decoupled"], "access": 7, "category": "config"},
+      {"type": "numeric", "name": "device_temperature", "label": "Device temperature", "property": "device_temperature", "unit": "°C", "access": 1, "category": "diagnostic"},
+      {"type": "enum", "name": "action", "label": "Action", "property": "action", "values": ["single_left", "single_right", "single_both"], "access": 1, "category": "diagnostic"},
+      {"type": "numeric", "name": "linkquality", "label": "Linkquality", "property": "linkquality", "unit": "lqi", "access": 1, "category": "diagnostic"}
+    ]}
+  },
+  {
+    "ieee_address": "0x000d6f0000000005", "type": "EndDevice", "friendly_name": "bedroom_remote",
+    "definition": {"model": "E1743", "vendor": "IKEA", "exposes": [
+      {"type": "enum", "name": "action", "label": "Action", "property": "action", "values": ["on", "off", "brightness_move_up", "brightness_stop"], "access": 1, "category": "diagnostic"},
+      {"type": "numeric", "name": "battery", "label": "Battery", "property": "battery", "unit": "%", "access": 1, "category": "diagnostic"},
+      {"type": "numeric", "name": "linkquality", "label": "Linkquality", "property": "linkquality", "unit": "lqi", "access": 1, "category": "diagnostic"}
+    ]}
+  },
+  {
+    "ieee_address": "0x001788010000000a", "type": "EndDevice", "friendly_name": "veranda_motion",
+    "definition": {"model": "9290012607", "vendor": "Philips", "exposes": [
+      {"type": "binary", "name": "occupancy", "label": "Occupancy", "property": "occupancy", "value_on": true, "value_off": false, "access": 1},
+      {"type": "numeric", "name": "illuminance", "label": "Illuminance", "property": "illuminance", "unit": "lx", "access": 1},
+      {"type": "numeric", "name": "temperature", "label": "Temperature", "property": "temperature", "unit": "°C", "access": 1},
+      {"type": "enum", "name": "motion_sensitivity", "label": "Motion sensitivity", "property": "motion_sensitivity", "values": ["low", "medium", "high"], "access": 7, "category": "config"},
+      {"type": "numeric", "name": "battery", "label": "Battery", "property": "battery", "unit": "%", "access": 1, "category": "diagnostic"},
+      {"type": "numeric", "name": "linkquality", "label": "Linkquality", "property": "linkquality", "unit": "lqi", "access": 1, "category": "diagnostic"}
+    ]}
+  },
+  {
+    "ieee_address": "0x00158d000000000b", "type": "EndDevice", "friendly_name": "front_door",
+    "definition": {"model": "MCCGQ11LM", "vendor": "Aqara", "exposes": [
+      {"type": "binary", "name": "contact", "label": "Contact", "property": "contact", "value_on": false, "value_off": true, "access": 1},
+      {"type": "numeric", "name": "battery", "label": "Battery", "property": "battery", "unit": "%", "access": 1, "category": "diagnostic"},
+      {"type": "numeric", "name": "linkquality", "label": "Linkquality", "property": "linkquality", "unit": "lqi", "access": 1, "category": "diagnostic"}
+    ]}
+  },
+  {
+    "ieee_address": "0xa4c138000000000c", "type": "EndDevice", "friendly_name": "dual_probe",
+    "definition": {"model": "TS0201", "vendor": "Tuya", "exposes": [
+      {"type": "numeric", "name": "temperature", "label": "Temperature", "property": "temperature_l1", "endpoint": "l1", "unit": "°C", "access": 1},
+      {"type": "numeric", "name": "temperature", "label": "Temperature", "property": "temperature_l2", "endpoint": "l2", "unit": "°C", "access": 1},
+      {"type": "numeric", "name": "linkquality", "label": "Linkquality", "property": "linkquality", "unit": "lqi", "access": 1, "category": "diagnostic"}
+    ]}
+  },
+  {"ieee_address": "0x0000000000000006", "type": "EndDevice", "friendly_name": "mystery", "definition": null}
+]

@@ -1,0 +1,26 @@
+{"accessories": [{"aid": 1, "services": [
+  {"type": "0000003E-0000-1000-8000-0026BB765291", "iid": 1, "characteristics": [
+    {"type": "00000014-0000-1000-8000-0026BB765291", "iid": 2, "format": "bool", "perms": ["pw"]},
+    {"type": "00000020-0000-1000-8000-0026BB765291", "iid": 3, "format": "string", "perms": ["pr"], "value": "Aqara"},
+    {"type": "00000021-0000-1000-8000-0026BB765291", "iid": 4, "format": "string", "perms": ["pr"], "value": "PS-S02D"},
+    {"type": "00000023-0000-1000-8000-0026BB765291", "iid": 5, "format": "string", "perms": ["pr"], "value": "Presence-Sensor-FP2-1A2B"},
+    {"type": "00000030-0000-1000-8000-0026BB765291", "iid": 6, "format": "string", "perms": ["pr"], "value": "54EF44000000"}
+  ]},
+  {"type": "000000A2-0000-1000-8000-0026BB765291", "iid": 16, "characteristics": [
+    {"type": "00000037-0000-1000-8000-0026BB765291", "iid": 18, "format": "string", "perms": ["pr"], "value": "1.1.0"}
+  ]},
+  {"type": "00000086-0000-1000-8000-0026BB765291", "iid": 2692, "characteristics": [
+    {"type": "00000023-0000-1000-8000-0026BB765291", "iid": 2693, "format": "string", "perms": ["pr"], "value": "Zone 1"},
+    {"type": "00000071-0000-1000-8000-0026BB765291", "iid": 2694, "format": "uint8", "perms": ["pr", "ev"], "value": 0},
+    {"type": "C8622A33-826A-4DD3-9BE9-D496361F29BB", "iid": 2695, "format": "uint8", "perms": ["pr", "hd"], "value": 1}
+  ]},
+  {"type": "00000084-0000-1000-8000-0026BB765291", "iid": 2672, "characteristics": [
+    {"type": "00000023-0000-1000-8000-0026BB765291", "iid": 2673, "format": "string", "perms": ["pr"], "value": "Light Sensor"},
+    {"type": "0000006B-0000-1000-8000-0026BB765291", "iid": 2674, "format": "float", "perms": ["pr", "ev"], "value": 212.5}
+  ]},
+  {"type": "00000086-0000-1000-8000-0026BB765291", "iid": 2688, "characteristics": [
+    {"type": "00000023-0000-1000-8000-0026BB765291", "iid": 2689, "format": "string", "perms": ["pr"], "value": "Occupancy Sensor"},
+    {"type": "00000071-0000-1000-8000-0026BB765291", "iid": 2690, "format": "uint8", "perms": ["pr", "ev"], "value": 1},
+    {"type": "C8622A33-826A-4DD3-9BE9-D496361F29BB", "iid": 2691, "format": "uint8", "perms": ["pr", "hd"], "value": 0}
+  ]}
+]}]}

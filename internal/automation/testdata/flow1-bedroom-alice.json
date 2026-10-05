@@ -1,0 +1,46 @@
+{
+  "name": "Bedroom Alice buttons",
+  "enabled": true,
+  "steps": [
+    {"id": "on", "kind": "eventTrigger", "name": "Dimmer on", "params": {"target": "device:switch-alice/button", "capability": "action", "events": ["on_press_release"]}},
+    {"id": "on-bulbs", "kind": "command", "name": "Bedside and ceiling on", "params": {"targets": ["device:bedside-alice/light", "device:ceiling-alice/light"], "values": {"state": true, "brightness": 254, "color_temp": 500}, "transition": 0.5}},
+    {"id": "on-lamp", "kind": "command", "name": "Lamp on", "params": {"targets": ["device:lamp-alice/light"], "values": {"state": true, "brightness": 254, "color_temp": 454}, "transition": 0.5}},
+
+    {"id": "off", "kind": "eventTrigger", "name": "Dimmer off", "params": {"target": "device:switch-alice/button", "capability": "action", "events": ["off_press_release"]}},
+    {"id": "off-room", "kind": "command", "name": "Room off", "params": {"targets": ["aggregate:bedroom-alice"], "values": {"state": false}, "transition": 0.5}},
+
+    {"id": "on-hold", "kind": "eventTrigger", "name": "Dimmer on held", "params": {"target": "device:switch-alice/button", "capability": "action", "events": ["on_hold_release"]}},
+    {"id": "long", "kind": "eventTrigger", "name": "Button long", "params": {"target": "device:button-alice/button", "capability": "action", "events": ["long"]}},
+    {"id": "nightlight-lamp", "kind": "command", "name": "Nightlight: lamp", "params": {"targets": ["device:lamp-alice/light"], "values": {"state": true, "brightness": 3, "color_temp": 454}, "transition": 0.5}},
+    {"id": "nightlight-off", "kind": "command", "name": "Nightlight: others off", "params": {"targets": ["device:bedside-alice/light", "device:ceiling-alice/light"], "values": {"state": false}, "transition": 0.5}},
+
+    {"id": "up", "kind": "eventTrigger", "name": "Dimmer up", "params": {"target": "device:switch-alice/button", "capability": "action", "events": ["up_press_release"]}},
+    {"id": "up-toggle", "kind": "command", "name": "Toggle bedside", "params": {"targets": ["device:bedside-alice/light"], "values": {"state": "toggle", "brightness": 175, "color_temp": 200}, "transition": 0.5}},
+
+    {"id": "down", "kind": "eventTrigger", "name": "Dimmer down", "params": {"target": "device:switch-alice/button", "capability": "action", "events": ["down_press_release"]}},
+    {"id": "down-toggle", "kind": "command", "name": "Toggle lamp", "params": {"targets": ["device:lamp-alice/light"], "values": {"state": "toggle", "brightness": 175, "color_temp": 200}, "transition": 0.5}},
+
+    {"id": "up-hold", "kind": "eventTrigger", "name": "Dimmer up held", "params": {"target": "device:switch-alice/button", "capability": "action", "events": ["up_hold_release"]}},
+    {"id": "up-hold-on", "kind": "command", "name": "Bedside on", "params": {"targets": ["device:bedside-alice/light"], "values": {"state": true, "brightness": 254, "color_temp": 500}, "transition": 0.5}},
+
+    {"id": "down-hold", "kind": "eventTrigger", "name": "Dimmer down held", "params": {"target": "device:switch-alice/button", "capability": "action", "events": ["down_hold_release"]}},
+    {"id": "down-hold-toggle", "kind": "command", "name": "Toggle lamp warm", "params": {"targets": ["device:lamp-alice/light"], "values": {"state": "toggle", "brightness": 254, "color_temp": 454}, "transition": 0.5}},
+
+    {"id": "single", "kind": "eventTrigger", "name": "Button single", "params": {"target": "device:button-alice/button", "capability": "action", "events": ["single"]}},
+    {"id": "single-toggle", "kind": "command", "name": "Toggle room", "params": {"targets": ["aggregate:bedroom-alice"], "values": {"state": "toggle", "brightness": 254, "color_temp": 200}, "transition": 0.5}}
+  ],
+  "edges": [
+    {"from": {"step": "on", "handle": "out"}, "to": {"step": "on-bulbs", "handle": "in"}},
+    {"from": {"step": "on", "handle": "out"}, "to": {"step": "on-lamp", "handle": "in"}},
+    {"from": {"step": "off", "handle": "out"}, "to": {"step": "off-room", "handle": "in"}},
+    {"from": {"step": "on-hold", "handle": "out"}, "to": {"step": "nightlight-lamp", "handle": "in"}},
+    {"from": {"step": "on-hold", "handle": "out"}, "to": {"step": "nightlight-off", "handle": "in"}},
+    {"from": {"step": "long", "handle": "out"}, "to": {"step": "nightlight-lamp", "handle": "in"}},
+    {"from": {"step": "long", "handle": "out"}, "to": {"step": "nightlight-off", "handle": "in"}},
+    {"from": {"step": "up", "handle": "out"}, "to": {"step": "up-toggle", "handle": "in"}},
+    {"from": {"step": "down", "handle": "out"}, "to": {"step": "down-toggle", "handle": "in"}},
+    {"from": {"step": "up-hold", "handle": "out"}, "to": {"step": "up-hold-on", "handle": "in"}},
+    {"from": {"step": "down-hold", "handle": "out"}, "to": {"step": "down-hold-toggle", "handle": "in"}},
+    {"from": {"step": "single", "handle": "out"}, "to": {"step": "single-toggle", "handle": "in"}}
+  ]
+}
