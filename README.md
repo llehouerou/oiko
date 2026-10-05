@@ -123,7 +123,8 @@ to add each one.
 
 A type of Bridge is a Go package of its own implementing `bridge.Bridge`, which registers
 itself from `init` (package [`bridge`](bridge/bridge.go), ADR 0017; `internal/netatmo` is a
-small example). `oiko-build` builds an Oiko with it, given the version of its module (Go
+small example), tested against Oiko's own rules with [`bridgetest`](bridge/bridgetest/bridgetest.go).
+`oiko-build` builds an Oiko with it, given the version of its module (Go
 1.27 needed):
 
 ```sh
