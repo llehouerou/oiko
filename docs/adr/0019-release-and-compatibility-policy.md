@@ -9,7 +9,7 @@ What others write against breaks only in a breaking release:
 - The `bridge` contract (ADR 0017): its Go API, and the kinds of Function and keys of Capability that shape Tiles (ADR 0014). Adding a method to an interface a type implements (`Bridge`, `Module`) breaks it; adding one to `Port` does not. `scripts/release` runs `gorelease` against the previous release before tagging and refuses a version the changes to the Go API do not allow; `gorelease` judges nothing during v0, so the script itself refuses a v0 patch whose API changed at all.
 - The HTTP and WebSocket API, for programs other than the web client, which ships in the same executable and never lags.
 - What a Code Step's Starlark sees: `run(trigger, state)`, the shape of `trigger` and `state`, and the functions Oiko provides. A Step's params are data, migrated.
-- The configuration, which a human or Nix writes and Oiko cannot migrate. A removed or renamed key fails Oiko's start, as an unknown key already does; the breaking release's notes list each one. No alias keeps an old key working.
+- The configuration, which a human or Nix writes and Oiko cannot migrate. A removed or renamed key fails Oiko's start, as an unknown key already does, in a Bridge's section too when its type decodes it with `Env.Decode`, as the built-in types do; the breaking release's notes list each one. No alias keeps an old key working.
 
 These share Oiko's version: they live in its module. A major release from `v2` on changes its module path (`github.com/llehouerou/oiko/v2`), so every type of Bridge must follow. The version of Oiko a type of Bridge's `go.mod` requires is therefore enough to tell which Oiko it builds with (ADR 0020): during v0, the releases of that minor.
 

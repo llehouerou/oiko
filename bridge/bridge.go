@@ -15,6 +15,7 @@
 package bridge
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -154,15 +155,28 @@ type Capability struct {
 // Env is what Oiko hands a Bridge it creates, or one of its Commands.
 type Env struct {
 	Name    string          // the Bridge's name in the configuration, recorded on its Devices
-	Config  json.RawMessage // its section of the configuration, "type" included
+	Config  json.RawMessage // its section of the configuration, without "type"; decode it with Decode
 	DataDir string          // a directory of its own, for what it keeps: tokens, sessions, pairings
+}
+
+// Decode decodes the Bridge's section of the configuration into v, refusing a
+// key v has no field for: a misspelt or removed key stops Oiko from starting
+// instead of being ignored (ADR 0019). No section decodes as an empty one.
+func (e Env) Decode(v any) error {
+	if len(e.Config) == 0 {
+		return nil
+	}
+	d := json.NewDecoder(bytes.NewReader(e.Config))
+	d.DisallowUnknownFields()
+	return d.Decode(v)
 }
 
 // Module is a type of Bridge compiled into Oiko.
 type Module struct {
 	Type string // what the configuration names it by
 	// New creates a Bridge, which Oiko then runs. It reports a configuration
-	// it cannot work with, so that Oiko refuses to start.
+	// it cannot work with, so that Oiko refuses to start: decoding it with
+	// env.Decode refuses unknown keys.
 	New func(env Env) (Bridge, error)
 	// Commands are run by name from the command line, on a Bridge of this
 	// type, while Oiko is not serving: `oiko <bridge> <command> [args]`.

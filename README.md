@@ -4,7 +4,8 @@ Local home automation platform: observe and control the devices of a home in rea
 Vocabulary: [CONTEXT.md](CONTEXT.md). Decisions: [docs/adr](docs/adr).
 
 Oiko learns about devices through Bridges, each configured by name under `bridges` in
-`data/config.json`, and keeping its state in `data/<its name>/`. Four types are built in.
+`data/config.json`, and keeping its state in `data/<its name>/`. A key a Bridge does not
+know stops Oiko from starting. Three types are built in.
 
 **zigbee2mqtt**: one [zigbee2mqtt](https://www.zigbee2mqtt.io) instance, through an
 existing MQTT broker. Enable zigbee2mqtt's `availability` option, or every Device's

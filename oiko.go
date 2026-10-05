@@ -151,21 +151,27 @@ func configure(sections map[string]json.RawMessage, dataDir string) ([]configure
 		if name == "upgrade" {
 			return nil, errors.New("bridge upgrade: the name is oiko upgrade's")
 		}
-		var section struct {
-			Type string `json:"type"`
-		}
+		var section map[string]json.RawMessage
+		var t string
 		if err := json.Unmarshal(sections[name], &section); err != nil {
 			return nil, fmt.Errorf("bridge %s: %w", name, err)
 		}
-		t := section.Type
-		if t == "" {
-			t = name
+		if raw, ok := section["type"]; ok {
+			if err := json.Unmarshal(raw, &t); err != nil {
+				return nil, fmt.Errorf("bridge %s: type: %w", name, err)
+			}
+			delete(section, "type") // Oiko's key, not the type's
 		}
+		t = cmp.Or(t, name)
 		m, ok := bridge.Lookup(t)
 		if !ok {
 			return nil, fmt.Errorf("bridge %s: no type %q in this build of Oiko", name, t)
 		}
-		env := bridge.Env{Name: name, Config: sections[name], DataDir: filepath.Join(dataDir, name)}
+		config, err := json.Marshal(section)
+		if err != nil {
+			return nil, fmt.Errorf("bridge %s: %w", name, err)
+		}
+		env := bridge.Env{Name: name, Config: config, DataDir: filepath.Join(dataDir, name)}
 		if err := os.MkdirAll(env.DataDir, 0o700); err != nil { // tokens and keys
 			return nil, err
 		}

@@ -70,6 +70,9 @@ var pairingsFormat, accessoriesFormat store.Format
 // open follows the accessories paired in the data directory: pairings.json,
 // which only pairing writes, and accessories.json, their last descriptions.
 func open(env bridge.Env) (bridge.Bridge, error) {
+	if err := env.Decode(&struct{}{}); err != nil { // it takes no key
+		return nil, fmt.Errorf("homekit: %w", err)
+	}
 	pairings, accessories := filepath.Join(env.DataDir, "pairings.json"), filepath.Join(env.DataDir, "accessories.json")
 	var p Pairings
 	var saved map[string]json.RawMessage

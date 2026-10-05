@@ -33,8 +33,8 @@ func TestConfigureResolvesTypesAndRunsCommands(t *testing.T) {
 	pinged = nil
 	dir := t.TempDir()
 	bridges, err := configure(map[string]json.RawMessage{
-		"fake":   json.RawMessage(`{}`),               // its type is its name
-		"garage": json.RawMessage(`{"type": "fake"}`), // a second one
+		"fake":   json.RawMessage(`{}`),                          // its type is its name
+		"garage": json.RawMessage(`{"type": "fake", "door": 2}`), // a second one
 	}, dir)
 	if err != nil {
 		t.Fatal(err)
@@ -51,6 +51,9 @@ func TestConfigureResolvesTypesAndRunsCommands(t *testing.T) {
 	}
 	if !slices.Equal(names, []string{"fake", "garage"}) {
 		t.Errorf("bridges %v", names)
+	}
+	if got := string(bridges[1].env.Config); got != `{"door":2}` {
+		t.Errorf("garage's section %s, want it without its type", got)
 	}
 
 	if err := command(bridges, []string{"garage", "ping", "x"}); err != nil || !slices.Equal(pinged, []string{"garage x"}) {

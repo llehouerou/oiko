@@ -47,7 +47,7 @@ type Bridge struct {
 
 func open(env bridge.Env) (bridge.Bridge, error) {
 	c := Config{BaseTopic: "zigbee2mqtt"}
-	if err := json.Unmarshal(env.Config, &c); err != nil {
+	if err := env.Decode(&c); err != nil {
 		return nil, fmt.Errorf("zigbee2mqtt: %w", err)
 	}
 	if c.Broker == "" {

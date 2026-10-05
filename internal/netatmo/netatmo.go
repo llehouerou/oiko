@@ -65,7 +65,7 @@ var tokenFormat store.Format
 // rewrites on every refresh: Netatmo invalidates the previous refresh token.
 func open(env bridge.Env) (bridge.Bridge, error) {
 	var c Config
-	if err := json.Unmarshal(env.Config, &c); err != nil {
+	if err := env.Decode(&c); err != nil {
 		return nil, fmt.Errorf("netatmo: %w", err)
 	}
 	if c.ClientID == "" {

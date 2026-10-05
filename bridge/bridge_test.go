@@ -1,6 +1,24 @@
 package bridge
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
+
+func TestDecodeRefusesUnknownKeys(t *testing.T) {
+	var c struct {
+		Broker string `json:"broker"`
+	}
+	if err := (Env{Config: json.RawMessage(`{"broker": "mqtt://x"}`)}).Decode(&c); err != nil || c.Broker != "mqtt://x" {
+		t.Errorf("known key: %v, %+v", err, c)
+	}
+	if err := (Env{Config: json.RawMessage(`{"borker": "mqtt://x"}`)}).Decode(&c); err == nil {
+		t.Error("misspelt key decoded")
+	}
+	if err := (Env{}).Decode(&c); err != nil {
+		t.Errorf("no section: %v", err)
+	}
+}
 
 func TestPackageOf(t *testing.T) {
 	for fn, want := range map[string]string{
