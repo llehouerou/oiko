@@ -17,7 +17,9 @@ import (
 
 type nopBridge struct{}
 
-func (nopBridge) Send(string, string, map[string]any, time.Duration) error { return nil }
+func (nopBridge) Send(context.Context, string, string, map[string]any, time.Duration) error {
+	return nil
+}
 
 func TestBurstOf1000ReportsLosesNoTrace(t *testing.T) {
 	store, err := history.Open(filepath.Join(t.TempDir(), "history.db"))

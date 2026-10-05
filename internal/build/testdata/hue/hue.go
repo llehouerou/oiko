@@ -21,5 +21,5 @@ func init() {
 
 type hue struct{}
 
-func (hue) Run(context.Context, bridge.Port)                         {}
-func (hue) Send(string, string, map[string]any, time.Duration) error { return nil }
+func (hue) Run(context.Context, bridge.Port)                                          {}
+func (hue) Send(context.Context, string, string, map[string]any, time.Duration) error { return nil }

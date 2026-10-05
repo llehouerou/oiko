@@ -15,8 +15,8 @@ import (
 // fake is a type of Bridge doing nothing, with a ping command.
 type fake struct{}
 
-func (fake) Run(context.Context, bridge.Port)                         {}
-func (fake) Send(string, string, map[string]any, time.Duration) error { return nil }
+func (fake) Run(context.Context, bridge.Port)                                          {}
+func (fake) Send(context.Context, string, string, map[string]any, time.Duration) error { return nil }
 
 var pinged []string // by ping: the Bridge's name and its argument
 

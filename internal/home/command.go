@@ -1,6 +1,7 @@
 package home
 
 import (
+	"context"
 	"sync"
 	"time"
 	"uuid"
@@ -9,12 +10,13 @@ import (
 // inFlight is a pending Command on its Target. A Command on an Aggregate
 // relays one per counted member, each pointing back to it.
 type inFlight struct {
-	id      string
-	target  Target
-	req     Request     // with its toggle resolved
-	timeout *time.Timer // nil if it never times out
-	relay   *inFlight   // the Aggregate Command relaying it, if any
-	waiting int         // when relaying: member Commands not confirmed yet
+	id       string
+	target   Target
+	req      Request     // with its toggle resolved
+	timeout  *time.Timer // nil if it never times out
+	deadline time.Time   // when it times out; zero if it never does
+	relay    *inFlight   // the Aggregate Command relaying it, if any
+	waiting  int         // when relaying: member Commands not confirmed yet
 }
 
 func (p *inFlight) state(status CommandStatus) *CommandState {
@@ -46,6 +48,7 @@ func (c *commands) start(t Target, req Request, relay *inFlight, timeout time.Du
 	p := &inFlight{id: uuid.NewV7().String(), target: t, req: req, relay: relay}
 	if timeout > 0 {
 		p.timeout = time.AfterFunc(timeout, func() { c.expire(p) })
+		p.deadline = time.Now().Add(timeout)
 	}
 	old := c.pending[t]
 	c.pending[t] = p
@@ -54,6 +57,17 @@ func (c *commands) start(t Target, req Request, relay *inFlight, timeout time.Du
 		c.end(old, Superseded)
 	}
 	return p
+}
+
+// sending is the context of a Send carrying the pending Command on t: it ends
+// when that Command times out, at once without one. Device Targets, the only
+// ones sent to, always time out.
+func (c *commands) sending(t Target) (context.Context, context.CancelFunc) {
+	var deadline time.Time
+	if p := c.pending[t]; p != nil {
+		deadline = p.deadline
+	}
+	return context.WithDeadline(context.Background(), deadline)
 }
 
 // asking is what the pending Command on t asks for; nil without one.

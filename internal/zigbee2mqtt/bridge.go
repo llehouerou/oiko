@@ -229,7 +229,7 @@ func (b *Bridge) syncDevices(payload []byte) {
 
 // Send publishes values to the device's /set topic, with zigbee2mqtt's
 // transition option (in seconds) when a fade is requested.
-func (b *Bridge) Send(address, function string, values map[string]any, transition time.Duration) error {
+func (b *Bridge) Send(ctx context.Context, address, function string, values map[string]any, transition time.Duration) error {
 	b.mu.RLock()
 	d, conn := b.byAddress[address], b.conn
 	b.mu.RUnlock()
@@ -247,8 +247,6 @@ func (b *Bridge) Send(address, function string, values map[string]any, transitio
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 	_, err = conn.Publish(ctx, &paho.Publish{Topic: b.base + "/" + d.topic + "/set", QoS: 1, Payload: body})
 	return err
 }

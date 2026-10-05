@@ -142,7 +142,7 @@ func (b *Bridge) Run(ctx context.Context, p bridge.Port) {
 }
 
 // Send refuses: no Netatmo Capability is settable, so Oiko lets none through.
-func (b *Bridge) Send(address, function string, values map[string]any, transition time.Duration) error {
+func (b *Bridge) Send(ctx context.Context, address, function string, values map[string]any, transition time.Duration) error {
 	return errors.New("netatmo: read-only")
 }
 

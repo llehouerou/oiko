@@ -14,7 +14,9 @@ import (
 
 type nopBridge struct{}
 
-func (nopBridge) Send(string, string, map[string]any, time.Duration) error { return nil }
+func (nopBridge) Send(context.Context, string, string, map[string]any, time.Duration) error {
+	return nil
+}
 
 // counted is a real Home that counts the Commands the engine issues, fed
 // through the Port of its one Bridge.

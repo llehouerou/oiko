@@ -186,7 +186,9 @@ func following(t *testing.T, s *Store) (*home.Home, func()) {
 
 type nopBridge struct{}
 
-func (nopBridge) Send(string, string, map[string]any, time.Duration) error { return nil }
+func (nopBridge) Send(context.Context, string, string, map[string]any, time.Duration) error {
+	return nil
+}
 
 func plug(address string) bridge.Device {
 	caps := []home.Capability{{Key: "state", Type: home.Binary, Access: home.Access{Observable: true, Settable: true}}}

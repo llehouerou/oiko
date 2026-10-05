@@ -38,9 +38,10 @@ type Bridge interface {
 	// with the transition requested (0 for none). Oiko only sends values the
 	// Capabilities accept, a toggle already resolved to true or false, and
 	// one Send at a time per Function or Device; Sends for different ones may
-	// run concurrently. An error fails the Command; otherwise it waits for a
-	// Report confirming it.
-	Send(address, function string, values map[string]any, transition time.Duration) error
+	// run concurrently. ctx ends when the Command times out: past it, a
+	// transmission is pointless. An error fails the Command; otherwise it
+	// waits for a Report confirming it.
+	Send(ctx context.Context, address, function string, values map[string]any, transition time.Duration) error
 }
 
 // Port is how one Bridge feeds Oiko: what it describes and reports concerns

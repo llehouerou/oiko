@@ -7,8 +7,8 @@ import (
 
 // sender transmits the Commands on one Device Target to its Bridge: a burst
 // collapses into its latest values and transition, at most one Send per
-// sendInterval, in order, each outside Home's lock. A failed Send fails the
-// pending Command.
+// sendInterval, in order, each outside Home's lock and until the pending
+// Command times out. A failed Send fails the pending Command.
 type sender struct {
 	queued     map[string]any // values not yet transmitted
 	transition time.Duration  // of the latest queued Command
@@ -51,9 +51,11 @@ func (h *Home) flush(t Target) {
 	s.queued, s.flush, s.sending, s.lastSent = nil, nil, true, time.Now()
 	d := h.devices[t.Device()]
 	bridge := h.links[d.Bridge].bridge // attached: the Command was accepted
+	ctx, cancel := h.commands.sending(t)
 	h.mu.Unlock()
 
-	err := bridge.Send(d.NativeAddress, t.Function(), values, transition)
+	err := bridge.Send(ctx, d.NativeAddress, t.Function(), values, transition)
+	cancel()
 
 	h.mu.Lock()
 	defer h.mu.Unlock()

@@ -123,7 +123,7 @@ func (b *Bridge) Run(ctx context.Context, p bridge.Port) {
 }
 
 // Send refuses: no Capability of a HomeKit Device is settable yet.
-func (b *Bridge) Send(address, function string, values map[string]any, transition time.Duration) error {
+func (b *Bridge) Send(ctx context.Context, address, function string, values map[string]any, transition time.Duration) error {
 	return errors.New("homekit: commands are not supported")
 }
 

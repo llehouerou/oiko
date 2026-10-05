@@ -2,6 +2,7 @@ package home
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -34,7 +35,7 @@ const (
 
 // Bridge is what Home needs of a bridge.Bridge: transmitting Commands.
 type Bridge interface {
-	Send(address, function string, values map[string]any, transition time.Duration) error
+	Send(ctx context.Context, address, function string, values map[string]any, transition time.Duration) error
 }
 
 // link is an attached Bridge, whether it is online, and whether it has

@@ -310,7 +310,9 @@ func TestPeriodsEndpoint(t *testing.T) {
 
 type nopBridge struct{}
 
-func (nopBridge) Send(string, string, map[string]any, time.Duration) error { return nil }
+func (nopBridge) Send(context.Context, string, string, map[string]any, time.Duration) error {
+	return nil
+}
 
 func TestAnAggregatesEnergyIsItsMembersCountersSummed(t *testing.T) {
 	h, do := server(t)

@@ -1,6 +1,7 @@
 package home
 
 import (
+	"context"
 	"errors"
 	"maps"
 	"slices"
@@ -16,6 +17,7 @@ type sent struct {
 	address, function string
 	values            map[string]any
 	transition        time.Duration
+	deadline          time.Time // of the Send's context
 }
 
 type fakeBridge struct {
@@ -24,10 +26,11 @@ type fakeBridge struct {
 	err   error
 }
 
-func (b *fakeBridge) Send(address, function string, values map[string]any, transition time.Duration) error {
+func (b *fakeBridge) Send(ctx context.Context, address, function string, values map[string]any, transition time.Duration) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.sends = append(b.sends, sent{address, function, values, transition})
+	deadline, _ := ctx.Deadline()
+	b.sends = append(b.sends, sent{address, function, values, transition, deadline})
 	return b.err
 }
 
@@ -231,6 +234,18 @@ func TestCommandTimesOut(t *testing.T) {
 		synctest.Wait()
 		if got := commandStatuses(drain(updates)); len(got) != 2 || got[1] != TimedOut {
 			t.Fatalf("statuses = %v", got)
+		}
+	})
+}
+
+func TestSendEndsWithItsCommand(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		h, b, _, id := setup(t)
+		issued := time.Now()
+		h.Command(TargetDevice(id, "light"), Request{Values: map[string]any{"state": true}})
+		synctest.Wait()
+		if s := b.all(); len(s) != 1 || !s[0].deadline.Equal(issued.Add(commandTimeout)) {
+			t.Fatalf("sends = %v, want one ending %v after the Command", s, commandTimeout)
 		}
 	})
 }
