@@ -1,5 +1,7 @@
 # A Person signs in with a Passkey or a Sign-in link, never a password
 
+_Amended by [ADR 0030](0030-inviting-is-a-sign-in-link-for-a-new-person.md): a Sign-in link an Admin creates for another Person is valid for 24 hours, and a Person has at most one unused link._
+
 Exposing Oiko to the internet means every Person must prove who they are, and an account is only as strong as its weakest way in. A Person signs in either with a Passkey or with a Sign-in link: a single-use link that is valid for 15 minutes and that a signed-in device creates for a Person. Oiko has no password, no TOTP and no username. A household Oiko has no mail server or support desk, so a password would bring hashing, brute-force defence and lockout, and it would add a phishable path that undercuts the Passkey. Sign-in is username-less: the device's passkey sheet picks the account, so no identifier needs managing and none can be enumerated.
 
 ## Considered Options

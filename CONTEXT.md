@@ -158,7 +158,7 @@ _Avoid_: symbol, image
 ### Access
 
 **Person**:
-A human known to Oiko: a member of the household or a temporary guest, under an identity that survives a change of Name or of credentials. May sign in to the dashboard, or never do so (a child presence will later track).
+A human known to Oiko: a member of the household or a temporary guest, under an identity that survives a change of Name or of credentials. May sign in to the dashboard, or never do so (a child presence will later track). Created by an Admin, who invites them by creating a Sign-in link for them.
 _Avoid_: User, account, member (as the term), occupant, resident
 
 **Kiosk**:
@@ -174,7 +174,7 @@ External software, such as Node-RED or a script, calling Oiko's HTTP API under i
 _Avoid_: Integration, API client, service account, app, token (its credential, not its identity)
 
 **Access level**:
-What a Person, a Kiosk or a Program may do in Oiko: Guest, Member or Admin, a list fixed by Oiko, each allowing everything the one below it does; whoever holds one is called by it (a Guest, an Admin). A Guest observes the home as it is now, issues Commands except on configuration Capabilities, and starts Manual triggers; a Member also reads the home's past (History, Traces, the Commands issued); an Admin also edits the home (Devices, configuration Capabilities, Areas, Layouts, Aggregates, Flags, Automations), sees the Build and Releases, and manages access: Persons, Kiosks, Programs, their credentials and Access levels. A Kiosk is a Guest or a Member, never an Admin; a Program may be an Admin but never manages access, which only a Person does; the last Admin Person can be neither demoted nor removed. Everyone signed in manages their own credentials and Name, never their own Access level.
+What a Person, a Kiosk or a Program may do in Oiko: Guest, Member or Admin, a list fixed by Oiko, each allowing everything the one below it does; whoever holds one is called by it (a Guest, an Admin). A Guest observes the home as it is now, issues Commands except on configuration Capabilities, and starts Manual triggers; a Member also reads the home's past (History, Traces, the Commands issued); an Admin also edits the home (Devices, configuration Capabilities, Areas, Layouts, Aggregates, Flags, Automations), sees the Build and Releases, and manages access: Persons, Kiosks, Programs, their credentials and Access levels. A Kiosk is a Guest or a Member, never an Admin; a Program may be an Admin but never manages access, which only a Person does; the last Admin Person can be neither demoted nor removed. Everyone signed in manages their own credentials and Name, never their own Access level. A Guest may have an end date set by an Admin, after which they can no longer sign in while the Person stays; promotion to Member clears it.
 _Avoid_: role (reserved for a Capability's), permission, group, right
 
 **Passkey**:
@@ -182,8 +182,8 @@ A Person's lasting credential for signing in, kept by their device or password m
 _Avoid_: password, key, token, login
 
 **Sign-in link**:
-A single-use link, or its QR code, that signs one Person in on one device and expires 15 minutes after a signed-in device, or a command on Oiko's host, creates it.
-_Avoid_: magic link, login link, login code, token
+A single-use link, or its QR code, that signs one Person in on one device. It expires 24 hours after an Admin creates it for another Person, and 15 minutes after a Person creates it for themselves or a command on Oiko's host creates it. A Person has at most one unused link: a new one revokes the previous one.
+_Avoid_: magic link, login link, login code, token, invitation
 
 **Setup link**:
 The single-use link a fresh Oiko prints to its log while it has no Admin; whoever opens it becomes its first Admin. It stays valid until used or until Oiko restarts.
