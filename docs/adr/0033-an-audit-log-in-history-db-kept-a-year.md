@@ -1,6 +1,6 @@
 # An Audit log in `history.db`, kept a year, read on request
 
-Sign-in, Sessions, Sign-in links, Kiosk pairing and Tokens need a trail: the identity documents delete a Session or a Sign-in link when it ends (ADR 0032), so without a trail an ended one leaves nothing behind. Oiko keeps an Audit log, an append-only `audit` table in `history.db`, created by its format 2 migration (ADR 0032). It records every refusal and every change to access. Its entries go through the History's writer but, like a Replace or a Delete (ADR 0016), are never dropped when its queue is full. Each entry is kept one year, then deleted; nothing else deletes or edits one. A year matches a Session's absolute lifetime (ADR 0025), so the sign-in behind any live Session is still in the log.
+Sign-in, Sessions, Sign-in links, Kiosk pairing and Tokens need a trail: the identity documents delete a Session or a Sign-in link when it ends (ADR 0032), so without a trail an ended one leaves nothing behind. Oiko keeps an Audit log, an append-only `audit` table in `history.db`, created by its format 2 migration (ADR 0032). It records every refusal (anonymous ones within a budget, ADR 0034) and every change to access. Its entries go through the History's writer but, like a Replace or a Delete (ADR 0016), are never dropped when its queue is full. Each entry is kept one year, then deleted; nothing else deletes or edits one. A year matches a Session's absolute lifetime (ADR 0025), so the sign-in behind any live Session is still in the log.
 
 ## Considered Options
 
@@ -9,7 +9,7 @@ Sign-in, Sessions, Sign-in links, Kiosk pairing and Tokens need a trail: the ide
 - **30 days, like Traces, or indefinitely, like History**: 30 days loses how a year-long Session or a never-expiring Token was obtained; indefinitely keeps internet scanners' refusals forever.
 - **Ids only, as in a Command's Origin** (ADR 0031): a Command's Origin is a live reference that follows renames, but an audit entry records the past. After a removal, the case an audit exists for, an id alone would read "a removed Person". Each identity in an entry is therefore stored as its id and its Name at the time.
 - **The client address**: behind a TLS-only proxy every client has the proxy's address, since no forwarded header is trusted by default, so the address would mislead and only adds personal data to backups. An entry keeps the browser label that the Session list shows (ADR 0025).
-- **Only refusals tied to a known identity**: less noise, but probing with bogus links or Tokens would go unseen. The rate limits on the exposed surface bound the volume instead.
+- **Only refusals tied to a known identity**: less noise, but probing with bogus links or Tokens would go unseen. A budget on anonymous refusals bounds the volume instead (ADR 0034).
 - **Edits to the home** (Automations, Devices, Areas, Layouts): a general activity log is another feature, with its own volume and display. The Audit log covers access only.
 - **Streaming entries as Updates**: every observer sees Updates in the same order, so audit entries would need a second per-observer filter beside the Guest one (ADR 0031). A security log does not need to be live.
 - **Erasing a removed identity's entries**: less personal data kept, but removing a compromised account would erase what it did.
