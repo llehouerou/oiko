@@ -172,3 +172,11 @@ _Avoid_: Integration, API client, service account, app, token (its credential, n
 **Access level**:
 What a Person, a Kiosk or a Program may do in Oiko: Guest, Member or Admin, a list fixed by Oiko, each allowing everything the one below it does; whoever holds one is called by it (a Guest, an Admin). A Guest observes the home as it is now, issues Commands except on configuration Capabilities, and starts Manual triggers; a Member also reads the home's past (History, Traces, the Commands issued); an Admin also edits the home (Devices, configuration Capabilities, Areas, Layouts, Aggregates, Flags, Automations), sees the Build and Releases, and manages access: Persons, Kiosks, Programs, their credentials and Access levels. A Kiosk is a Guest or a Member, never an Admin; a Program may be an Admin but never manages access, which only a Person does; the last Admin Person can be neither demoted nor removed. Everyone signed in manages their own credentials and Name, never their own Access level.
 _Avoid_: role (reserved for a Capability's), permission, group, right
+
+**Passkey**:
+A Person's lasting credential for signing in, kept by their device or password manager and bound to this Oiko. A Person may hold several and needs no username or password.
+_Avoid_: password, key, token, login
+
+**Sign-in link**:
+A single-use link, or its QR code, that signs one Person in on one device and expires 15 minutes after a signed-in device creates it.
+_Avoid_: magic link, login link, login code, token
