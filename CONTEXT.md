@@ -162,8 +162,12 @@ A human known to Oiko: a member of the household or a temporary guest, under an 
 _Avoid_: User, account, member (as the term), occupant, resident
 
 **Kiosk**:
-A shared screen, such as a wall tablet, signed in to the dashboard as itself rather than as a Person. What is done from it is the Kiosk's doing, and it is revoked on its own.
+A shared screen, such as a wall tablet, signed in to the dashboard as itself rather than as a Person. What is done from it is the Kiosk's doing, and it is revoked on its own. Holds at most one Session, which ends only when an Admin signs it out or after 30 days without use; it shows no sign-out and manages nothing, not even its Name.
 _Avoid_: panel, display, shared device, household account
+
+**Kiosk pairing**:
+How a screen becomes a Kiosk: its sign-in page shows a QR code, which an Admin scans from a signed-in phone and approves as a new Kiosk or an existing one, ending that Kiosk's previous Session. Only the screen that showed the code receives the Session.
+_Avoid_: enrolment, device code, Quick Connect, pairing (alone: reserved for a Bridge's hardware)
 
 **Program**:
 External software, such as Node-RED or a script, calling Oiko's HTTP API under its own identity rather than a Person's. It outlives whoever created it, and what it does is its own doing.
