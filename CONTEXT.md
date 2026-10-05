@@ -178,8 +178,12 @@ A Person's lasting credential for signing in, kept by their device or password m
 _Avoid_: password, key, token, login
 
 **Sign-in link**:
-A single-use link, or its QR code, that signs one Person in on one device and expires 15 minutes after a signed-in device creates it.
+A single-use link, or its QR code, that signs one Person in on one device and expires 15 minutes after a signed-in device, or a command on Oiko's host, creates it.
 _Avoid_: magic link, login link, login code, token
+
+**Setup link**:
+The single-use link a fresh Oiko prints to its log while it has no Admin; whoever opens it becomes its first Admin. It stays valid until used or until Oiko restarts.
+_Avoid_: setup code, claim link, invitation
 
 **Session**:
 A browser signed in to the dashboard as a Person or a Kiosk, from sign-in until it is signed out, revoked or expires. One device may hold several, one per browser.
