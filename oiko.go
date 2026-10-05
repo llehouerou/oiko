@@ -40,7 +40,6 @@ import (
 
 	// The built-in types of Bridge.
 	_ "github.com/llehouerou/oiko/internal/homekit"
-	_ "github.com/llehouerou/oiko/internal/netatmo"
 	_ "github.com/llehouerou/oiko/internal/zigbee2mqtt"
 )
 

@@ -5,7 +5,7 @@ Vocabulary: [CONTEXT.md](CONTEXT.md). Decisions: [docs/adr](docs/adr).
 
 Oiko learns about devices through Bridges, each configured by name under `bridges` in
 `data/config.json`, and keeping its state in `data/<its name>/`. A key a Bridge does not
-know stops Oiko from starting. Three types are built in.
+know stops Oiko from starting. Two types are built in (ADR 0021).
 
 **zigbee2mqtt**: one [zigbee2mqtt](https://www.zigbee2mqtt.io) instance, through an
 existing MQTT broker. Enable zigbee2mqtt's `availability` option, or every Device's
@@ -28,15 +28,9 @@ with Apple Home), then restart Oiko:
 
 The pairing, with Oiko's private key, is kept in `data/homekit/pairings.json`.
 
-**netatmo**: Netatmo weather stations through Netatmo's cloud (temperature, humidity, CO₂,
-noise, pressure, rain, battery), polled every 5 minutes. Create an app on
-[dev.netatmo.com](https://dev.netatmo.com), generate a token with the `read_station` scope
-on its page, write `{"refresh_token": "…"}` to `data/netatmo/token.json`, and configure
-`"netatmo": {"clientId": "…", "clientSecretFile": "…"}`.
-Oiko rewrites the token file on every refresh (ADR 0012).
-
-Arlo cameras are followed by a type of Bridge added to Oiko like any other (see below),
-`github.com/llehouerou/oiko-arlo` (ADR 0010).
+Other systems are followed by types of Bridge added to Oiko like any other (see below), such
+as `github.com/llehouerou/oiko-arlo` for Arlo cameras (ADR 0010) and
+`github.com/llehouerou/oiko-netatmo` for Netatmo weather stations.
 
 A Bridge's type is its name, unless its section says `"type"`: two zigbee2mqtt instances
 are `"zigbee2mqtt": {…}` and `"garage": {"type": "zigbee2mqtt", …}`. A Bridge's name is
@@ -122,8 +116,9 @@ listed in the [catalogue](https://llehouerou.github.io/oiko-catalogue/), with wh
 to add each one.
 
 A type of Bridge is a Go package of its own implementing `bridge.Bridge`, which registers
-itself from `init` (package [`bridge`](bridge/bridge.go), ADR 0017; `internal/netatmo` is a
-small example), tested against Oiko's own rules with [`bridgetest`](bridge/bridgetest/bridgetest.go).
+itself from `init` (package [`bridge`](bridge/bridge.go), ADR 0017; `oiko-netatmo` is a small
+example), keeps its data with [`bridge/store`](bridge/store/store.go), and is tested against
+Oiko's own rules with [`bridgetest`](bridge/bridgetest/bridgetest.go).
 `oiko-build` builds an Oiko with it, given the version of its module (Go
 1.27 needed):
 

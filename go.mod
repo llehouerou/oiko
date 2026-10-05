@@ -8,7 +8,6 @@ require (
 	github.com/nathan-osman/go-sunrise v1.1.0
 	go.starlark.net v0.0.0-20260908191801-89a6a09411d5
 	golang.org/x/mod v0.38.0
-	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.22.0
 	modernc.org/sqlite v1.59.0
 )
