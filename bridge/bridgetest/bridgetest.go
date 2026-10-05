@@ -8,12 +8,20 @@
 //	if v, _ := h.Value("0xbulb", "light", "state"); v != true { … }
 //	if err := h.Command("0xbulb", "light", map[string]any{"state": false}); err != nil { … }
 //
+// Env builds what Oiko hands a type's Module.New, to test its creation.
+//
 // Reads give the home as it is at the call: a test following a Bridge that
 // runs on its own waits for it, with testing/synctest for instance.
 package bridgetest
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
+	"slices"
+	"sync"
+	"testing"
 
 	"github.com/llehouerou/oiko/bridge"
 	"github.com/llehouerou/oiko/internal/home"
@@ -22,16 +30,50 @@ import (
 // name is the Bridge's name in the home.
 const name = "test"
 
+// What became of a Command, for errors.Is.
+var (
+	ErrRefused  = errors.New("refused") // offline, unknown Function or Capability, or a value it does not accept
+	ErrFailed   = errors.New("failed")  // the Bridge's Send returned an error
+	ErrTimedOut = errors.New("timed out")
+)
+
+// Env is what Oiko hands a Bridge named name, or one of its Commands: its
+// section of the configuration, config, as Oiko hands it (without "type"),
+// a data directory of its own, removed after the test, and a logger writing
+// into the test's output.
+func Env(t testing.TB, name, config string) bridge.Env {
+	return bridge.Env{Name: name, Config: json.RawMessage(config), DataDir: t.TempDir(),
+		Log: slog.New(slog.NewTextHandler(t.Output(), nil)).With("bridge", name)}
+}
+
 // Home is a home with one Bridge attached, offline until it says otherwise.
 type Home struct {
 	h    *home.Home
-	port *home.Port
+	port port
+}
+
+// port is the home's, remembering the order the Bridge last listed its
+// Devices in.
+type port struct {
+	*home.Port
+	mu     *sync.Mutex
+	listed *[]string // Native Addresses
+}
+
+func (p port) SyncDevices(devices []bridge.Device) {
+	p.mu.Lock()
+	*p.listed = nil
+	for _, d := range devices {
+		*p.listed = append(*p.listed, d.NativeAddress)
+	}
+	p.mu.Unlock()
+	p.Port.SyncDevices(devices)
 }
 
 // New attaches b, which receives the Commands; nil if the test issues none.
 func New(b bridge.Bridge) *Home {
 	h := home.New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
-	return &Home{h: h, port: h.Attach(name, b)}
+	return &Home{h: h, port: port{Port: h.Attach(name, b), mu: &sync.Mutex{}, listed: &[]string{}}}
 }
 
 // Port is what the Bridge feeds the home through.
@@ -43,8 +85,12 @@ func (h *Home) Online() bool { return h.snapshot().Bridges[name] }
 // Replayed is whether the Bridge has handed its Replay.
 func (h *Home) Replayed() bool { return len(h.h.Waiting()) == 0 }
 
-// Devices are those the Bridge last listed, as the home holds them.
+// Devices are those the Bridge last listed, in its order, as the home holds
+// them.
 func (h *Home) Devices() []bridge.Device {
+	h.port.mu.Lock()
+	listed := slices.Clone(*h.port.listed)
+	h.port.mu.Unlock()
 	var devices []bridge.Device
 	for _, d := range h.snapshot().Devices {
 		if d.Detached {
@@ -56,6 +102,9 @@ func (h *Home) Devices() []bridge.Device {
 		}
 		devices = append(devices, b)
 	}
+	slices.SortFunc(devices, func(a, b bridge.Device) int {
+		return slices.Index(listed, a.NativeAddress) - slices.Index(listed, b.NativeAddress)
+	})
 	return devices
 }
 
@@ -85,26 +134,32 @@ func (h *Home) Event(address, function, capability string) (any, bool) {
 }
 
 // Command issues values to Function function ("" for the Device itself) of
-// the Device at address, as Oiko does: refused when the Bridge is offline or
-// the Capabilities do not accept them, otherwise sent through the Bridge's
-// Send. It returns once the Command is over: nil when a Report confirms it.
+// the Device at address, as Oiko does: refused (ErrRefused) when the Device
+// is not listed, the Bridge is offline or the Capabilities do not accept
+// them, otherwise sent through the Bridge's Send. It returns once the Command
+// is over: nil when a Report confirms it, else ErrFailed or ErrTimedOut.
 func (h *Home) Command(address, function string, values map[string]any) error {
 	snap, updates, cancel := h.h.Subscribe()
 	defer cancel()
 	id, ok := device(snap, address)
 	if !ok {
-		return fmt.Errorf("no Device at %s", address)
+		return fmt.Errorf("%w: no Device at %s", ErrRefused, address)
 	}
 	cmd, err := h.h.Command(home.TargetDevice(id, function), home.Request{Values: values})
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrRefused, err)
 	}
 	for u := range updates {
 		if c := u.Command; c != nil && c.ID == cmd && c.Status != home.Pending {
-			if c.Status != home.Confirmed {
-				return fmt.Errorf("command %s", c.Status)
+			switch c.Status {
+			case home.Confirmed:
+				return nil
+			case home.Failed:
+				return ErrFailed
+			case home.TimedOut:
+				return ErrTimedOut
 			}
-			return nil
+			return fmt.Errorf("command %s", c.Status) // superseded by a concurrent one
 		}
 	}
 	return fmt.Errorf("command %s: outcome lost", cmd) // its updates fell too far behind

@@ -3,17 +3,20 @@ package bridgetest_test
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/llehouerou/oiko/bridge"
 	"github.com/llehouerou/oiko/bridge/bridgetest"
 )
 
-// lamp is a Bridge whose one lamp confirms what it is sent, unless broken.
+// lamp is a Bridge whose one lamp confirms what it is sent, unless broken
+// (Send fails) or silent (nothing ever confirms).
 type lamp struct {
-	port   bridge.Port
-	broken bool
+	port           bridge.Port
+	broken, silent bool
 }
 
 func (l *lamp) Run(context.Context, bridge.Port) {}
@@ -24,6 +27,9 @@ func (l *lamp) Send(ctx context.Context, address, function string, values map[st
 	}
 	if _, ok := ctx.Deadline(); !ok {
 		return errors.New("no deadline")
+	}
+	if l.silent {
+		return nil
 	}
 	var rs []bridge.Reading
 	for k, v := range values {
@@ -97,4 +103,51 @@ func TestHomeAppliesOikosRules(t *testing.T) {
 	if len(h.Devices()) != 0 || h.Availability("0xlamp") != bridge.Unknown {
 		t.Errorf("unlisted Device still there: %+v", h.Devices())
 	}
+}
+
+func TestDevicesInTheBridgesOrder(t *testing.T) {
+	h := bridgetest.New(nil)
+	h.Port().SyncDevices([]bridge.Device{{NativeAddress: "0xa"}})
+	h.Port().SyncDevices([]bridge.Device{{NativeAddress: "0xb"}, {NativeAddress: "0xa"}}) // 0xa is older in the home
+	if d := h.Devices(); len(d) != 2 || d[0].NativeAddress != "0xb" || d[1].NativeAddress != "0xa" {
+		t.Errorf("devices %+v, want 0xb then 0xa", d)
+	}
+}
+
+func TestCommandErrorsTellWhatHappened(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		l := &lamp{}
+		h := bridgetest.New(l)
+		l.port = h.Port()
+		h.Port().SyncDevices([]bridge.Device{device})
+		if err := h.Command("0xlamp", "light", map[string]any{"state": true}); !errors.Is(err, bridgetest.ErrRefused) {
+			t.Errorf("offline: %v, want ErrRefused", err)
+		}
+		h.Port().SetOnline(true)
+		if err := h.Command("0xlamp", "light", map[string]any{"effect": "custom"}); !errors.Is(err, bridgetest.ErrRefused) {
+			t.Errorf("outside the Options: %v, want ErrRefused", err)
+		}
+		l.broken = true
+		if err := h.Command("0xlamp", "light", map[string]any{"state": true}); !errors.Is(err, bridgetest.ErrFailed) {
+			t.Errorf("Send failing: %v, want ErrFailed", err)
+		}
+		l.broken, l.silent = false, true
+		if err := h.Command("0xlamp", "light", map[string]any{"state": true}); !errors.Is(err, bridgetest.ErrTimedOut) {
+			t.Errorf("never confirmed: %v, want ErrTimedOut", err)
+		}
+	})
+}
+
+func TestEnvAsOikoHandsIt(t *testing.T) {
+	env := bridgetest.Env(t, "garage", `{"door": 2}`)
+	var c struct {
+		Door int `json:"door"`
+	}
+	if err := env.Decode(&c); err != nil || c.Door != 2 || env.Name != "garage" {
+		t.Errorf("decode: %v, %+v, name %q", err, c, env.Name)
+	}
+	if fi, err := os.Stat(env.DataDir); err != nil || !fi.IsDir() {
+		t.Errorf("data directory: %v", err)
+	}
+	env.Log.Info("hello") // into the test's output
 }
