@@ -188,3 +188,7 @@ _Avoid_: setup code, claim link, invitation
 **Session**:
 A browser signed in to the dashboard as a Person or a Kiosk, from sign-in until it is signed out, revoked or expires. One device may hold several, one per browser.
 _Avoid_: login, signed-in device (as the term), token, cookie
+
+**Token**:
+A Program's credential: a secret it sends with every request to the HTTP API, shown once when an Admin generates it, valid until it is revoked or replaced, never expiring. A Program holds at most one.
+_Avoid_: API key, access token, secret, password
