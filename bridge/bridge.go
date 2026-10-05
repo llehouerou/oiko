@@ -15,9 +15,9 @@
 package bridge
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -162,15 +162,13 @@ type Env struct {
 }
 
 // Decode decodes the Bridge's section of the configuration into v, refusing a
-// key v has no field for: a misspelt or removed key stops Oiko from starting
+// key v has no field for, in its case: a misspelt or removed key stops Oiko from starting
 // instead of being ignored (ADR 0019). No section decodes as an empty one.
 func (e Env) Decode(v any) error {
 	if len(e.Config) == 0 {
 		return nil
 	}
-	d := json.NewDecoder(bytes.NewReader(e.Config))
-	d.DisallowUnknownFields()
-	return d.Decode(v)
+	return jsonv2.Unmarshal(e.Config, v, jsonv2.RejectUnknownMembers(true)) // names match in their case only
 }
 
 // Module is a type of Bridge compiled into Oiko.

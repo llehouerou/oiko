@@ -15,6 +15,9 @@ func TestDecodeRefusesUnknownKeys(t *testing.T) {
 	if err := (Env{Config: json.RawMessage(`{"borker": "mqtt://x"}`)}).Decode(&c); err == nil {
 		t.Error("misspelt key decoded")
 	}
+	if err := (Env{Config: json.RawMessage(`{"Broker": "mqtt://x"}`)}).Decode(&c); err == nil {
+		t.Error("key in another case decoded")
+	}
 	if err := (Env{}).Decode(&c); err != nil {
 		t.Errorf("no section: %v", err)
 	}

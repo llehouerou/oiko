@@ -89,3 +89,22 @@ func TestTypesRecordTheirPackage(t *testing.T) {
 		t.Errorf("types %+v", bridge.Types())
 	}
 }
+
+func TestLoadConfigRefusesUnknownKeys(t *testing.T) {
+	dir := t.TempDir()
+	for doc, ok := range map[string]bool{
+		`{"location": {"latitude": 1, "longitude": 2}}`: true,
+		`{"locaton": {}}`:               false,
+		`{"Location": {"latitude": 1}}`: false, // another case is another key
+		`{"location": {"Latitude": 1}}`: false,
+	} {
+		path := filepath.Join(dir, "config.json")
+		if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var c config
+		if err := loadConfig(path, &c); (err == nil) != ok {
+			t.Errorf("%s: %v", doc, err)
+		}
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"flag"
 	"fmt"
@@ -126,17 +127,14 @@ func install(env string) (string, error) {
 // not know: a section left over from an earlier layout. A missing file is an
 // empty configuration.
 func loadConfig(path string, c *config) error {
-	f, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	d := json.NewDecoder(f)
-	d.DisallowUnknownFields()
-	return d.Decode(c)
+	return jsonv2.Unmarshal(data, c, jsonv2.RejectUnknownMembers(true)) // names match in their case only
 }
 
 // configure resolves each Bridge of the configuration, by name, to its type,
