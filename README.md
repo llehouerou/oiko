@@ -47,9 +47,12 @@ make build
 ./oiko
 ```
 
-Then open http://localhost:8080. Flags: `-listen`, `-data` (directory holding Oiko's own configuration, `./data` by default; back it up), `-config` (`<data>/config.json` by default), `-version` (what this Oiko is built from: its version and each type of Bridge, with its module and version; the dashboard shows it too, under Oiko's logo).
+Then open http://localhost:8080. Flags: `-listen`, `-data` (directory holding Oiko's own configuration, `./data` by default, created `0700` if missing; back it up), `-config` (`<data>/config.json` by default), `-version` (what this Oiko is built from: its version and each type of Bridge, with its module and version; the dashboard shows it too, under Oiko's logo).
 `./oiko [flags] <bridge> <command> [args]` runs a command of a Bridge instead, such as `homekit pair`;
-`upgrade` is not a Bridge name, it is the command below.
+`upgrade` (below) and `sign-in-link` are Oiko's own commands, never Bridge names.
+
+The Public URL, where users reach Oiko, goes in `data/config.json`: `{"publicUrl": "https://oiko.example.org"}`,
+an HTTPS origin with no path. Sign-in will need it; Oiko starts without it.
 
 Sun triggers need the home's location, written by hand in `data/config.json`:
 `{"location": {"latitude": 48.86, "longitude": 2.35}}`. Times of day follow the host timezone.
@@ -81,10 +84,10 @@ There is no authentication yet: only run Oiko on a trusted network.
 ## Deploy
 
 The flake exports the package and a NixOS module, `nixosModules.default`
-(`services.oiko`: `listen`, `mqtt` for the zigbee2mqtt Bridge, `settings` for config.json, and
+(`services.oiko`: `listen`, `publicUrl`, `mqtt` for the zigbee2mqtt Bridge, `settings` for config.json, and
 `credentials`, files holding secrets that the service reads as
 `/run/credentials/oiko.service/<name>`, where `settings` point to them; a homekit Bridge
-is always configured). State lives in `/var/lib/oiko`; pair an accessory with
+is always configured). State lives in `/var/lib/oiko`, mode `0700`; pair an accessory with
 `sudo -u oiko oiko -data /var/lib/oiko -config /etc/oiko/config.json homekit pair <code>`,
 then restart `oiko`.
 After changing `web/package-lock.json` or `go.sum`, update `npmDepsHash` or

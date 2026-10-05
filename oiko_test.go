@@ -3,6 +3,7 @@ package oiko
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -75,7 +76,7 @@ func TestConfigureResolvesTypesAndRunsCommands(t *testing.T) {
 		}
 	}
 
-	for name, section := range map[string]string{"hue": `{}`, "x": `{"type": "hue"}`, "Fake": `{"type": "fake"}`, "../up": `{"type": "fake"}`, "upgrade": `{"type": "fake"}`} {
+	for name, section := range map[string]string{"hue": `{}`, "x": `{"type": "hue"}`, "Fake": `{"type": "fake"}`, "../up": `{"type": "fake"}`, "upgrade": `{"type": "fake"}`, "sign-in-link": `{"type": "fake"}`} {
 		if _, err := configure(map[string]json.RawMessage{name: json.RawMessage(section)}, dir); err == nil {
 			t.Errorf("%s %s: configured", name, section)
 		}
@@ -105,6 +106,82 @@ func TestLoadConfigRefusesUnknownKeys(t *testing.T) {
 		var c config
 		if err := loadConfig(path, &c); (err == nil) != ok {
 			t.Errorf("%s: %v", doc, err)
+		}
+	}
+}
+
+func TestPublicURLIsAnHTTPSOrigin(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://example.org":          "https://example.org",
+		"https://example.org/":         "https://example.org",
+		"https://example.org:8443":     "https://example.org:8443",
+		"https://oiko.example.ts.net/": "https://oiko.example.ts.net",
+	} {
+		u, err := parsePublicURL(in)
+		if err != nil || u.String() != want {
+			t.Errorf("%s: %v, %v, want %s", in, u, err, want)
+		}
+	}
+	for in, reason := range map[string]string{
+		"http://example.org":        "https",
+		"example.org":               "https",
+		"https://":                  "host",
+		"https://:8443":             "host",
+		"https://example.org:port":  "port",
+		"https://example.org/oiko":  "path",
+		"https://example.org/oiko/": "path",
+		"https://example.org/?a=1":  "query",
+		"https://example.org?":      "query",
+		"https://example.org/#x":    "fragment",
+		"https://example.org#":      "fragment",
+		"https://alice@example.org": "userinfo",
+		"https://a:b@example.org/":  "userinfo",
+	} {
+		if u, err := parsePublicURL(in); err == nil || !strings.Contains(err.Error(), reason) {
+			t.Errorf("%s: %v, %v, want an error about its %s", in, u, err, reason)
+		}
+	}
+}
+
+// load checks publicUrl with the rest of the configuration, and starts
+// without it.
+func TestLoadChecksThePublicURL(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	write := func(doc string) {
+		if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for doc, want := range map[string]string{
+		`{}`:                                    "<nil>",
+		`{"publicUrl": "https://example.org/"}`: "https://example.org",
+	} {
+		write(doc)
+		if _, u, _, err := load(dir, path); err != nil || fmt.Sprint(u) != want {
+			t.Errorf("%s: %v, %v, want %s", doc, u, err, want)
+		}
+	}
+	write(`{"publicUrl": "http://example.org"}`)
+	if _, _, _, err := load(dir, path); err == nil || !strings.Contains(err.Error(), "publicUrl") {
+		t.Errorf("http: %v, want an error naming publicUrl", err)
+	}
+}
+
+// The data directory holds tokens and keys: a missing one is created 0700,
+// an existing one left as it is (it may be shared).
+func TestLoadCreatesAPrivateDataDirectory(t *testing.T) {
+	fresh := filepath.Join(t.TempDir(), "data")
+	existing := t.TempDir()
+	if err := os.Chmod(existing, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for dir, want := range map[string]os.FileMode{fresh: 0o700, existing: 0o755} {
+		if _, _, _, err := load(dir, filepath.Join(dir, "config.json")); err != nil {
+			t.Fatal(err)
+		}
+		if fi, err := os.Stat(dir); err != nil || fi.Mode().Perm() != want {
+			t.Errorf("%s: %v, %v, want %v", dir, fi.Mode().Perm(), err, want)
 		}
 	}
 }

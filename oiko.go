@@ -20,6 +20,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -46,9 +47,10 @@ import (
 
 // config is Oiko's hand-written configuration.
 type config struct {
-	Location *automation.Place          `json:"location"` // for the sun triggers
-	Telegram *telegram.Config           `json:"telegram"` // no Notifications without it
-	Bridges  map[string]json.RawMessage `json:"bridges"`  // each one's section, by name
+	PublicURL string                     `json:"publicUrl"` // where users reach Oiko; sign-in needs it
+	Location  *automation.Place          `json:"location"`  // for the sun triggers
+	Telegram  *telegram.Config           `json:"telegram"`  // no Notifications without it
+	Bridges   map[string]json.RawMessage `json:"bridges"`   // each one's section, by name
 }
 
 // configured is a Bridge of the configuration, of a type compiled in.
@@ -84,23 +86,13 @@ func Main() {
 		return
 	}
 
-	if err := os.MkdirAll(*dataDir, 0o755); err != nil {
-		log.Fatalf("data directory: %v", err)
-	}
 	configFile := *configPath
 	if configFile == "" {
 		configFile = filepath.Join(*dataDir, "config.json") // written by hand
 	}
-	var c config
-	if err := loadConfig(configFile, &c); err != nil {
-		log.Fatalf("loading %s: %v", configFile, err)
-	}
-	if l := c.Location; l != nil && (math.Abs(l.Latitude) > 90 || math.Abs(l.Longitude) > 180) {
-		log.Fatalf("%s: location out of range: %+v", configFile, *l)
-	}
-	bridges, err := configure(c.Bridges, *dataDir)
+	c, public, bridges, err := load(*dataDir, configFile)
 	if err != nil {
-		log.Fatalf("%s: %v", configFile, err)
+		log.Fatal(err)
 	}
 	if flag.NArg() > 0 {
 		if err := command(bridges, flag.Args()); err != nil {
@@ -108,7 +100,64 @@ func Main() {
 		}
 		return
 	}
-	serve(*listen, *dataDir, configFile, inst, c, bridges)
+	if public == nil {
+		log.Printf("oiko: no publicUrl in %s: sign-in will need one", configFile)
+	}
+	serve(*listen, *dataDir, configFile, inst, c, public, bridges)
+}
+
+// load readies Oiko to run from dataDir: it creates the data directory if it
+// is missing, private since it holds tokens and keys (an existing one may be
+// shared, and is left as it is), then reads and checks the configuration at
+// configFile, and resolves its Bridges. The Public URL is nil when the
+// configuration has none.
+func load(dataDir, configFile string) (config, *url.URL, []configured, error) {
+	var c config
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		return c, nil, nil, fmt.Errorf("data directory: %w", err)
+	}
+	if err := loadConfig(configFile, &c); err != nil {
+		return c, nil, nil, fmt.Errorf("loading %s: %w", configFile, err)
+	}
+	var public *url.URL
+	if c.PublicURL != "" {
+		var err error
+		if public, err = parsePublicURL(c.PublicURL); err != nil {
+			return c, nil, nil, fmt.Errorf("%s: publicUrl %q: %w", configFile, c.PublicURL, err)
+		}
+	}
+	if l := c.Location; l != nil && (math.Abs(l.Latitude) > 90 || math.Abs(l.Longitude) > 180) {
+		return c, nil, nil, fmt.Errorf("%s: location out of range: %+v", configFile, *l)
+	}
+	bridges, err := configure(c.Bridges, dataDir)
+	if err != nil {
+		return c, nil, nil, fmt.Errorf("%s: %w", configFile, err)
+	}
+	return c, public, bridges, nil
+}
+
+// parsePublicURL reads s as the Public URL, an HTTPS origin with nothing after
+// it but a "/" (ADR 0035): a __Host- cookie needs Path=/, the RP ID is the
+// host, and the web client is served from /.
+func parsePublicURL(s string) (*url.URL, error) {
+	u, err := url.Parse(s)
+	switch {
+	case err != nil:
+		return nil, err
+	case u.Scheme != "https":
+		return nil, errors.New("want https://host[:port]")
+	case u.User != nil:
+		return nil, errors.New("no userinfo allowed")
+	case u.Hostname() == "":
+		return nil, errors.New("no host")
+	case u.Path != "" && u.Path != "/", u.Opaque != "":
+		return nil, errors.New("no path allowed: Oiko is served from /")
+	case u.RawQuery != "" || u.ForceQuery:
+		return nil, errors.New("no query allowed")
+	case strings.Contains(s, "#"):
+		return nil, errors.New("no fragment allowed")
+	}
+	return &url.URL{Scheme: u.Scheme, Host: u.Host}, nil
 }
 
 // install is how this Oiko runs on its host, its Install (see CONTEXT.md), as
@@ -146,8 +195,8 @@ func configure(sections map[string]json.RawMessage, dataDir string) ([]configure
 		if name == "" || strings.Trim(name, "abcdefghijklmnopqrstuvwxyz0123456789-") != "" {
 			return nil, fmt.Errorf("bridge %q: a name is made of lowercase letters, digits and dashes", name)
 		}
-		if name == "upgrade" {
-			return nil, errors.New("bridge upgrade: the name is oiko upgrade's")
+		if name == "upgrade" || name == "sign-in-link" {
+			return nil, fmt.Errorf("bridge %s: the name is oiko %[1]s's", name)
 		}
 		var section map[string]json.RawMessage
 		var t string
@@ -205,8 +254,9 @@ func command(bridges []configured, args []string) error {
 	return b.module.Commands[args[1]](b.env, args[2:])
 }
 
-// serve runs Oiko until it receives SIGINT or SIGTERM.
-func serve(listen, dataDir, configFile, install string, c config, bridges []configured) {
+// serve runs Oiko until it receives SIGINT or SIGTERM. public is the Public
+// URL, nil when the configuration has none.
+func serve(listen, dataDir, configFile, install string, c config, public *url.URL, bridges []configured) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -318,7 +368,7 @@ func serve(listen, dataDir, configFile, install string, c config, bridges []conf
 	go releases.Run(ctx)
 	srv := &http.Server{
 		Addr:        listen,
-		Handler:     api.Handler(h, engine, hist, built, install, releases, types, web.Dist()),
+		Handler:     api.Handler(h, engine, hist, built, install, releases, types, public, web.Dist()),
 		BaseContext: func(net.Listener) context.Context { return ctx }, // ends SSE streams on shutdown
 	}
 	served := make(chan struct{})

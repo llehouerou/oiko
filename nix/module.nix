@@ -23,6 +23,7 @@ let
     // {
       bridges = bridges // (cfg.settings.bridges or { });
     }
+    // lib.optionalAttrs (cfg.publicUrl != null) { inherit (cfg) publicUrl; }
   );
 in
 {
@@ -39,6 +40,16 @@ in
       type = lib.types.str;
       default = ":8080";
       description = "HTTP listen address. There is no authentication: keep it off untrusted networks.";
+    };
+
+    publicUrl = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "https://oiko.example.org";
+      description = ''
+        The Public URL, where users reach Oiko: an HTTPS origin,
+        `https://host[:port]`, with no path. Sign-in needs it.
+      '';
     };
 
     mqtt = lib.mkOption {
@@ -119,6 +130,7 @@ in
         User = "oiko";
         Group = "oiko";
         StateDirectory = "oiko";
+        StateDirectoryMode = "0700"; # tokens and keys
         Restart = "on-failure";
         ProtectSystem = "strict";
         ProtectHome = true;

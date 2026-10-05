@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"math"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/llehouerou/oiko/internal/automation"
@@ -23,8 +24,10 @@ import (
 // ponytail: no authentication yet; anyone on the LAN can observe and command.
 // Add accounts before exposing Oiko beyond a trusted network.
 // b is what Oiko is built from, install its Install (see CONTEXT.md), releases
-// what is newer, bridges the type of each Bridge of the configuration, by name.
-func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, b build.Build, install string, releases *release.Checker, bridges map[string]string, static fs.FS) http.Handler {
+// what is newer, bridges the type of each Bridge of the configuration, by name,
+// public the Public URL, nil when the configuration has none: the origin and
+// RP ID sign-in will check.
+func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, b build.Build, install string, releases *release.Checker, bridges map[string]string, public *url.URL, static fs.FS) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/updates", updates(h, releases))
 	mux.HandleFunc("GET /api/build", func(w http.ResponseWriter, r *http.Request) {

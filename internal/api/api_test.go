@@ -36,7 +36,7 @@ func server(t *testing.T) (*home.Home, func(method, path, body string) *http.Res
 	t.Cleanup(cancel)
 	go e.Run(ctx)
 	go store.Run(ctx)
-	srv := httptest.NewServer(Handler(h, e, store, build.Build{}, "binary", release.New(build.Build{}), nil, fstest.MapFS{}))
+	srv := httptest.NewServer(Handler(h, e, store, build.Build{}, "binary", release.New(build.Build{}), nil, nil, fstest.MapFS{}))
 	t.Cleanup(srv.Close)
 	return h, func(method, path, body string) *http.Response {
 		t.Helper()
