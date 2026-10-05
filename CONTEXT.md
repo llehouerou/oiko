@@ -200,3 +200,7 @@ _Avoid_: login, signed-in device (as the term), token, cookie
 **Token**:
 A Program's credential: a secret it sends with every request to the HTTP API, shown once when an Admin generates it, valid until it is revoked or replaced, never expiring. A Program holds at most one.
 _Avoid_: API key, access token, secret, password
+
+**Audit log**:
+Record of who signed in or was refused, and of every change to access: Persons, Kiosks and Programs, their Access levels, credentials and Sessions, Sign-in links, Kiosk pairings, and what ended by itself. Each entry names who acted and whom it concerns as they were named then. Kept one year; never edited. Admins read all of it, every Person the entries that concern them.
+_Avoid_: security log, activity log, journal, History (reserved for a Target's past)
