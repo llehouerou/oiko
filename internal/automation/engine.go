@@ -17,8 +17,8 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/llehouerou/oiko/bridge/store"
 	"github.com/llehouerou/oiko/internal/home"
-	"github.com/llehouerou/oiko/internal/store"
 )
 
 const (

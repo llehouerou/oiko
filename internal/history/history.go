@@ -24,9 +24,9 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/llehouerou/oiko/bridge/store"
 	"github.com/llehouerou/oiko/internal/automation"
 	"github.com/llehouerou/oiko/internal/home"
-	"github.com/llehouerou/oiko/internal/store"
 )
 
 const (

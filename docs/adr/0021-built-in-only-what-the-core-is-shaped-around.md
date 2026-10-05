@@ -2,7 +2,7 @@
 
 A type of Bridge is built into Oiko only when Oiko's core is shaped around it and most installations need it. That is zigbee2mqtt alone: `commandTimeout` sits above zigbee2mqtt's delivery timeout, `maxTransition` is the Zigbee transition ceiling, and the send spacing exists for the radio network; its tests and benchmarks exercise Home's hot path in this repository. Every other type is external, in a repository of its own, added through `oiko-build` or the flake's `bridges` (ADR 0017) and listed in the catalogue (ADR 0020), as Arlo already is (ADR 0010).
 
-netatmo and homekit therefore leave Oiko before v1.0.0: after it, removing a built-in type, its configuration and its NixOS defaults is a breaking release (ADR 0019). Both keep their data in versioned stores (`token.json`, `pairings.json`, `accessories.json`) through `internal/store`, which an external type cannot import: the store becomes part of the public contract first. A type that moves keeps its name, so its data directory, `<data>/<name>`, stays where it is.
+netatmo and homekit therefore leave Oiko before v1.0.0: after it, removing a built-in type, its configuration and its NixOS defaults is a breaking release (ADR 0019). Both keep their data in versioned stores (`token.json`, `pairings.json`, `accessories.json`) through Oiko's store, which therefore became part of the public contract first, as `bridge/store`. A type that moves keeps its name, so its data directory, `<data>/<name>`, stays where it is.
 
 ## Considered Options
 

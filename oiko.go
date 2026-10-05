@@ -28,13 +28,13 @@ import (
 	"text/tabwriter"
 
 	"github.com/llehouerou/oiko/bridge"
+	"github.com/llehouerou/oiko/bridge/store"
 	"github.com/llehouerou/oiko/internal/api"
 	"github.com/llehouerou/oiko/internal/automation"
 	"github.com/llehouerou/oiko/internal/build"
 	"github.com/llehouerou/oiko/internal/history"
 	"github.com/llehouerou/oiko/internal/home"
 	"github.com/llehouerou/oiko/internal/release"
-	"github.com/llehouerou/oiko/internal/store"
 	"github.com/llehouerou/oiko/internal/telegram"
 	"github.com/llehouerou/oiko/web"
 

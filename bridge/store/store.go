@@ -1,5 +1,11 @@
 // Package store keeps JSON documents in a data directory (ADR 0003), each in
-// a format migrated forward on loading (ADR 0019).
+// a format migrated forward on loading (ADR 0019). Oiko keeps its own state
+// with it, and a type of Bridge its own, in its Env.DataDir:
+//
+//	var tokenFormat store.Format // format 1; add a migration to change it
+//
+//	store.Load(filepath.Join(env.DataDir, "token.json"), tokenFormat, &tok)
+//	store.Save(filepath.Join(env.DataDir, "token.json"), tokenFormat, tok)
 package store
 
 import (

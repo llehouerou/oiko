@@ -22,7 +22,7 @@ import (
 	"github.com/AlexxIT/go2rtc/pkg/hap"
 
 	"github.com/llehouerou/oiko/bridge"
-	"github.com/llehouerou/oiko/internal/store"
+	"github.com/llehouerou/oiko/bridge/store"
 )
 
 func init() {

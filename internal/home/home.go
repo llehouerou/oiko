@@ -12,7 +12,7 @@ import (
 	"uuid"
 
 	"github.com/llehouerou/oiko/bridge"
-	"github.com/llehouerou/oiko/internal/store"
+	"github.com/llehouerou/oiko/bridge/store"
 )
 
 const (

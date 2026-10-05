@@ -12,7 +12,7 @@ import (
 	"github.com/AlexxIT/go2rtc/pkg/mdns"
 
 	"github.com/llehouerou/oiko/bridge"
-	"github.com/llehouerou/oiko/internal/store"
+	"github.com/llehouerou/oiko/bridge/store"
 )
 
 // pair is the pair command, `oiko <bridge> pair [-id device-id] setup-code`:

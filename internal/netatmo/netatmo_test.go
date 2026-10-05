@@ -11,8 +11,8 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/llehouerou/oiko/bridge/store"
 	"github.com/llehouerou/oiko/internal/home"
-	"github.com/llehouerou/oiko/internal/store"
 )
 
 // A failed poll is tried again soon, then less and less often, never less

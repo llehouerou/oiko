@@ -18,7 +18,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/llehouerou/oiko/bridge"
-	"github.com/llehouerou/oiko/internal/store"
+	"github.com/llehouerou/oiko/bridge/store"
 )
 
 func init() { bridge.Register(bridge.Module{Type: "netatmo", New: open}) }
