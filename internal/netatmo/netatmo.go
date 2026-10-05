@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -52,6 +52,7 @@ const api = "https://api.netatmo.com"
 type Bridge struct {
 	api    string // overridden by tests
 	client *http.Client
+	log    *slog.Logger
 	// Only Run's goroutine touches these.
 	port      bridge.Port
 	described []bridge.Device
@@ -83,16 +84,16 @@ func open(env bridge.Env) (bridge.Bridge, error) {
 	if tok.RefreshToken == "" {
 		return nil, fmt.Errorf(`netatmo: no token: write {"refresh_token": "…"} from the app's token generator (scope read_station) to %s`, tokenPath)
 	}
-	return newBridge(api, c.ClientID, strings.TrimSpace(string(secret)), &tok, tokenPath), nil
+	return newBridge(api, c.ClientID, strings.TrimSpace(string(secret)), &tok, tokenPath, env.Log), nil
 }
 
-func newBridge(base, id, secret string, tok *oauth2.Token, tokenPath string) *Bridge {
+func newBridge(base, id, secret string, tok *oauth2.Token, tokenPath string, log *slog.Logger) *Bridge {
 	conf := &oauth2.Config{ClientID: id, ClientSecret: secret,
 		Endpoint: oauth2.Endpoint{TokenURL: base + "/oauth2/token", AuthStyle: oauth2.AuthStyleInParams}}
 	src := &saver{conf.TokenSource(context.Background(), tok), tokenPath, tok.RefreshToken}
 	client := oauth2.NewClient(context.Background(), src)
 	client.Timeout = 30 * time.Second
-	return &Bridge{api: base, client: client, measured: map[string]int64{}}
+	return &Bridge{api: base, client: client, log: log, measured: map[string]int64{}}
 }
 
 // saver writes each new token to path, before it is used.
@@ -127,7 +128,7 @@ func (b *Bridge) Run(ctx context.Context, p bridge.Port) {
 		case err != nil:
 			retry = backoff(retry)
 			wait = retry
-			log.Printf("netatmo: %v; again in %v", err, wait)
+			b.log.Warn("poll failed", "err", err, "retry", wait)
 			p.SetOnline(false)
 		default:
 			retry = 0

@@ -3,9 +3,11 @@ package oiko
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +33,10 @@ func init() {
 
 func TestConfigureResolvesTypesAndRunsCommands(t *testing.T) {
 	pinged = nil
+	var logged strings.Builder
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
 	dir := t.TempDir()
 	bridges, err := configure(map[string]json.RawMessage{
 		"fake":   json.RawMessage(`{}`),                          // its type is its name
@@ -54,6 +60,10 @@ func TestConfigureResolvesTypesAndRunsCommands(t *testing.T) {
 	}
 	if got := string(bridges[1].env.Config); got != `{"door":2}` {
 		t.Errorf("garage's section %s, want it without its type", got)
+	}
+	bridges[1].env.Log.Info("hello")
+	if !strings.Contains(logged.String(), "msg=hello bridge=garage") {
+		t.Errorf("logged %q, want it scoped to garage", logged.String())
 	}
 
 	if err := command(bridges, []string{"garage", "ping", "x"}); err != nil || !slices.Equal(pinged, []string{"garage x"}) {

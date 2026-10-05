@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -47,7 +48,7 @@ func accessoryFake(t *testing.T, conn net.Conn, subscribed chan<- []byte) {
 
 func TestFollowDescribesReportsAndRelaysEvents(t *testing.T) {
 	var saved map[string]json.RawMessage
-	b := newBridge(Pairings{Accessories: []Paired{{ID: "AA:BB"}}}, nil, func(a map[string]json.RawMessage) error { saved = a; return nil })
+	b := newBridge(Pairings{Accessories: []Paired{{ID: "AA:BB"}}}, nil, func(a map[string]json.RawMessage) error { saved = a; return nil }, slog.Default())
 	h := home.New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	b.port = h.Attach("homekit", b)
 	b.port.SetOnline(true)
@@ -142,7 +143,7 @@ func TestFollowDescribesReportsAndRelaysEvents(t *testing.T) {
 // An accessory that cannot be reached has nothing to replay: it does not hold
 // the home back.
 func TestUnreachableAccessoryDoesNotHoldTheReplay(t *testing.T) {
-	b := newBridge(Pairings{Accessories: []Paired{{ID: "AA:BB", Public: "not hex"}}}, nil, nil)
+	b := newBridge(Pairings{Accessories: []Paired{{ID: "AA:BB", Public: "not hex"}}}, nil, nil, slog.Default())
 	h := home.New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	b.Run(context.Background(), h.Attach("homekit", b)) // returns: its pairing is unusable
 	select {

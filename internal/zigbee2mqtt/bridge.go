@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/url"
 	"strings"
 	"sync"
@@ -33,6 +33,7 @@ type Config struct {
 type Bridge struct {
 	broker   *url.URL
 	base     string // base topic
+	log      *slog.Logger
 	clientID string
 	marker   string // our own topic, published once subscribed: it comes back after the retained state
 	home     bridge.Port
@@ -57,12 +58,12 @@ func open(env bridge.Env) (bridge.Bridge, error) {
 	if err != nil {
 		return nil, fmt.Errorf("zigbee2mqtt: broker: %w", err)
 	}
-	return newBridge(c.BaseTopic, broker), nil
+	return newBridge(c.BaseTopic, broker, env.Log), nil
 }
 
-func newBridge(baseTopic string, broker *url.URL) *Bridge {
+func newBridge(baseTopic string, broker *url.URL, log *slog.Logger) *Bridge {
 	id := "oiko-" + uuid.New().String() // unique: instances sharing a broker must not evict each other
-	return &Bridge{broker: broker, base: baseTopic, clientID: id, marker: "oiko/" + id + "/replayed"}
+	return &Bridge{broker: broker, base: baseTopic, log: log, clientID: id, marker: "oiko/" + id + "/replayed"}
 }
 
 // settle notes zigbee2mqtt online or not, or the marker back, and tells Oiko
@@ -88,7 +89,7 @@ func (b *Bridge) Run(ctx context.Context, p bridge.Port) {
 		KeepAlive:                     20,
 		CleanStartOnInitialConnection: true,
 		OnConnectionUp: func(cm *autopaho.ConnectionManager, _ *paho.Connack) {
-			log.Printf("mqtt: connected to %s", broker.Host)
+			b.log.Info("mqtt connected", "broker", broker.Host)
 			go func() {
 				// NoLocal: don't receive our own /set publishes back. The broker
 				// queues the retained state on subscribing, so the marker comes
@@ -97,20 +98,20 @@ func (b *Bridge) Run(ctx context.Context, p bridge.Port) {
 				// Mosquitto, and main's 10 s cap bounds a broker it doesn't.
 				sub := &paho.Subscribe{Subscriptions: []paho.SubscribeOptions{{Topic: b.base + "/#", QoS: 1, NoLocal: true}, {Topic: b.marker, QoS: 1}}}
 				if _, err := cm.Subscribe(ctx, sub); err != nil {
-					log.Printf("mqtt: subscribe: %v", err)
+					b.log.Error("mqtt subscribe", "err", err)
 					return
 				}
 				if _, err := cm.Publish(ctx, &paho.Publish{Topic: b.marker, QoS: 1, Payload: []byte("replayed")}); err != nil {
-					log.Printf("mqtt: publish: %v", err)
+					b.log.Error("mqtt publish", "err", err)
 				}
 			}()
 		},
 		OnConnectionDown: func() bool {
-			log.Printf("mqtt: connection lost")
+			b.log.Warn("mqtt connection lost")
 			p.SetOnline(false)
 			return true
 		},
-		OnConnectError: func(err error) { log.Printf("mqtt: %v", err) },
+		OnConnectError: func(err error) { b.log.Warn("mqtt connect", "err", err) },
 		ClientConfig: paho.ClientConfig{
 			ClientID: b.clientID,
 			OnPublishReceived: []func(paho.PublishReceived) (bool, error){
@@ -127,7 +128,7 @@ func (b *Bridge) Run(ctx context.Context, p bridge.Port) {
 	}
 	conn, err := autopaho.NewConnection(ctx, cfg)
 	if err != nil { // a configuration autopaho refuses: the Bridge stays offline
-		log.Printf("mqtt: %v", err)
+		b.log.Error("mqtt", "err", err)
 		return
 	}
 	b.mu.Lock()
@@ -174,7 +175,7 @@ func (b *Bridge) handle(topic string, payload []byte, retained bool) {
 		}
 		var state map[string]any
 		if err := json.Unmarshal(payload, &state); err != nil {
-			log.Printf("zigbee2mqtt: %s: %v", topic, err)
+			b.log.Warn("bad message", "topic", topic, "err", err)
 			return
 		}
 		b.home.Report(d.address, d.readings(state, !retained), reportedAt(state))
@@ -206,7 +207,7 @@ func availability(s string) bridge.Availability {
 func (b *Bridge) syncDevices(payload []byte) {
 	var list []device
 	if err := json.Unmarshal(payload, &list); err != nil {
-		log.Printf("zigbee2mqtt: bridge/devices: %v", err)
+		b.log.Warn("bad message", "topic", "bridge/devices", "err", err)
 		return
 	}
 	var devices []bridge.Device

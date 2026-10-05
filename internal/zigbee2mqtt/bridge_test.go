@@ -3,6 +3,7 @@ package zigbee2mqtt
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"reflect"
 	"slices"
@@ -22,7 +23,7 @@ func newTestBridge(t testing.TB) (*Bridge, *home.Home) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := newBridge("zigbee2mqtt", nil)
+	b := newBridge("zigbee2mqtt", nil, slog.Default())
 	h := home.New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	b.home = h.Attach("zigbee2mqtt", b)
 	b.handle("zigbee2mqtt/bridge/state", []byte(`{"state":"online"}`), true)
@@ -223,7 +224,7 @@ func (h issuing) Command(t home.Target, req home.Request) (string, error) {
 
 func TestReplayedOnceOnlineAndItsRetainedStateReplayed(t *testing.T) {
 	for _, online := range []bool{true, false} {
-		b := newBridge("zigbee2mqtt", nil)
+		b := newBridge("zigbee2mqtt", nil, slog.Default())
 		h := home.New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
 		b.home = h.Attach("zigbee2mqtt", b)
 		replayed := func(*Bridge) bool {

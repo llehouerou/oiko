@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/url"
 	"runtime"
@@ -157,6 +158,7 @@ type Env struct {
 	Name    string          // the Bridge's name in the configuration, recorded on its Devices
 	Config  json.RawMessage // its section of the configuration, without "type"; decode it with Decode
 	DataDir string          // a directory of its own, for what it keeps: tokens, sessions, pairings
+	Log     *slog.Logger    // where it logs, its records carrying its name as "bridge"
 }
 
 // Decode decodes the Bridge's section of the configuration into v, refusing a

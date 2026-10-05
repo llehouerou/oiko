@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"path/filepath"
 	"reflect"
@@ -57,6 +57,7 @@ const (
 type Bridge struct {
 	pairings Pairings
 	save     func(map[string]json.RawMessage) error // the last /accessories of each accessory
+	log      *slog.Logger
 
 	mu        sync.Mutex
 	port      bridge.Port
@@ -85,13 +86,13 @@ func open(env bridge.Env) (bridge.Bridge, error) {
 			return nil, fmt.Errorf("homekit: %w", err)
 		}
 	}
-	return newBridge(p, saved, func(a map[string]json.RawMessage) error { return store.Save(accessories, accessoriesFormat, a) }), nil
+	return newBridge(p, saved, func(a map[string]json.RawMessage) error { return store.Save(accessories, accessoriesFormat, a) }, env.Log), nil
 }
 
 // newBridge starts from the /accessories documents last saved, so that
 // accessories out of reach at startup keep their Device.
-func newBridge(p Pairings, saved map[string]json.RawMessage, save func(map[string]json.RawMessage) error) *Bridge {
-	b := &Bridge{pairings: p, save: save, raw: map[string]json.RawMessage{}, described: map[string]described{}}
+func newBridge(p Pairings, saved map[string]json.RawMessage, save func(map[string]json.RawMessage) error, log *slog.Logger) *Bridge {
+	b := &Bridge{pairings: p, save: save, log: log, raw: map[string]json.RawMessage{}, described: map[string]described{}}
 	for _, a := range p.Accessories {
 		if raw, ok := saved[a.ID]; ok {
 			if d, _, err := describe(a.ID, raw); err == nil {
@@ -150,7 +151,7 @@ func (b *Bridge) keep(ctx context.Context, a Paired, tried func()) {
 		c.ClientPrivate, err = hex.DecodeString(b.pairings.Controller.Key)
 	}
 	if err != nil {
-		log.Printf("homekit: %s: bad pairing: %v", a.ID, err)
+		b.log.Error("bad pairing", "accessory", a.ID, "err", err)
 		return
 	}
 	backoff := time.Second
@@ -165,7 +166,7 @@ func (b *Bridge) keep(ctx context.Context, a Paired, tried func()) {
 		if time.Since(started) > maxBackoff {
 			backoff = time.Second
 		}
-		log.Printf("homekit: %s: %v; retrying in %v", a.ID, err, backoff)
+		b.log.Warn("accessory unreachable", "accessory", a.ID, "err", err, "retry", backoff)
 		select {
 		case <-time.After(backoff):
 		case <-ctx.Done():
@@ -212,7 +213,7 @@ func (b *Bridge) follow(ctx context.Context, id string, conn io.ReadWriter, repo
 			Characteristics []characteristic `json:"characteristics"`
 		}
 		if err := json.Unmarshal(body, &v); err != nil {
-			log.Printf("homekit: %s: event: %v", id, err)
+			b.log.Warn("bad event", "accessory", id, "err", err)
 			return
 		}
 		b.port.Report(id, d.values(v.Characteristics), time.Now())
@@ -268,7 +269,7 @@ func (b *Bridge) describe(id string, raw []byte, d described) {
 		return
 	}
 	if err := b.save(b.raw); err != nil {
-		log.Printf("homekit: saving accessories: %v", err)
+		b.log.Error("saving accessories", "err", err)
 	}
 	b.syncDevices()
 }

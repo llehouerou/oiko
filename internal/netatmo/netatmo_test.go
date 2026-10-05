@@ -1,6 +1,7 @@
 package netatmo
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -58,7 +59,7 @@ func TestPollFeedsHome(t *testing.T) {
 	defer srv.Close()
 
 	tokenPath := filepath.Join(t.TempDir(), "netatmo-token.json")
-	b := newBridge(srv.URL, "id", "secret", &oauth2.Token{RefreshToken: "r1"}, tokenPath)
+	b := newBridge(srv.URL, "id", "secret", &oauth2.Token{RefreshToken: "r1"}, tokenPath, slog.Default())
 	h := home.New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	b.port = h.Attach("netatmo", b)
 	stations, err := b.fetch(t.Context())

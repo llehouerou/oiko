@@ -14,6 +14,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"log/slog"
 	"maps"
 	"math"
 	"net"
@@ -171,7 +172,7 @@ func configure(sections map[string]json.RawMessage, dataDir string) ([]configure
 		if err != nil {
 			return nil, fmt.Errorf("bridge %s: %w", name, err)
 		}
-		env := bridge.Env{Name: name, Config: config, DataDir: filepath.Join(dataDir, name)}
+		env := bridge.Env{Name: name, Config: config, DataDir: filepath.Join(dataDir, name), Log: slog.With("bridge", name)}
 		if err := os.MkdirAll(env.DataDir, 0o700); err != nil { // tokens and keys
 			return nil, err
 		}
