@@ -1,6 +1,6 @@
 # Types of Bridge compiled in, through a public contract
 
-Anyone can add a type of Bridge to Oiko without changing it: a type is a Go package that registers a `bridge.Module` from `init`, and a build of Oiko is a main package that imports such packages for their side effect and calls `oiko.Main`. The four built-in types (zigbee2mqtt, homekit, arlo, netatmo) register the same way and are always compiled in. The module is `github.com/llehouerou/oiko`, so that builds and types outside the repository import it; Oiko's own packages stay internal.
+Anyone can add a type of Bridge to Oiko without changing it: a type is a Go package that registers a `bridge.Module` from `init`, and a build of Oiko is a main package that imports such packages for their side effect and calls `oiko.Main`. The built-in types register the same way and are always compiled in; which types are built in is ADR 0021's. The module is `github.com/llehouerou/oiko`, so that builds and types outside the repository import it; Oiko's own packages stay internal.
 
 The contract is the `bridge` package, which depends on the standard library only: a `Bridge` runs and sends Commands, and feeds Oiko through a `Port` (`SyncDevices`, `SetOnline`, `SetAvailability`, `Report`, `Replayed`), the methods Home already exposed to its Bridges. It also holds the terms a Bridge describes its Devices in. `Capability`, its types and categories, and `Availability` are Home's own, through aliases. A described `Device` and `Function` carry only what a Bridge knows: identity, Name, Icon and Areas stay Oiko's.
 
