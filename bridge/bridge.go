@@ -112,7 +112,7 @@ type ValueType string
 const (
 	Binary    ValueType = "binary"    // bool
 	Numeric   ValueType = "numeric"   // float64
-	Enum      ValueType = "enum"      // string, one of the Options
+	Enum      ValueType = "enum"      // string: a Command sets one of the Options; a report may carry another, shown as is
 	Text      ValueType = "text"      // string
 	Composite ValueType = "composite" // map[string]any, keyed by the Fields' keys
 	List      ValueType = "list"      // []any
@@ -142,7 +142,7 @@ type Capability struct {
 	Min       *float64     `json:"min,omitempty"`
 	Max       *float64     `json:"max,omitempty"`
 	Step      *float64     `json:"step,omitempty"`
-	Options   []string     `json:"options,omitempty"`  // Enum values
+	Options   []string     `json:"options,omitempty"`  // Enum values a Command may set
 	Triggers  []string     `json:"triggers,omitempty"` // Options that trigger a one-off action, never reported as the Value
 	Fields    []Capability `json:"fields,omitempty"`   // Composite members
 	Access    Access       `json:"access"`

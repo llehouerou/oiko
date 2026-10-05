@@ -527,7 +527,7 @@ export function Strip({
             width: width(s, e),
             minWidth: 1,
             opacity: 0.75,
-            background: enumColors[Math.max(0, cap.options?.indexOf(v) ?? 0) % enumColors.length],
+            background: cap.options?.includes(v) ? enumColors[cap.options.indexOf(v) % enumColors.length] : '#a3a3a3', // grey: outside the Options
           }}
         >
           {v}

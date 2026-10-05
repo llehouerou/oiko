@@ -1758,17 +1758,17 @@ function Color(props: CapProps) {
 function Select(props: CapProps) {
   const { target, cap } = props
   const value = useValue(ref(props))
+  const current = typeof value?.data === 'string' ? value.data : ''
   return (
     <label className="flex items-center justify-between gap-2 text-sm">
       <span className="text-neutral-400">{cap.label}</span>
-      <select
-        value={typeof value?.data === 'string' ? value.data : ''}
-        onChange={(e) => sendCommand(target, { [cap.key]: e.target.value })}
-        className="rounded bg-neutral-800 px-2 py-1"
-      >
+      <select value={current} onChange={(e) => sendCommand(target, { [cap.key]: e.target.value })} className="rounded bg-neutral-800 px-2 py-1">
         <option value="" disabled>
           —
         </option>
+        {current !== '' && !cap.options?.includes(current) && (
+          <option disabled>{current}</option> // reported, but not one a Command may set
+        )}
         {cap.options?.map((o) => (
           <option key={o}>{o}</option>
         ))}
