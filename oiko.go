@@ -25,6 +25,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -47,7 +48,7 @@ import (
 
 // config is Oiko's hand-written configuration.
 type config struct {
-	PublicURL string                     `json:"publicUrl"` // where users reach Oiko; sign-in needs it
+	PublicURL *string                    `json:"publicUrl"` // where users reach Oiko; sign-in needs it
 	Location  *automation.Place          `json:"location"`  // for the sun triggers
 	Telegram  *telegram.Config           `json:"telegram"`  // no Notifications without it
 	Bridges   map[string]json.RawMessage `json:"bridges"`   // each one's section, by name
@@ -107,7 +108,7 @@ func Main() {
 }
 
 // load readies Oiko to run from dataDir: it creates the data directory if it
-// is missing, private since it holds tokens and keys (an existing one may be
+// is missing, private since it holds secrets (an existing one may be
 // shared, and is left as it is), then reads and checks the configuration at
 // configFile, and resolves its Bridges. The Public URL is nil when the
 // configuration has none.
@@ -120,10 +121,10 @@ func load(dataDir, configFile string) (config, *url.URL, []configured, error) {
 		return c, nil, nil, fmt.Errorf("loading %s: %w", configFile, err)
 	}
 	var public *url.URL
-	if c.PublicURL != "" {
+	if c.PublicURL != nil {
 		var err error
-		if public, err = parsePublicURL(c.PublicURL); err != nil {
-			return c, nil, nil, fmt.Errorf("%s: publicUrl %q: %w", configFile, c.PublicURL, err)
+		if public, err = parsePublicURL(*c.PublicURL); err != nil {
+			return c, nil, nil, fmt.Errorf("%s: publicUrl %q: %w", configFile, *c.PublicURL, err)
 		}
 	}
 	if l := c.Location; l != nil && (math.Abs(l.Latitude) > 90 || math.Abs(l.Longitude) > 180) {
@@ -138,7 +139,8 @@ func load(dataDir, configFile string) (config, *url.URL, []configured, error) {
 
 // parsePublicURL reads s as the Public URL, an HTTPS origin with nothing after
 // it but a "/" (ADR 0035): a __Host- cookie needs Path=/, the RP ID is the
-// host, and the web client is served from /.
+// host, and the web client is served from /. The origin is returned as a
+// browser sends it: its host in lowercase, without the default port.
 func parsePublicURL(s string) (*url.URL, error) {
 	u, err := url.Parse(s)
 	switch {
@@ -157,7 +159,12 @@ func parsePublicURL(s string) (*url.URL, error) {
 	case strings.Contains(s, "#"):
 		return nil, errors.New("no fragment allowed")
 	}
-	return &url.URL{Scheme: u.Scheme, Host: u.Host}, nil
+	if p := u.Port(); p != "" || strings.HasSuffix(u.Host, ":") {
+		if n, err := strconv.Atoi(p); err != nil || n < 1 || n > 65535 {
+			return nil, errors.New("want a port from 1 to 65535")
+		}
+	}
+	return &url.URL{Scheme: "https", Host: strings.TrimSuffix(strings.ToLower(u.Host), ":443")}, nil
 }
 
 // install is how this Oiko runs on its host, its Install (see CONTEXT.md), as
@@ -219,7 +226,7 @@ func configure(sections map[string]json.RawMessage, dataDir string) ([]configure
 			return nil, fmt.Errorf("bridge %s: %w", name, err)
 		}
 		env := bridge.Env{Name: name, Config: config, DataDir: filepath.Join(dataDir, name), Log: slog.With("bridge", name)}
-		if err := os.MkdirAll(env.DataDir, 0o700); err != nil { // tokens and keys
+		if err := os.MkdirAll(env.DataDir, 0o700); err != nil { // its secrets
 			return nil, err
 		}
 		bridges = append(bridges, configured{env, m})

@@ -49,7 +49,7 @@ make build
 
 Then open http://localhost:8080. Flags: `-listen`, `-data` (directory holding Oiko's own configuration, `./data` by default, created `0700` if missing; back it up), `-config` (`<data>/config.json` by default), `-version` (what this Oiko is built from: its version and each type of Bridge, with its module and version; the dashboard shows it too, under Oiko's logo).
 `./oiko [flags] <bridge> <command> [args]` runs a command of a Bridge instead, such as `homekit pair`;
-`upgrade` (below) and `sign-in-link` are Oiko's own commands, never Bridge names.
+`upgrade` (below) and `sign-in-link` are reserved for Oiko's own commands, never Bridge names.
 
 The Public URL, where users reach Oiko, goes in `data/config.json`: `{"publicUrl": "https://oiko.example.org"}`,
 an HTTPS origin with no path. Sign-in will need it; Oiko starts without it.

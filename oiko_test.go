@@ -116,6 +116,8 @@ func TestPublicURLIsAnHTTPSOrigin(t *testing.T) {
 		"https://example.org/":         "https://example.org",
 		"https://example.org:8443":     "https://example.org:8443",
 		"https://oiko.example.ts.net/": "https://oiko.example.ts.net",
+		"https://Oiko.Example.org":     "https://oiko.example.org", // as a browser sends it
+		"https://example.org:443/":     "https://example.org",
 	} {
 		u, err := parsePublicURL(in)
 		if err != nil || u.String() != want {
@@ -136,6 +138,9 @@ func TestPublicURLIsAnHTTPSOrigin(t *testing.T) {
 		"https://example.org#":      "fragment",
 		"https://alice@example.org": "userinfo",
 		"https://a:b@example.org/":  "userinfo",
+		"https://example.org:":      "port",
+		"https://example.org:0":     "port",
+		"https://example.org:65536": "port",
 	} {
 		if u, err := parsePublicURL(in); err == nil || !strings.Contains(err.Error(), reason) {
 			t.Errorf("%s: %v, %v, want an error about its %s", in, u, err, reason)
@@ -162,13 +167,15 @@ func TestLoadChecksThePublicURL(t *testing.T) {
 			t.Errorf("%s: %v, %v, want %s", doc, u, err, want)
 		}
 	}
-	write(`{"publicUrl": "http://example.org"}`)
-	if _, _, _, err := load(dir, path); err == nil || !strings.Contains(err.Error(), "publicUrl") {
-		t.Errorf("http: %v, want an error naming publicUrl", err)
+	for _, doc := range []string{`{"publicUrl": "http://example.org"}`, `{"publicUrl": ""}`} {
+		write(doc)
+		if _, _, _, err := load(dir, path); err == nil || !strings.Contains(err.Error(), "publicUrl") {
+			t.Errorf("%s: %v, want an error naming publicUrl", doc, err)
+		}
 	}
 }
 
-// The data directory holds tokens and keys: a missing one is created 0700,
+// The data directory holds secrets: a missing one is created 0700,
 // an existing one left as it is (it may be shared).
 func TestLoadCreatesAPrivateDataDirectory(t *testing.T) {
 	fresh := filepath.Join(t.TempDir(), "data")

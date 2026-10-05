@@ -130,7 +130,7 @@ in
         User = "oiko";
         Group = "oiko";
         StateDirectory = "oiko";
-        StateDirectoryMode = "0700"; # tokens and keys
+        StateDirectoryMode = "0700"; # it holds secrets
         Restart = "on-failure";
         ProtectSystem = "strict";
         ProtectHome = true;
