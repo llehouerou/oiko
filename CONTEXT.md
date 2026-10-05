@@ -14,7 +14,7 @@ _Avoid_: Integration, Adapter, Coordinator, Plugin
 What an Oiko executable is made of: Oiko's version and each type of Bridge compiled into it, built in or added, with the Go package registering it and the module and version that package comes from, as Go records them in the executable. A version is unknown for a development build or a module taken from a directory; an untagged commit has a pseudo-version.
 _Avoid_: recipe, manifest (reserved for a Bridge's), bill of materials
 **Install**:
-How an Oiko runs on its host: from Oiko's NixOS module, in a Docker image, or as a plain binary, as `OIKO_INSTALL` tells (`nixos`, `docker`, unset). It decides how a Release is applied: the dashboard tells the occupant what to change for theirs, and a plain binary rebuilds itself with `oiko upgrade`.
+How an Oiko runs on its host: from Oiko's NixOS module, in a Docker image, or as a plain binary, as `OIKO_INSTALL` tells (`nixos`, `docker`, unset). It decides how a Release is applied: the dashboard tells what to change for each, and a plain binary rebuilds itself with `oiko upgrade`.
 _Avoid_: deployment, distribution, install method
 **Manifest**:
 What an added type of Bridge's module tells the catalogue about itself, in `oiko-bridge.json` at its root: each type its root package registers, with a description and an example of its section of the configuration. Its versions and the Oiko each needs are not in it: the module proxy and its `go.mod` say them (ADR 0020).
@@ -49,7 +49,7 @@ _Avoid_: unavailable (as a state value)
 ### Functional
 
 **Function**:
-What a Device does for the occupant (light, switch, cover, thermostat, occupancy, temperature, contact, button…). The unit of display and control; belongs to exactly one Device, unless it is a Group, an Aggregate or a Flag. A sensor measuring several quantities provides one Function per quantity, so each can be named, placed and aggregated on its own. Identified within its Device by its kind and endpoint (e.g. `switch/l2`).
+What a Device does in the home (light, switch, cover, thermostat, occupancy, temperature, contact, button…). The unit of display and control; belongs to exactly one Device, unless it is a Group, an Aggregate or a Flag. A sensor measuring several quantities provides one Function per quantity, so each can be named, placed and aggregated on its own. Identified within its Device by its kind and endpoint (e.g. `switch/l2`).
 _Avoid_: Entity, Endpoint, Service, Channel
 
 **Group**:
@@ -61,7 +61,7 @@ Function computed by Oiko from member Functions of the same kind. A member may i
 _Avoid_: Group (reserved for the Bridge's), helper, virtual device
 
 **Flag**:
-Binary Function held by Oiko itself, with no Device or Bridge: on or off, set by a Command from anyone (the occupant, an external program, an automation) and remembered across restarts. Created, renamed and deleted by the occupant; starts off. Always online. Has no Area unless assigned one, and may be a member of an Aggregate of Flags. State private to a single automation is not a Flag.
+Binary Function held by Oiko itself, with no Device or Bridge: on or off, set by a Command from anyone (a Person, a Kiosk, a Program, an Automation) and remembered across restarts. Created, renamed and deleted by a Person; starts off. Always online. Has no Area unless assigned one, and may be a member of an Aggregate of Flags. State private to a single automation is not a Flag.
 _Avoid_: Mode, helper, input_boolean, variable, virtual switch
 
 **Capability**:
@@ -90,7 +90,7 @@ _Avoid_: entity, member (when not in an Aggregate), address
 
 **Update**:
 Numbered record that something happened in Oiko: a new Value, an Event, an Availability transition, a Command status change, a Target deleted, a Device replaced, a change of an Automation's status or the end of a Run. Every observer sees Updates in the same order.
-_Avoid_: Event (reserved for button presses), Notification (reserved for the occupant's messages), message, change
+_Avoid_: Event (reserved for button presses), Notification (reserved for an Automation's messages), message, change
 
 **History**:
 Recorded past of a Target: its Values, Events and Availability, kept indefinitely from the first thing Oiko records of it until the Target is deleted. Every Value is recorded whole on each change, never on a refresh, and holds until the next one is recorded; a Replayed Value only when it differs from the last one recorded. It never invents a Value: what Oiko did not record is a Gap, and a Device offline or unknown shows in its Availability. Replace carries the new hardware's History over to the kept Device; a Capability that disappears keeps its History, which no longer grows. A Trace tells what one Run did; a History tells what a Target went through.
@@ -103,7 +103,7 @@ _Avoid_: outage, hole
 ### Automation
 
 **Automation**:
-Graph of Steps, created and named by the occupant, that reacts to what happens in the home by issuing Commands. Refers to Targets by identity, never by Name, and may watch any of them. Enabled or disabled; broken while a Target it refers to is gone, and runaway once it runs too often in a short time. A broken Automation never runs until edited, a runaway one until re-enabled.
+Graph of Steps, created and named by a Person, that reacts to what happens in the home by issuing Commands. Refers to Targets by identity, never by Name, and may watch any of them. Enabled or disabled; broken while a Target it refers to is gone, and runaway once it runs too often in a short time. A broken Automation never runs until edited, a runaway one until re-enabled.
 _Avoid_: Flow, Rule, Scenario, Script
 
 **Step**:
@@ -111,11 +111,11 @@ One box of an Automation's graph: a trigger, a condition, a timer or an action, 
 _Avoid_: Node, Block
 
 **Code Step**:
-Step running a Starlark `run(trigger, state)` written by the occupant. It reaches targets only through aliases bound to them in its params, and fires the output handles it declares. A call that fails issues nothing, fires nothing and keeps its previous state; the error goes into the Trace.
+Step running a Starlark `run(trigger, state)` written by a Person. It reaches targets only through aliases bound to them in its params, and fires the output handles it declares. A call that fails issues nothing, fires nothing and keeps its previous state; the error goes into the Trace.
 _Avoid_: Function node, Script
 
 **Manual trigger**:
-Trigger Step started by the occupant rather than by the home: a button named after the Step, on the dashboard's tile for its Automation, or in the editor. Its Run is like any other, with a Trace; only an enabled Automation, neither broken nor runaway, runs.
+Trigger Step started from the dashboard rather than by the home: a button named after the Step, on the dashboard's tile for its Automation, or in the editor. Its Run is like any other, with a Trace; only an enabled Automation, neither broken nor runaway, runs.
 _Avoid_: Scene, Script, inject, button (reserved for a Device's)
 
 **Run**:
@@ -127,13 +127,13 @@ Record of one Run: its trigger, each Step it went through with the evidence for 
 _Avoid_: Log, Execution, History (reserved for a Target's past)
 
 **Notification**:
-Message an Automation sends the occupant, on Telegram: a title and a text, which may name the Target that started its Run. Sent once, never retried, after the Run: its Trace shows what was sent, and one Telegram refuses is only logged. Without Telegram configured, it fails its Run.
+Message an Automation sends on Telegram: a title and a text, which may name the Target that started its Run. Sent once, never retried, after the Run: its Trace shows what was sent, and one Telegram refuses is only logged. Without Telegram configured, it fails its Run.
 _Avoid_: alert, message, push
 
 ### Home
 
 **Area**:
-Room or zone of the home, created and named by the occupant, in an order of the occupant's choosing. Areas are flat: none contains another. A Device has an Area or none; each of its Functions inherits it unless assigned another one. A Flag or an Aggregate may be assigned one too. Deleting an Area leaves what it held without one. The dashboard shows one section per Area, in their order, and everything without one last.
+Room or zone of the home, created and named by a Person, in an order of their choosing. Areas are flat: none contains another. A Device has an Area or none; each of its Functions inherits it unless assigned another one. A Flag or an Aggregate may be assigned one too. Deleting an Area leaves what it held without one. The dashboard shows one section per Area, in their order, and everything without one last.
 
 **Area Aggregate**:
 Aggregate Oiko derives for an Area and an aggregated kind (lights, occupancy, doors, temperature, humidity, CO2) from the Functions of that kind in the Area, under a rule fixed per kind: a room's temperature and humidity are its mean, its CO2 its highest. Its members are never stored, its Name is derived, and it exists while it has at least one member, coming back under the same identity when it has one again.
@@ -144,13 +144,27 @@ A Device's, Aggregate's, Flag's or Automation's box on the dashboard; an Automat
 _Avoid_: card, widget, entity row
 
 **Layout**:
-Where an Area's Tiles sit on the dashboard: a grid of a few columns, and for each Tile the occupant placed, its cell and how many columns and rows it spans, with empty cells wherever the occupant leaves them. A row is as tall as its tallest Tile; a Tile several rows tall fills them, leaving the cells beside it to others. Until the occupant sets it, a Tile is one row tall, a Tile of readings one per line of its cells. A Tile not placed takes the first free cells after the placed ones. A screen too narrow for the columns shows the Tiles one under another in reading order, without the empty cells. Tiles without an Area have no Layout.
+Where an Area's Tiles sit on the dashboard: a grid of a few columns, and for each Tile placed, its cell and how many columns and rows it spans, with empty cells wherever they are left. A row is as tall as its tallest Tile; a Tile several rows tall fills them, leaving the cells beside it to others. Until it is set, a Tile is one row tall, a Tile of readings one per line of its cells. A Tile not placed takes the first free cells after the placed ones. A screen too narrow for the columns shows the Tiles one under another in reading order, without the empty cells. Tiles without an Area have no Layout.
 _Avoid_: arrangement, position, grid (as the term)
 
 **Name**:
-Display label of a Device, an Aggregate, a Flag or an Area. A new Device takes its Bridge's label; afterwards it is freely editable in Oiko, never used as a reference, and never written back to the Bridge. A Function has no Name of its own: it shows its Device's, followed by its key when the Device has several (e.g. `Kitchen plug · switch/l2`).
+Display label of a Device, an Aggregate, a Flag, an Area, a Person, a Kiosk or a Program. A new Device takes its Bridge's label; afterwards it is freely editable in Oiko, never used as a reference, and never written back to the Bridge. A Function has no Name of its own: it shows its Device's, followed by its key when the Device has several (e.g. `Kitchen plug · switch/l2`).
 _Avoid_: entity_id, slug as identifier
 
 **Icon**:
-Picture the dashboard shows for a Device or an Aggregate, picked by the occupant among the dashboard's own, known to Oiko by its name only. Without one, a light shows a bulb and an Aggregate of lights several. Like a Name, a label: never a reference, never written back to the Bridge.
+Picture the dashboard shows for a Device or an Aggregate, picked by a Person among the dashboard's own, known to Oiko by its name only. Without one, a light shows a bulb and an Aggregate of lights several. Like a Name, a label: never a reference, never written back to the Bridge.
 _Avoid_: symbol, image
+
+### Access
+
+**Person**:
+A human known to Oiko: a member of the household or a temporary guest, under an identity that survives a change of Name or of credentials. May sign in to the dashboard, or never do so (a child presence will later track).
+_Avoid_: User, account, member (as the term), occupant, resident
+
+**Kiosk**:
+A shared screen, such as a wall tablet, signed in to the dashboard as itself rather than as a Person. What is done from it is the Kiosk's doing, and it is revoked on its own.
+_Avoid_: panel, display, shared device, household account
+
+**Program**:
+External software, such as Node-RED or a script, calling Oiko's HTTP API under its own identity rather than a Person's. It outlives whoever created it, and what it does is its own doing.
+_Avoid_: Integration, API client, service account, app, token (its credential, not its identity)
