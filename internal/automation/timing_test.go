@@ -31,7 +31,7 @@ type clock struct{ t time.Time }
 // timed returns a fixture and its engine, on a fake clock reading start.
 func timed(start time.Time) (*fakeHome, *Engine, *clock) {
 	f := fixture()
-	e := New(f, nil, nil, &place, nil, nil, nil)
+	e := New(f, nil, &place, nil)
 	c := &clock{start}
 	e.now = func() time.Time { return c.t }
 	return f, e, c
@@ -437,7 +437,7 @@ func TestCooldown(t *testing.T) {
 func TestIdleEngineNeverWakesAndATimeTriggerWakesIt(t *testing.T) {
 	c, lamp, _ := realHome(t)
 	var reads atomic.Int64
-	e := New(c, copies(t, "flow1-bedroom-alice.json", 10), nil, nil, nil, nil, nil)
+	e := New(c, copies(t, "flow1-bedroom-alice.json", 10), nil, nil)
 	e.now = func() time.Time { reads.Add(1); return time.Now() }
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

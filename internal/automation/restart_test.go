@@ -3,14 +3,18 @@ package automation
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"slices"
-	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	"github.com/nathan-osman/go-sunrise"
 
+	"github.com/llehouerou/oiko/bridge/store"
 	"github.com/llehouerou/oiko/internal/home"
 )
 
@@ -33,7 +37,7 @@ func TestRunWaitsForTheHomeToBeKnown(t *testing.T) {
 			f := fixture()
 			f.known = make(chan struct{})
 			h := issuing{f, make(chan home.Target, 1)}
-			e := New(h, []Document{doc("x", []string{pressSingle, cmd("on", `"flag:a"`)}, "single.out on.in")}, nil, nil, nil, nil, nil)
+			e := New(h, []Document{doc("x", []string{pressSingle, cmd("on", `"flag:a"`)}, "single.out on.in")}, nil, nil)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			go e.Run(ctx)
@@ -79,7 +83,7 @@ func restart(t *testing.T, e *Engine, f *fakeHome, c *clock, at time.Time) *Engi
 		t.Fatal(err)
 	}
 	c.t = at
-	r := New(f, nil, nil, &place, nil, nil, e.record)
+	r := New(f, nil, &place, e.record)
 	r.now = func() time.Time { return c.t }
 	r.mu.Lock()
 	r.loadAll(docs, saved)
@@ -257,23 +261,30 @@ func TestRunawayStaysRunawayAcrossARestart(t *testing.T) {
 }
 
 func TestStateWritesAreCoalesced(t *testing.T) {
-	f := fixture()
-	var (
-		mu     sync.Mutex
-		writes []map[string]State
-	)
-	write := func(s map[string]State) error {
-		mu.Lock()
-		defer mu.Unlock()
-		writes = append(writes, s)
-		return nil
+	dir, f := t.TempDir(), fixture()
+	file := filepath.Join(dir, stateFile)
+	// written is the Step state as last written, and the file holding it:
+	// each write replaces it with another, the same until the next write.
+	written := func() (map[string]State, os.FileInfo) {
+		t.Helper()
+		info, err := os.Stat(file)
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		var s map[string]State
+		if err == nil {
+			err = store.Load(file, stateFormat, &s)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s, info
 	}
-	written := func() []map[string]State {
-		mu.Lock()
-		defer mu.Unlock()
-		return slices.Clone(writes)
+	unchanged := func(before os.FileInfo) bool {
+		_, now := written()
+		return now != nil && os.SameFile(before, now)
 	}
-	e := New(f, nil, nil, nil, nil, write, nil)
+	e := opened(t, dir, f)
 	e.now = spaced()
 	d := doc("restarted", []string{pressSingle, `delay timer {"duration": 3600, "reentry": "restart"}`}, "single.out delay.start")
 	id := create(t, e, d)
@@ -289,33 +300,36 @@ func TestStateWritesAreCoalesced(t *testing.T) {
 			Ref:   &home.Ref{Target: home.TargetDevice("button-office", "button"), Capability: "action"},
 			Value: &home.Value{Data: "single"}})
 	}
+	if s, _ := written(); s != nil {
+		t.Fatalf("written during the burst: %+v", s)
+	}
 	time.Sleep(writeDelay + 500*time.Millisecond)
-	w := written()
-	if len(w) != 1 || len(w[0][id].Steps) != 1 || w[0][id].Steps[0].Step != "delay" {
-		t.Fatalf("writes after a burst = %+v, want one with the timer", w)
+	s, first := written()
+	if len(s[id].Steps) != 1 || s[id].Steps[0].Step != "delay" {
+		t.Fatalf("written after a burst: %+v, want the timer", s)
 	}
 	time.Sleep(writeDelay + 200*time.Millisecond)
-	if n := len(written()); n != 1 {
-		t.Errorf("%d writes while idle, want none", n-1)
+	if !unchanged(first) {
+		t.Error("written while idle")
 	}
 	cancel()
 	<-stopped
 	e.Flush()
-	if n := len(written()); n != 1 {
-		t.Errorf("a shutdown without a change wrote")
+	if !unchanged(first) {
+		t.Error("a shutdown without a change wrote")
 	}
 
-	e = New(f, e.Documents(), w[0], nil, nil, write, nil) // a restart
+	e = opened(t, dir, f) // a restart
 	e.Flush()
-	if n := len(written()); n != 1 {
-		t.Errorf("a restart that changed nothing wrote")
+	if !unchanged(first) {
+		t.Error("a restart that changed nothing wrote")
 	}
 	d.Enabled = false
 	if err := e.Replace(id, d); err != nil {
 		t.Fatal(err)
 	}
 	e.Flush()
-	if w := written(); len(w) != 2 || len(w[1]) != 0 {
-		t.Errorf("shutdown after disabling: writes %+v, want the cleared state flushed", w[1:])
+	if s, _ := written(); unchanged(first) || len(s) != 0 {
+		t.Errorf("shutdown after disabling: %+v, want the cleared state flushed", s)
 	}
 }

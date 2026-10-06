@@ -15,7 +15,7 @@ func TestANotificationCarriesTheRecordingThatStartedItsRun(t *testing.T) {
 	f := fixture()
 	f.snap.Devices = append(f.snap.Devices, home.Device{ID: "garden", Name: "Garden", Functions: []home.Function{{Key: "camera", Kind: home.Camera}}})
 	var traces []*Trace
-	e := New(f, nil, nil, nil, nil, nil, keep(&traces))
+	e := New(f, nil, nil, keep(&traces))
 	var sent []Notification
 	e.NotifyThrough(func(n Notification) { sent = append(sent, n) })
 	create(t, e, doc("clips", []string{

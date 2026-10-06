@@ -152,7 +152,7 @@ func TestCodeFailuresAreAllOrNothing(t *testing.T) {
 	} {
 		f := fixture()
 		var traces []*Trace
-		e := New(f, nil, nil, nil, nil, nil, keep(&traces))
+		e := New(f, nil, nil, keep(&traces))
 		a := map[string]home.Target{"a": home.TargetFlag("a"), "b": home.TargetFlag("b")}
 		id := create(t, e, doc("fails", []string{pressSingle,
 			coded("fails", "def run(trigger, state):\n    command(\"a\", on=True)\n    state[\"n\"] = 1\n    "+c.fail+"\n    return \"out\"", []string{"out"}, a),
@@ -242,7 +242,7 @@ def run(trigger, state):
 func TestCodePrintIsCapped(t *testing.T) {
 	f := fixture()
 	var traces []*Trace
-	e := New(f, nil, nil, nil, nil, nil, keep(&traces))
+	e := New(f, nil, nil, keep(&traces))
 	create(t, e, doc("chatty", []string{pressSingle, coded("c", `
 def run(trigger, state):
     for i in range(1000):
@@ -274,7 +274,8 @@ func handled(t testing.TB) (*quietHome, func()) {
 		coded("handler", handler, nil, map[string]home.Target{
 			"lux":   home.TargetDevice("lux-sensor", "illuminance"),
 			"light": home.TargetAggregate("veranda"),
-		})}, "moving.out handler.run", "still.out handler.run")}, nil, nil, nil, nil, nil)
+		})}, "moving.out handler.run", "still.out handler.run")}, nil, nil)
+
 	motion := home.TargetAggregate("motion-veranda").Ref("occupancy")
 	q.deliver(home.Update{Kind: home.ValueChanged, Ref: &luxRef, Value: &home.Value{Data: 42.0}})
 	q.deliver(home.Update{Kind: home.ValueChanged, Ref: &motion, Value: &home.Value{Data: false}})

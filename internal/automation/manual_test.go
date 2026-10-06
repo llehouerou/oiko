@@ -12,7 +12,7 @@ import (
 func TestManualTriggerRunsALiveAutomationOnly(t *testing.T) {
 	f := fixture()
 	var traces []*Trace
-	e := New(f, nil, nil, nil, nil, nil, func(tr *Trace) { traces = append(traces, tr) })
+	e := New(f, nil, nil, func(tr *Trace) { traces = append(traces, tr) })
 	d := doc("lamps", []string{`previous manualTrigger {}`, cmd("set", `"flag:a"`), pressSingle}, "previous.out set.in")
 	id := create(t, e, d)
 	alice := home.Origin{Person: "alice"}
@@ -61,7 +61,7 @@ func TestManualTriggerRunsALiveAutomationOnly(t *testing.T) {
 
 func TestAStatusIsTheAutomationsTileAndFollowsItsEdits(t *testing.T) {
 	f := fixture()
-	e := New(f, nil, nil, nil, nil, nil, nil)
+	e := New(f, nil, nil, nil)
 	d := doc("lamps", []string{pressSingle, cmd("set", `"flag:a"`)}, "single.out set.in")
 	id := create(t, e, d)
 	if s := statusOf(f, id); s.Name != "lamps" || s.ManualTriggers != nil {

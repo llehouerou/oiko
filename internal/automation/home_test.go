@@ -81,7 +81,7 @@ func TestRetainedStateReplayedOnConnectFiresNoValueTrigger(t *testing.T) {
 		[]string{
 			fmt.Sprintf(`on valueTrigger {"target": "device:%s/light", "capability": "state", "op": "eq", "value": true}`, lamp),
 			lampOn(lamp),
-		}, "on.out act.in")}, nil, nil, nil, nil, nil)
+		}, "on.out act.in")}, nil, nil)
 
 	state := func(on bool) {
 		c.z.Report("0xlamp", []bridge.Reading{{Function: "light", Capability: "state", Data: on}}, time.Now())
@@ -121,7 +121,7 @@ func TestRetainedStateReplayedIntoAnAggregateFiresNoValueTrigger(t *testing.T) {
 		[]string{
 			fmt.Sprintf(`on valueTrigger {"target": "aggregate:%s", "capability": "state", "op": "eq", "value": true}`, lights),
 			lampOn(lamp),
-		}, "on.out act.in")}, nil, nil, nil, nil, nil)
+		}, "on.out act.in")}, nil, nil)
 
 	state := func(address string, on bool) {
 		c.z.Report(address, []bridge.Reading{{Function: "light", Capability: "state", Data: on}}, time.Now())
@@ -152,7 +152,7 @@ func TestAutomationsTriggeringEachOtherBecomeRunaway(t *testing.T) {
 			fmt.Sprintf(`next command {"targets": ["flag:%s"], "values": {"on": true}}`, other),
 		}, "on.out off.in", "off.then next.in")
 	}
-	e := New(c, nil, nil, nil, nil, nil, nil)
+	e := New(c, nil, nil, nil)
 	a := create(t, e, chase("a", x, y))
 	b := create(t, e, chase("b", y, x))
 
@@ -182,7 +182,7 @@ func TestBurstOf1000ReportsLosesNoTrigger(t *testing.T) {
 		[]string{
 			fmt.Sprintf(`single eventTrigger {"target": "device:%s/button", "capability": "action", "events": ["single"]}`, remote),
 			lampOn(lamp),
-		}, "single.out act.in")}, nil, nil, nil, nil, nil)
+		}, "single.out act.in")}, nil, nil)
 
 	e.now = spaced()
 	ctx, cancel := context.WithCancel(context.Background())

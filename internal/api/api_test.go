@@ -55,7 +55,7 @@ func handlerIn(t *testing.T, dir string, public *url.URL, now func() time.Time) 
 		t.Fatal(err)
 	}
 	h := home.New(store.Command)
-	e := automation.New(h, nil, nil, nil, nil, nil, store.Record)
+	e := automation.New(h, nil, nil, store.Record)
 	h.Follow(store.Follow)
 	ctx, cancel := context.WithCancel(context.Background())
 	stored := make(chan struct{})

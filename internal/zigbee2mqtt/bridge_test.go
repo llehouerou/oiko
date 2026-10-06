@@ -275,7 +275,7 @@ func BenchmarkReportToCommand(bm *testing.B) {
 		Edges: []automation.Edge{{From: automation.Port{Step: "press", Handle: "out"}, To: automation.Port{Step: "on", Handle: "in"}}},
 	}
 	issued := make(chan struct{})
-	e := automation.New(issuing{h, issued}, nil, nil, nil, nil, nil, nil)
+	e := automation.New(issuing{h, issued}, nil, nil, nil)
 	id, err := e.Create(doc)
 	if err != nil {
 		bm.Fatal(err)

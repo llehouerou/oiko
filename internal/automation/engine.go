@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand/v2"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"sync"
@@ -94,17 +95,16 @@ type eventKey struct {
 
 // Engine runs the Automations.
 type Engine struct {
-	home      Home
-	place     *Place                       // nil if unknown
-	save      func([]Document) error       // nil in tests that don't care
-	saveState func(map[string]State) error // nil in tests that don't care
-	record    func(*Trace)                 // nil in tests that don't care
-	notify    func(Notification)           // nil unless Notifications are configured
-	now       func() time.Time             // in the host timezone
-	rand      *rand.Rand                   // draws presence simulations; guarded by mu
-	unfollow  func()
-	writing   sync.Mutex // serializes writes of the Step state, and guards written
-	written   []byte     // the Step state as last written or loaded, in JSON
+	home     Home
+	place    *Place             // nil if unknown
+	dir      string             // where its documents are saved; "" if it saves nothing
+	record   func(*Trace)       // nil in tests that don't care
+	notify   func(Notification) // nil unless Notifications are configured
+	now      func() time.Time   // in the host timezone
+	rand     *rand.Rand         // draws presence simulations; guarded by mu
+	unfollow func()
+	writing  sync.Mutex // serializes writes of the Step state, and guards written
+	written  []byte     // the Step state as last written or loaded, in JSON
 
 	qmu   sync.Mutex
 	inbox []home.Update // delivered, not applied yet
@@ -112,7 +112,7 @@ type Engine struct {
 	wake  chan struct{}
 
 	// mu guards what follows. Unexported methods touching it are called with
-	// mu held, or from New.
+	// mu held, or from fromSaved.
 	mu        sync.Mutex
 	autos     []*automation // in document order
 	nextOrder int
@@ -137,31 +137,59 @@ type Engine struct {
 	flush      *time.Timer // Flushes it, once armed by touch
 }
 
-// The formats of the saved Documents and of their runtime state (ADR 0019).
-var DocumentsFormat, StateFormat store.Format
+// The documents an Engine saves in its directory, and their formats (ADR
+// 0019): the Documents, and their runtime state by id.
+const (
+	documentsFile = "automations.json"
+	stateFile     = "automation-state.json"
+)
 
-// New follows h from now on and loads docs, with the runtime state saved
-// for them by id; place is the home's location, if known. save persists the
-// Documents whenever they change, and saveState their runtime state, a
-// little after it changes. record keeps the Trace of every Run: it takes the
-// Trace over, must return at once, and Releases it once done with it.
+var documentsFormat, stateFormat store.Format
+
+// New follows h from now on and loads docs, saving nothing; place is the
+// home's location, if known. record keeps the Trace of every Run: it takes
+// the Trace over, must return at once, and Releases it once done with it.
 // Updates are applied, and deadlines kept, once Run is called.
-func New(h Home, docs []Document, state map[string]State, place *Place,
-	save func([]Document) error, saveState func(map[string]State) error, record func(*Trace),
-) *Engine {
+func New(h Home, docs []Document, place *Place, record func(*Trace)) *Engine {
+	return fromSaved("", h, docs, nil, place, record)
+}
+
+// Open is as New, with the Documents saved in dir and the runtime state
+// saved for them: it loads them, migrating them if need be, and saves the
+// Documents whenever they change, and their runtime state a little after it
+// changes.
+func Open(dir string, h Home, place *Place, record func(*Trace)) (*Engine, error) {
+	var docs []Document
+	var state map[string]State
+	for _, doc := range []struct {
+		file   string
+		format store.Format
+		v      any
+	}{
+		{documentsFile, documentsFormat, &docs},
+		{stateFile, stateFormat, &state},
+	} {
+		path := filepath.Join(dir, doc.file)
+		if err := store.Load(path, doc.format, doc.v); err != nil {
+			return nil, fmt.Errorf("loading %s: %w", path, err)
+		}
+	}
+	return fromSaved(dir, h, docs, state, place, record), nil
+}
+
+func fromSaved(dir string, h Home, docs []Document, state map[string]State, place *Place, record func(*Trace)) *Engine {
 	e := &Engine{
-		home:      h,
-		place:     place,
-		save:      save,
-		saveState: saveState,
-		record:    record,
-		now:       time.Now,
-		rand:      rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
-		wake:      make(chan struct{}, 1),
-		values:    map[home.Ref]home.Value{},
-		onEvent:   map[eventKey][]trigger{},
-		onValue:   map[home.Ref][]trigger{},
-		onAvail:   map[home.Target][]trigger{},
+		home:    h,
+		place:   place,
+		dir:     dir,
+		record:  record,
+		now:     time.Now,
+		rand:    rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
+		wake:    make(chan struct{}, 1),
+		values:  map[home.Ref]home.Value{},
+		onEvent: map[eventKey][]trigger{},
+		onValue: map[home.Ref][]trigger{},
+		onAvail: map[home.Target][]trigger{},
 	}
 	e.runner = newRunner(e.values)
 	snap, unfollow := h.Follow(e.deliver)
@@ -593,10 +621,10 @@ func (e *Engine) find(id string) int {
 func (e *Engine) changed() error {
 	e.publish()
 	e.touch() // their runtime state follows
-	if e.save == nil {
+	if e.dir == "" {
 		return nil
 	}
-	if err := e.save(e.documents()); err != nil {
+	if err := store.Save(filepath.Join(e.dir, documentsFile), documentsFormat, e.documents()); err != nil {
 		log.Printf("automation: saving: %v", err)
 		return err
 	}

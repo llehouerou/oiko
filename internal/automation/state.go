@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"log"
+	"path/filepath"
 	"slices"
 	"time"
 
+	"github.com/llehouerou/oiko/bridge/store"
 	"github.com/llehouerou/oiko/internal/home"
 )
 
@@ -106,7 +108,7 @@ func (e *Engine) restore(a *automation, saved []StepState) {
 // touch notes a possible change of the Step state, to be written a little
 // later. Callers hold e.mu.
 func (e *Engine) touch() {
-	if e.dirty || e.saveState == nil {
+	if e.dirty || e.dir == "" {
 		return
 	}
 	e.dirty = true
@@ -135,7 +137,7 @@ func (e *Engine) Flush() {
 		return
 	}
 	if err == nil {
-		err = e.saveState(s)
+		err = store.Save(filepath.Join(e.dir, stateFile), stateFormat, s)
 	}
 	if err != nil {
 		log.Printf("automation: saving the Step state: %v", err)

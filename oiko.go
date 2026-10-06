@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/llehouerou/oiko/bridge"
-	"github.com/llehouerou/oiko/bridge/store"
 	"github.com/llehouerou/oiko/internal/access"
 	"github.com/llehouerou/oiko/internal/api"
 	"github.com/llehouerou/oiko/internal/automation"
@@ -278,25 +277,6 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	automationsFile := filepath.Join(dataDir, "automations.json")
-	automationStateFile := filepath.Join(dataDir, "automation-state.json")
-	var savedAutomations []automation.Document
-	var automationState map[string]automation.State
-	// ponytail: each store migrates or refuses as it is loaded, so a refusal
-	// can follow another store's migration; a pre-pass over every store,
-	// Bridges' included, if stores ever disagree on an update or rollback.
-	for _, s := range []struct {
-		file string
-		f    store.Format
-		v    any
-	}{
-		{automationsFile, automation.DocumentsFormat, &savedAutomations}, {automationStateFile, automation.StateFormat, &automationState},
-	} {
-		if err := store.Load(s.file, s.f, s.v); err != nil {
-			log.Fatalf("loading %s: %v", s.file, err)
-		}
-	}
-
 	hist, err := history.Open(filepath.Join(dataDir, "history.db"))
 	if err != nil {
 		log.Fatalf("history: %v", err)
@@ -314,6 +294,9 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 		close(written)
 	}()
 
+	// ponytail: each store migrates or refuses as it is opened, so a refusal
+	// can follow another store's migration; a pre-pass over every store,
+	// Bridges' included, if stores ever disagree on an update or rollback.
 	h, err := home.Open(dataDir, hist.Command)
 	if err != nil {
 		log.Fatal(err)
@@ -330,14 +313,10 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 	}
 	// Created before the Bridges run, so the engine and the History see every
 	// Update.
-	engine := automation.New(h, savedAutomations, automationState, c.Location,
-		func(docs []automation.Document) error {
-			return store.Save(automationsFile, automation.DocumentsFormat, docs)
-		},
-		func(state map[string]automation.State) error {
-			return store.Save(automationStateFile, automation.StateFormat, state)
-		},
-		hist.Record)
+	engine, err := automation.Open(dataDir, h, c.Location, hist.Record)
+	if err != nil {
+		log.Fatal(err)
+	}
 	h.Follow(hist.Follow)
 	cams := camera.New(h, hist.LiveView)
 	if c.Telegram != nil {

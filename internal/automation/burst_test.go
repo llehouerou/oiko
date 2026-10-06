@@ -59,7 +59,8 @@ func TestBurstOf1000ReportsLosesNoTrace(t *testing.T) {
 			{ID: "on", Kind: "command", Params: json.RawMessage(`{"targets": ["device:` + string(ids["0xlamp"]) + `/light"], "values": {"state": true}}`)},
 		},
 		Edges: []automation.Edge{{From: automation.Port{Step: "press", Handle: "out"}, To: automation.Port{Step: "on", Handle: "in"}}},
-	}}, nil, nil, nil, nil, store.Record)
+	}}, nil, store.Record)
+
 	automation.SpaceRuns(e)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

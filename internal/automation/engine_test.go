@@ -217,7 +217,7 @@ func decoded(t testing.TB, file string) Document {
 
 func TestFlowsFromNodeRED(t *testing.T) {
 	f := fixture()
-	e := New(f, nil, nil, nil, nil, nil, nil)
+	e := New(f, nil, nil, nil)
 	for _, file := range []string{"flow1-bedroom-alice.json", "flow2-bedroom-bob.json", "flow3a-bedroom-parents.json", "flow4-living.json", "flow8-office.json"} {
 		id := create(t, e, decoded(t, file))
 		if s := statusOf(f, id); s.Status != home.AutomationEnabled {
@@ -281,8 +281,8 @@ func TestConvergingPathsActOnce(t *testing.T) {
 	e := New(f, []Document{doc("converge",
 		[]string{pressSingle, isNight, cmd("lamp", `"device:lamp-office/light"`)},
 		"single.out lamp.in", "single.out is-night.in", "is-night.true lamp.in", "is-night.false lamp.in",
-		"lamp.then lamp.in", // a cycle ends too
-	)}, nil, nil, nil, nil, nil)
+		"lamp.then lamp.in",
+	)}, nil, nil)
 
 	set(e, f, home.ValueChanged, nightRef, true)
 	press(e, f, "button-office", "single")
@@ -297,7 +297,7 @@ func TestConvergingPathsActOnce(t *testing.T) {
 
 func TestAutomationsFireInDocumentOrderAndFanOutInEdgeOrder(t *testing.T) {
 	f := fixture()
-	e := New(f, nil, nil, nil, nil, nil, nil)
+	e := New(f, nil, nil, nil)
 	for _, name := range []string{"first", "second"} {
 		create(t, e, doc(name,
 			[]string{pressSingle, cmd("b", `"flag:`+name+`-b"`), cmd("a", `"flag:`+name+`-a"`)},
@@ -318,7 +318,7 @@ func TestRefusedCommandStillFiresThen(t *testing.T) {
 			cmd("both", `"device:office-strip/light", "device:lamp-office/light"`),
 			cmd("after", `"flag:guest"`)},
 		"single.out both.in", "both.then after.in",
-	)}, nil, nil, nil, nil, nil)
+	)}, nil, nil)
 
 	press(e, f, "button-office", "single")
 	want := []string{"lamp-office/light map[on:true] 0s", "flag guest map[on:true] 0s"}
@@ -332,7 +332,7 @@ func TestValueTriggerFiresOnRealChangesOnly(t *testing.T) {
 	e := New(f, []Document{
 		doc("night", []string{nightOn, cmd("act", `"flag:guest"`)}, "night-on.out act.in"),
 		doc("dark", []string{luxLow, cmd("act", `"flag:guest"`)}, "lux-low.out act.in"),
-	}, nil, nil, nil, nil, nil)
+	}, nil, nil)
 
 	for i, c := range []struct {
 		kind  home.UpdateKind
@@ -365,7 +365,7 @@ func TestValueConditionReadsTheLastKnownValue(t *testing.T) {
 	e := New(f, []Document{doc("cond",
 		[]string{pressSingle, isNight, cmd("yes", `"flag:yes"`), cmd("no", `"flag:no"`)},
 		"single.out is-night.in", "is-night.true yes.in", "is-night.false no.in",
-	)}, nil, nil, nil, nil, nil)
+	)}, nil, nil)
 
 	for _, c := range []struct {
 		night any
@@ -416,7 +416,7 @@ func TestBrokenDocuments(t *testing.T) {
 		`too many steps`:              doc("x", []string{coded("c", "def spin():\n  for i in range(1000000000):\n    pass\nx = spin()\ndef run(trigger, state):\n  pass", nil, nil)}),
 	} {
 		f := fixture()
-		e := New(f, []Document{d}, nil, nil, nil, nil, nil)
+		e := New(f, []Document{d}, nil, nil)
 		s := f.status[0]
 		if s.Status != home.AutomationBroken || !strings.Contains(s.Reason, reason) {
 			t.Errorf("%s: status %+v", reason, s)
@@ -434,7 +434,7 @@ func TestBrokenDocuments(t *testing.T) {
 
 func TestDeletedTargetBreaksUntilTheDocumentIsFixed(t *testing.T) {
 	f := fixture()
-	e := New(f, nil, nil, nil, nil, nil, nil)
+	e := New(f, nil, nil, nil)
 	d := doc("guest", []string{pressSingle, cmd("c", `"flag:guest"`)}, "single.out c.in")
 	id := create(t, e, d)
 
@@ -467,7 +467,7 @@ func TestDeletedTargetBreaksUntilTheDocumentIsFixed(t *testing.T) {
 
 func TestHotReloadSwapsOneAutomationAlone(t *testing.T) {
 	f := fixture()
-	e := New(f, nil, nil, nil, nil, nil, nil)
+	e := New(f, nil, nil, nil)
 	a := create(t, e, doc("a", []string{pressSingle, cmd("c", `"flag:a"`)}, "single.out c.in"))
 	create(t, e, doc("b", []string{pressSingle, cmd("c", `"flag:b"`)}, "single.out c.in"))
 	b := e.autos[1]
@@ -511,25 +511,39 @@ func TestHotReloadSwapsOneAutomationAlone(t *testing.T) {
 	}
 }
 
-func TestDocumentsAreSaved(t *testing.T) {
-	var saved []Document
-	e := New(fixture(), nil, nil, nil, func(d []Document) error { saved = d; return nil }, nil, nil)
+// opened is the Engine saved in dir, following f: open it again on the same
+// dir to restart it.
+func opened(t *testing.T, dir string, f Home) *Engine {
+	t.Helper()
+	e, err := Open(dir, f, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e
+}
+
+func TestDocumentsSurviveARestart(t *testing.T) {
+	dir, f := t.TempDir(), fixture()
+	e := opened(t, dir, f)
 	if _, err := e.Create(Document{Name: "  "}); !errors.Is(err, home.ErrInvalid) {
 		t.Errorf("blank name: %v", err)
 	}
 	id := create(t, e, Document{Name: " Empty "})
-	if len(saved) != 1 || saved[0].ID != id || saved[0].Name != "Empty" || saved[0].Steps == nil || saved[0].Edges == nil {
-		t.Errorf("saved = %+v", saved)
+	if saved := opened(t, dir, f).Documents(); len(saved) != 1 || saved[0].ID != id || saved[0].Name != "Empty" || saved[0].Steps == nil || saved[0].Edges == nil {
+		t.Errorf("after a restart: %+v", saved)
 	}
-	if err := e.Delete(id); err != nil || len(saved) != 0 {
-		t.Errorf("after delete: %v, saved = %+v", err, saved)
+	if err := e.Delete(id); err != nil {
+		t.Fatal(err)
+	}
+	if saved := opened(t, dir, f).Documents(); len(saved) != 0 {
+		t.Errorf("after delete and a restart: %+v", saved)
 	}
 }
 
 func TestTraceShowsWhatAConditionRead(t *testing.T) {
 	f := fixture()
 	var traces []*Trace
-	e := New(f, nil, nil, nil, nil, nil, keep(&traces))
+	e := New(f, nil, nil, keep(&traces))
 	id := create(t, e, doc("cond",
 		[]string{pressSingle, isNight, cmd("yes", `"flag:yes"`)},
 		"single.out is-night.in", "is-night.true yes.in"))
@@ -572,7 +586,7 @@ func TestTraceShowsCommandsAndRefusals(t *testing.T) {
 	f := fixture()
 	f.refuse = map[home.Target]bool{home.TargetDevice("office-strip", "light"): true}
 	var traces []*Trace
-	e := New(f, nil, nil, nil, nil, nil, keep(&traces))
+	e := New(f, nil, nil, keep(&traces))
 	id := create(t, e, doc("both",
 		[]string{pressSingle, cmd("both", `"device:office-strip/light", "device:lamp-office/light"`)},
 		"single.out both.in"))
@@ -603,7 +617,8 @@ func TestValueTriggerWatchesADeviceItself(t *testing.T) {
 	f := fixture()
 	e := New(f, []Document{doc("battery",
 		[]string{`low valueTrigger {"target": "device:lux-sensor", "capability": "battery", "op": "lt", "value": 10}`, cmd("act", `"flag:guest"`)},
-		"low.out act.in")}, nil, nil, nil, nil, nil)
+		"low.out act.in")}, nil, nil)
+
 	if s := f.status[0]; s.Status != home.AutomationEnabled {
 		t.Fatalf("status %+v", s)
 	}

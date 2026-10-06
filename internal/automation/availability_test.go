@@ -21,7 +21,7 @@ func TestAvailabilityTriggerHeldForNotifies(t *testing.T) {
 	f.snap.Devices = append(f.snap.Devices, home.Device{ID: "gate", Name: "Gate"})
 	f.snap.Availability = map[home.Target]home.Availability{gate: home.Online}
 	var traces []*Trace
-	e := New(f, nil, nil, nil, nil, nil, keep(&traces))
+	e := New(f, nil, nil, keep(&traces))
 	c := &clock{at(15, 20, 0)}
 	e.now = func() time.Time { return c.t }
 	var sent []Notification
@@ -57,7 +57,7 @@ func TestAvailabilityBecomingKnownFiresNothing(t *testing.T) {
 	f := fixture()
 	f.snap.Devices = append(f.snap.Devices, home.Device{ID: "gate", Name: "Gate"})
 	var traces []*Trace
-	e := New(f, nil, nil, nil, nil, nil, keep(&traces))
+	e := New(f, nil, nil, keep(&traces))
 	create(t, e, doc("offline", []string{
 		`off availabilityTrigger {"target": "device:gate", "op": "eq", "availability": "offline"}`,
 		`tell notify {"title": "{name} offline"}`},

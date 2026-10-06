@@ -32,7 +32,7 @@ func loaded(t testing.TB, n int) (*Engine, *quietHome) {
 	docs = append(docs, doc("office",
 		[]string{pressSingle, isNight, cmd("lamp", `"device:lamp-office/light"`)},
 		"single.out is-night.in", "is-night.true lamp.in", "is-night.false lamp.in"))
-	e := New(q, docs, nil, nil, nil, nil, nil)
+	e := New(q, docs, nil, nil)
 	q.deliver(home.Update{Kind: home.ValueChanged, Ref: &nightRef, Value: &home.Value{Data: true}})
 	settle(e)
 	e.now = spaced()
@@ -91,7 +91,7 @@ func TestHeapPerLoadedAutomation(t *testing.T) {
 		var before, after runtime.MemStats
 		runtime.GC()
 		runtime.ReadMemStats(&before)
-		e := New(fixture(), copies(t, file, n), nil, nil, nil, nil, nil)
+		e := New(fixture(), copies(t, file, n), nil, nil)
 		runtime.GC()
 		runtime.ReadMemStats(&after)
 		runtime.KeepAlive(e)
