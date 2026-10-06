@@ -18,9 +18,11 @@ import (
 	"context"
 	"encoding/json"
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
+	"net/http"
 	"net/url"
 	"runtime"
 	"slices"
@@ -70,6 +72,46 @@ type Picture struct {
 	ContentType string    // e.g. "image/jpeg"
 	Taken       time.Time // when the camera took it
 }
+
+// Recordings is implemented by a Bridge whose cameras' system keeps
+// Recordings: the clips it recorded by itself (ADR 0038). Oiko keeps none of
+// them; it finds this interface by a type assertion on the Bridge, beside
+// Cameras.
+type Recordings interface {
+	// Recordings lists the Recordings of camera Function function of the
+	// Device at address that started within [from, to], the newest first.
+	Recordings(ctx context.Context, address, function string, from, to time.Time) ([]Recording, error)
+	// RecordingMedia fetches part of Recording id of that camera: its video,
+	// an MP4 a browser plays, or its thumbnail, a still image. The Bridge
+	// sends the request with header, which holds what Oiko passes on from
+	// the browser (Range, If-Range), and whatever its system needs on top,
+	// and returns the response, which Oiko relays and closes: its status,
+	// Content-Type, Content-Length, Content-Range, Accept-Ranges,
+	// Last-Modified and ETag. ErrNotFound when the system no longer has id.
+	// Oiko logs the errors of both methods: they must not hold a URL that
+	// gives the media to whoever reads it.
+	RecordingMedia(ctx context.Context, address, function, id string, part RecordingPart, header http.Header) (*http.Response, error)
+}
+
+// Recording is a clip a camera's system recorded by itself.
+type Recording struct {
+	ID       string // chosen by the Bridge, stable while the system keeps it
+	Start    time.Time
+	Duration time.Duration
+	Trigger  string // what triggered it, a short lower-case word ("motion", "person"), or ""
+}
+
+// RecordingPart is what RecordingMedia fetches of a Recording.
+type RecordingPart string
+
+const (
+	Video     RecordingPart = "video"
+	Thumbnail RecordingPart = "thumbnail"
+)
+
+// ErrNotFound tells Oiko that what it asked a Bridge for, such as a
+// Recording, is not there.
+var ErrNotFound = errors.New("not found")
 
 // Port is how one Bridge feeds Oiko: what it describes and reports concerns
 // its own Devices only. Its methods are safe for concurrent use.

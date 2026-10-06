@@ -168,7 +168,9 @@ to add each one.
 A type of Bridge is a Go package of its own implementing `bridge.Bridge`, which registers
 itself from `init` (package [`bridge`](bridge/bridge.go), ADR 0017; `oiko-netatmo` is a small
 example), keeps its data with [`bridge/store`](bridge/store/store.go), and is tested against
-Oiko's own rules with [`bridgetest`](bridge/bridgetest/bridgetest.go).
+Oiko's own rules with [`bridgetest`](bridge/bridgetest/bridgetest.go). A type with cameras also
+implements `bridge.Cameras`, for their Picture and Live view (ADR 0036), and `bridge.Recordings`
+when their system keeps Recordings (ADR 0038).
 `oiko-build` builds an Oiko with it, given the version of its module (Go
 1.27 needed):
 

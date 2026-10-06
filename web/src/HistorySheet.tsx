@@ -52,8 +52,10 @@ import {
 import { Periods } from './Periods'
 import { useCatalogue, useNow } from './store'
 import { api, useAllows } from './access'
-import type { Capability, CommandRecord, LiveView, Ref, RunEnd, Target } from './types'
+import type { Capability, CommandRecord, LiveView, Recording, Ref, RunEnd, Target } from './types'
 import { watchedFor } from './liveview'
+import { cameraOf, describeRecording } from './recordings'
+import { RecordingList, useRecordings } from './RecordingList'
 import { owner } from './targets'
 import type { Document } from './automation/model'
 import { runSummary, setting } from './automation/runtime'
@@ -143,10 +145,12 @@ function Sheet({ target, onClose }: { target: Target; onClose: () => void }) {
   const selecting = useTimeGestures(frame, from, to, show, () => setRange({ len: preset, end: null }))
 
   // Markers of its own series, not the compared ones', clustered at the width
-  // of the time scale.
+  // of the time scale; the Recordings of its Device's camera among them.
   const describe = useDescribe()
   const own = series.filter((s) => !others.includes(s.ref.target))
-  const clusters = cluster(markers(loaded, own, describe), from, to, width)
+  const camera = cameraOf(targets, target)
+  const recordings = useRecordings(camera, range.len, range.end, loaded.from)
+  const clusters = cluster(markers(loaded, recordings ?? [], own, describe), from, to, width)
   const marks = clusters.map((ms) => ({ t: ms[0]!.t, color: markerStyle[ms[0]!.kind].color }))
 
   // Curves by unit, hatched where any of their Functions was offline; a Value
@@ -365,6 +369,7 @@ function Sheet({ target, onClose }: { target: Target; onClose: () => void }) {
             {series.length === 0 && <p className="text-sm text-neutral-500">Nothing to chart here{all ? '' : ' but its settings and diagnostics'}.</p>}
             {selecting && <SelectBox select={selecting} from={from} to={to} />}
           </div>
+          {camera && <RecordingList camera={camera} list={recordings} />}
           <p className="flex flex-wrap gap-3 text-[11px] text-neutral-500">
             {Object.values(markerStyle).map((s) => (
               <span key={s.label}>
@@ -422,9 +427,9 @@ function useDescribe() {
 }
 
 // markers are the Commands and Runs loaded on the Targets of series, linked to
-// their Run's Trace, the Live views of the cameras of their Devices, and the
-// Events of series: one each, or a bucket's count.
-function markers(loaded: Loaded, series: { ref: Ref; cap: Capability }[], describe: ReturnType<typeof useDescribe>): Marker[] {
+// their Run's Trace, the Live views and Recordings of the cameras of their
+// Devices, and the Events of series: one each, or a bucket's count.
+function markers(loaded: Loaded, recordings: Recording[], series: { ref: Ref; cap: Capability }[], describe: ReturnType<typeof useDescribe>): Marker[] {
   const trace = (automation: string, run: string) => `#automations/${automation}/${run}`
   const ofSeries = (t: Target) => series.some((s) => s.ref.target === t)
   return [
@@ -440,6 +445,7 @@ function markers(loaded: Loaded, series: { ref: Ref; cap: Capability }[], descri
     ...loaded.liveViews
       .filter((v) => series.some((s) => owner(s.ref.target) === owner(v.target)))
       .map((v): Marker => ({ t: Date.parse(v.start), n: 1, kind: 'liveView', text: describe.liveView(v) })),
+    ...recordings.map((r): Marker => ({ t: Date.parse(r.start), n: 1, kind: 'recording', text: describeRecording(r) })),
     ...series
       .filter(({ cap }) => cap.stateless)
       .flatMap(({ ref, cap }) =>

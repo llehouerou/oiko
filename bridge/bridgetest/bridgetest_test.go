@@ -3,7 +3,10 @@ package bridgetest_test
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -184,5 +187,50 @@ func TestAPictureIsReadThroughTheBridgesCameras(t *testing.T) {
 	plain.Port().SyncDevices([]bridge.Device{cam})
 	if _, err := plain.Picture("cam1", "camera"); !errors.Is(err, bridgetest.ErrRefused) {
 		t.Errorf("a Bridge without cameras: %v, want refused", err)
+	}
+}
+
+// recorder is a camera whose system keeps one Recording, "r1".
+type recorder struct{ camera }
+
+func (recorder) Recordings(_ context.Context, address, function string, from, to time.Time) ([]bridge.Recording, error) {
+	return []bridge.Recording{{ID: "r1", Start: from, Duration: time.Minute, Trigger: "motion"}}, nil
+}
+
+func (recorder) RecordingMedia(_ context.Context, address, function, id string, part bridge.RecordingPart, header http.Header) (*http.Response, error) {
+	if id != "r1" {
+		return nil, bridge.ErrNotFound
+	}
+	return &http.Response{StatusCode: http.StatusPartialContent, Header: http.Header{"Content-Range": {header.Get("Range")}},
+		Body: io.NopCloser(strings.NewReader(string(part)))}, nil
+}
+
+func TestRecordingsAreReadThroughTheBridgesRecordings(t *testing.T) {
+	cam := bridge.Device{NativeAddress: "cam1", Name: "Garden", Functions: []bridge.Function{{Key: "camera", Kind: "camera"}}}
+	h := bridgetest.New(&recorder{})
+	h.Port().SetOnline(true)
+	h.Port().SyncDevices([]bridge.Device{cam})
+	from := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	if rs, err := h.Recordings("cam1", "camera", from, from.Add(time.Hour)); err != nil || len(rs) != 1 || rs[0].ID != "r1" {
+		t.Errorf("Recordings: %+v, %v", rs, err)
+	}
+	resp, err := h.RecordingMedia("cam1", "camera", "r1", bridge.Video, http.Header{"Range": {"bytes=0-9"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if string(body) != "video" || resp.Header.Get("Content-Range") != "bytes=0-9" {
+		t.Errorf("RecordingMedia: %q %v", body, resp.Header)
+	}
+	if _, err := h.RecordingMedia("cam1", "camera", "r2", bridge.Thumbnail, nil); !errors.Is(err, bridge.ErrNotFound) {
+		t.Errorf("an unknown Recording: %v, want not found", err)
+	}
+
+	plain := bridgetest.New(&camera{})
+	plain.Port().SetOnline(true)
+	plain.Port().SyncDevices([]bridge.Device{cam})
+	if _, err := plain.Recordings("cam1", "camera", from, from); !errors.Is(err, bridgetest.ErrRefused) {
+		t.Errorf("a Bridge without Recordings: %v, want refused", err)
 	}
 }

@@ -8,6 +8,7 @@
 //	if v, _ := h.Value("0xbulb", "light", "state"); v.Data != true { … }
 //	if err := h.Command("0xbulb", "light", map[string]any{"state": false}); err != nil { … }
 //	if pic, err := h.Picture("cam1", "camera"); err != nil { … } // a Bridge with bridge.Cameras
+//	if rs, err := h.Recordings("cam1", "camera", from, to); err != nil { … } // with bridge.Recordings
 //
 // Env builds what Oiko hands a type's Module.New, to test its creation.
 //
@@ -21,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"slices"
 	"sync"
 	"testing"
@@ -189,6 +191,37 @@ func (h *Home) Picture(address, function string) (bridge.Picture, error) {
 		return pic, fmt.Errorf("%w: %w", ErrRefused, err)
 	}
 	return pic, err
+}
+
+// Recordings lists the Recordings of camera Function function of the Device
+// at address within [from, to] as Oiko does, through the Bridge's
+// bridge.Recordings: refused (ErrRefused) as Picture is, or when the Bridge
+// has no Recordings; else what Recordings returned.
+func (h *Home) Recordings(address, function string, from, to time.Time) ([]bridge.Recording, error) {
+	id, ok := device(h.snapshot(), address)
+	if !ok {
+		return nil, fmt.Errorf("%w: no Device at %s", ErrRefused, address)
+	}
+	rs, err := h.h.Recordings(context.Background(), home.TargetDevice(id, function), from, to)
+	if errors.Is(err, home.ErrNotFound) || errors.Is(err, home.ErrBridgeOffline) {
+		return rs, fmt.Errorf("%w: %w", ErrRefused, err)
+	}
+	return rs, err
+}
+
+// RecordingMedia fetches part of Recording id as Oiko does, passing header
+// on, refused as Recordings is; else what RecordingMedia returned, whose body
+// the caller closes.
+func (h *Home) RecordingMedia(address, function, id string, part bridge.RecordingPart, header http.Header) (*http.Response, error) {
+	dev, ok := device(h.snapshot(), address)
+	if !ok {
+		return nil, fmt.Errorf("%w: no Device at %s", ErrRefused, address)
+	}
+	resp, err := h.h.RecordingMedia(context.Background(), home.TargetDevice(dev, function), id, part, header)
+	if errors.Is(err, home.ErrNotFound) || errors.Is(err, home.ErrBridgeOffline) {
+		return resp, fmt.Errorf("%w: %w", ErrRefused, err)
+	}
+	return resp, err
 }
 
 func (h *Home) snapshot() home.Snapshot {

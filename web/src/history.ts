@@ -381,7 +381,7 @@ export const targetBlanks = (loaded: Loaded, target: Target, from: number, to: n
   )
 
 // A marker on the time axis: n Commands, Runs or Events at t, the same kind.
-export type MarkerKind = CommandKind | 'run' | 'event' | 'liveView'
+export type MarkerKind = CommandKind | 'run' | 'event' | 'liveView' | 'recording'
 export interface Marker {
   t: number
   n: number

@@ -124,6 +124,14 @@ export interface LiveView {
   end: string
 }
 
+// A Recording as /api/recordings lists it: its duration in ms.
+export interface Recording {
+  id: string
+  start: string
+  duration: number
+  trigger?: string
+}
+
 // Mirrors home.RunEnd.
 export interface RunEnd {
   automation: string
