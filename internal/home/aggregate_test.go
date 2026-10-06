@@ -22,19 +22,16 @@ func motion(address string, caps ...Capability) bridge.Device {
 	return bridge.Device{NativeAddress: address, Name: address, Functions: []bridge.Function{{Key: "occupancy", Kind: "occupancy", Capabilities: caps}}}
 }
 
-// aggregates is a Home with a bulb and three motion sensors, whose saved
-// Devices and Aggregates are captured as they would be on disk.
-func aggregates(t *testing.T) (h *Home, updates <-chan Update, devices *[]Device, saved *[]Aggregate) {
+// aggregates is a Home with a bulb and three motion sensors, saved in the
+// dir it answers.
+func aggregates(t *testing.T) (h *Home, updates <-chan Update, dir string) {
 	t.Helper()
-	devices, saved = &[]Device{}, &[]Aggregate{}
-	h = newHome(&fakeBridge{}, nil, nil, nil,
-		func(d []Device) error { *devices = d; return nil },
-		func(a []Aggregate) error { *saved = a; return nil }, nil, nil)
-	port(h).SetOnline(true)
+	dir = t.TempDir()
+	h = opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{bulb, motion("0xm1"), motion("0xm2"), motion("0xm3")})
 	_, updates, cancel := h.Subscribe()
 	t.Cleanup(cancel)
-	return h, updates, devices, saved
+	return h, updates, dir
 }
 
 func members(t *testing.T, h *Home, addresses ...string) []Target {
@@ -64,7 +61,7 @@ func aggregateValues(us []Update) []Update {
 }
 
 func TestCreateAggregateValidation(t *testing.T) {
-	h, updates, _, saved := aggregates(t)
+	h, updates, dir := aggregates(t)
 	m1 := members(t, h, "0xm1")[0]
 	for name, tc := range map[string]struct {
 		name    string
@@ -86,7 +83,7 @@ func TestCreateAggregateValidation(t *testing.T) {
 			t.Errorf("%s: err = %v, want %v", name, err, tc.want)
 		}
 	}
-	if len(*saved) != 0 || len(drain(updates)) != 0 {
+	if len(onDisk(t, dir).aggregates) != 0 || len(drain(updates)) != 0 {
 		t.Fatal("a refused Aggregate was saved or announced")
 	}
 }
@@ -94,7 +91,7 @@ func TestCreateAggregateValidation(t *testing.T) {
 func TestAggregateCapabilitiesAreSharedOnesWithoutStateless(t *testing.T) {
 	sensitivity := Capability{Key: "sensitivity", Type: Numeric, Access: Access{Observable: true, Settable: true}}
 	action := Capability{Key: "action", Type: Enum, Stateless: true, Access: Access{Observable: true}}
-	h, _, _, _ := aggregates(t)
+	h, _, _ := aggregates(t)
 	port(h).SyncDevices([]bridge.Device{
 		motion("0xm1", occupancy, Capability{Key: "tamper", Type: Binary}, action, sensitivity),
 		motion("0xm2", occupancy, Capability{Key: "tamper", Type: Numeric}, action, sensitivity),
@@ -115,7 +112,7 @@ func TestAggregateCapabilitiesAreSharedOnesWithoutStateless(t *testing.T) {
 func TestAnAggregateCountsOnlyWhatEveryMemberCountsAndResolvesItsMembers(t *testing.T) {
 	energy := Capability{Key: "energy", Type: Numeric, Counter: true}
 	level := Capability{Key: "level", Type: Numeric, Counter: true}
-	h, _, _, _ := aggregates(t)
+	h, _, _ := aggregates(t)
 	port(h).SyncDevices([]bridge.Device{
 		motion("0xm1", occupancy, energy, level),
 		motion("0xm2", occupancy, energy, Capability{Key: "level", Type: Numeric}),
@@ -143,7 +140,7 @@ func TestAnAggregateCountsOnlyWhatEveryMemberCountsAndResolvesItsMembers(t *test
 }
 
 func TestAnyAndAllIgnoreMembersWithoutValue(t *testing.T) {
-	h, updates, _, _ := aggregates(t)
+	h, updates, _ := aggregates(t)
 	all3 := members(t, h, "0xm1", "0xm2", "0xm3")
 	anyID, _ := h.CreateAggregate("Any", all3, Any, "")
 	allID, _ := h.CreateAggregate("All", all3, All, "")
@@ -183,7 +180,7 @@ func TestAnyAndAllIgnoreMembersWithoutValue(t *testing.T) {
 }
 
 func TestAStateHeldSinceItTookItsDataRecalledAcrossARestartAndAnAggregateFromItsMembers(t *testing.T) {
-	h, _, _, _ := aggregates(t)
+	h, _, _ := aggregates(t)
 	t0 := time.Now().Add(-48 * time.Hour)
 	m1 := members(t, h, "0xm1")[0]
 	// m1 was on before Oiko started; its History tells since when.
@@ -225,7 +222,7 @@ func TestAStateHeldSinceItTookItsDataRecalledAcrossARestartAndAnAggregateFromIts
 }
 
 func TestAggregateLifecycleInSnapshotAndUpdates(t *testing.T) {
-	h, updates, _, _ := aggregates(t)
+	h, updates, _ := aggregates(t)
 	at := time.Now()
 	port(h).Report("0xm1", []bridge.Reading{{Function: "occupancy", Capability: "occupancy", Data: true}}, at)
 	drain(updates)
@@ -264,16 +261,16 @@ func TestAggregateLifecycleInSnapshotAndUpdates(t *testing.T) {
 }
 
 func TestAggregatesSurviveRestart(t *testing.T) {
-	h, _, devices, saved := aggregates(t)
+	h, _, dir := aggregates(t)
 	id, err := h.CreateAggregate("Doors", members(t, h, "0xm1", "0xm2"), All, Sum)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(*saved) != 1 || (*saved)[0].Capabilities != nil || (*saved)[0].Kind != "" {
-		t.Fatalf("saved = %+v, want one definition without derived fields", *saved)
+	if len(onDisk(t, dir).aggregates) != 1 || onDisk(t, dir).aggregates[0].Capabilities != nil || onDisk(t, dir).aggregates[0].Kind != "" {
+		t.Fatalf("saved = %+v, want one definition without derived fields", onDisk(t, dir).aggregates)
 	}
 
-	restarted := newHome(&fakeBridge{}, *devices, *saved, nil, nil, nil, nil, nil)
+	restarted := restart(t, dir)
 	if av, ok := snapshot(restarted).Availability[TargetAggregate(id)]; !ok || av != Unknown {
 		t.Fatalf("availability before the Bridge is online = %q, %v; want unknown", av, ok)
 	}
@@ -304,7 +301,7 @@ func thermometer(address string) bridge.Device {
 }
 
 func TestNumericRulesIgnoreMembersWithoutValue(t *testing.T) {
-	h, updates, _, _ := aggregates(t)
+	h, updates, _ := aggregates(t)
 	port(h).SyncDevices([]bridge.Device{thermometer("0xt1"), thermometer("0xt2"), thermometer("0xt3")})
 	var ms []Target
 	for _, a := range []string{"0xt1", "0xt2", "0xt3"} {
@@ -356,7 +353,7 @@ func TestNumericRulesIgnoreMembersWithoutValue(t *testing.T) {
 }
 
 func TestABrightnessCountsOnlyTheLightsOnAllOfThemIfNone(t *testing.T) {
-	h, _, _, _ := aggregates(t)
+	h, _, _ := aggregates(t)
 	var ms []Target
 	var bulbs []bridge.Device
 	for _, a := range []string{"0xb1", "0xb2", "0xb3"} {
@@ -403,7 +400,7 @@ func TestABrightnessCountsOnlyTheLightsOnAllOfThemIfNone(t *testing.T) {
 }
 
 func TestEditAggregate(t *testing.T) {
-	h, updates, devices, saved := aggregates(t)
+	h, updates, dir := aggregates(t)
 	at := time.Now()
 	port(h).Report("0xm1", []bridge.Reading{{Function: "occupancy", Capability: "occupancy", Data: false}}, at)
 	port(h).Report("0xm3", []bridge.Reading{{Function: "occupancy", Capability: "occupancy", Data: true}}, at)
@@ -440,16 +437,16 @@ func TestEditAggregate(t *testing.T) {
 	}
 	drain(updates)
 
-	restarted := newHome(&fakeBridge{}, *devices, *saved, nil, nil, nil, nil, nil)
+	restarted := restart(t, dir)
 	if a := snapshot(restarted).Aggregates; len(a) != 1 || a[0].Name != "Motion Veranda" || !slices.Equal(a[0].Members, members(t, h, "0xm3")) || a[0].Binary != All || a[0].Numeric != Max {
 		t.Fatalf("restored %+v", a)
 	}
 }
 
 func TestRefusedEditLeavesAggregateUnchanged(t *testing.T) {
-	h, updates, _, saved := aggregates(t)
+	h, updates, dir := aggregates(t)
 	id, _ := h.CreateAggregate("Veranda", members(t, h, "0xm1"), "", "")
-	before, savedBefore := snapshot(h).Aggregates, *saved
+	before, savedBefore := snapshot(h).Aggregates, onDisk(t, dir).aggregates
 	drain(updates)
 	m1 := members(t, h, "0xm1")[0]
 	for name, tc := range map[string]struct {
@@ -469,7 +466,7 @@ func TestRefusedEditLeavesAggregateUnchanged(t *testing.T) {
 			t.Errorf("%s: err = %v, want %v", name, err, tc.want)
 		}
 	}
-	if len(drain(updates)) != 0 || !reflect.DeepEqual(*saved, savedBefore) || !reflect.DeepEqual(snapshot(h).Aggregates, before) {
+	if len(drain(updates)) != 0 || !reflect.DeepEqual(onDisk(t, dir).aggregates, savedBefore) || !reflect.DeepEqual(snapshot(h).Aggregates, before) {
 		t.Fatal("a refused edit changed, saved or announced the Aggregate")
 	}
 }
@@ -496,7 +493,7 @@ func occupied(h *Home, address string, occupied bool) {
 }
 
 func TestAggregateAvailability(t *testing.T) {
-	h, updates, _, _ := aggregates(t)
+	h, updates, _ := aggregates(t)
 	id, _ := h.CreateAggregate("Veranda", members(t, h, "0xm1", "0xm2"), "", "")
 	if av := snapshot(h).Availability[TargetAggregate(id)]; av != Unknown {
 		t.Fatalf("availability without any member's = %q, want unknown", av)
@@ -518,7 +515,7 @@ func TestAggregateAvailability(t *testing.T) {
 }
 
 func TestDetachedMemberIsNotCountedUntilItsHardwareReturns(t *testing.T) {
-	h, updates, _, saved := aggregates(t)
+	h, updates, dir := aggregates(t)
 	ms := members(t, h, "0xm1", "0xm2")
 	pair, _ := h.CreateAggregate("Veranda", ms, Any, "")
 	alone, _ := h.CreateAggregate("Seul", ms[:1], Any, "")
@@ -526,7 +523,7 @@ func TestDetachedMemberIsNotCountedUntilItsHardwareReturns(t *testing.T) {
 	port(h).SetAvailability("0xm2", Offline)
 	occupied(h, "0xm1", true)
 	occupied(h, "0xm2", false)
-	savedBefore := *saved
+	savedBefore := onDisk(t, dir).aggregates
 	drain(updates)
 
 	check := func(step string, wantPair, wantAlone []string) {
@@ -538,7 +535,7 @@ func TestDetachedMemberIsNotCountedUntilItsHardwareReturns(t *testing.T) {
 		if got := about(us, alone); !slices.Equal(got, wantAlone) {
 			t.Errorf("%s: Seul updates = %v, want %v", step, got, wantAlone)
 		}
-		if as := snapshot(h).Aggregates; len(as) != 2 || !slices.Equal(as[0].Members, ms[:1]) || !slices.Equal(as[1].Members, ms) || !reflect.DeepEqual(*saved, savedBefore) {
+		if as := snapshot(h).Aggregates; len(as) != 2 || !slices.Equal(as[0].Members, ms[:1]) || !slices.Equal(as[1].Members, ms) || !reflect.DeepEqual(onDisk(t, dir).aggregates, savedBefore) {
 			t.Errorf("%s: memberships changed: %+v", step, as)
 		}
 	}
@@ -567,14 +564,14 @@ func TestDetachedMemberIsNotCountedUntilItsHardwareReturns(t *testing.T) {
 }
 
 func TestMissingMemberFunctionIsIgnoredButKept(t *testing.T) {
-	h, updates, _, saved := aggregates(t)
+	h, updates, dir := aggregates(t)
 	ms := members(t, h, "0xm1", "0xm2")
 	id, _ := h.CreateAggregate("Veranda", ms, Any, "")
 	port(h).SetAvailability("0xm1", Online)
 	port(h).SetAvailability("0xm2", Offline)
 	occupied(h, "0xm1", true)
 	occupied(h, "0xm2", false)
-	savedBefore := *saved
+	savedBefore := onDisk(t, dir).aggregates
 	drain(updates)
 
 	// A re-interview finds 0xm1 no longer provides occupancy.
@@ -583,7 +580,7 @@ func TestMissingMemberFunctionIsIgnoredButKept(t *testing.T) {
 	if got := about(drain(updates), id); !slices.Equal(got, want) {
 		t.Errorf("updates = %v, want %v", got, want)
 	}
-	if a := snapshot(h).Aggregates[0]; !slices.Equal(a.Members, ms) || a.Kind != "occupancy" || !reflect.DeepEqual(*saved, savedBefore) {
+	if a := snapshot(h).Aggregates[0]; !slices.Equal(a.Members, ms) || a.Kind != "occupancy" || !reflect.DeepEqual(onDisk(t, dir).aggregates, savedBefore) {
 		t.Fatalf("the missing member left the definition: %+v", a)
 	}
 
@@ -596,7 +593,7 @@ func TestMissingMemberFunctionIsIgnoredButKept(t *testing.T) {
 }
 
 func TestDeletingDeviceRemovesItsMemberships(t *testing.T) {
-	h, updates, _, saved := aggregates(t)
+	h, updates, dir := aggregates(t)
 	ms := members(t, h, "0xm1", "0xm2")
 	pair, _ := h.CreateAggregate("Veranda", ms, Any, "")
 	alone, _ := h.CreateAggregate("Seul", ms[:1], Any, "")
@@ -619,7 +616,7 @@ func TestDeletingDeviceRemovesItsMemberships(t *testing.T) {
 			}
 		}
 	}
-	check("saved", *saved)
+	check("saved", onDisk(t, dir).aggregates)
 	var announced []Aggregate
 	for _, u := range drain(updates) {
 		if u.Kind == AggregatesChanged {
@@ -630,13 +627,13 @@ func TestDeletingDeviceRemovesItsMemberships(t *testing.T) {
 }
 
 func TestNestedAggregateRefusals(t *testing.T) {
-	h, updates, _, saved := aggregates(t)
+	h, updates, dir := aggregates(t)
 	m1, m2 := members(t, h, "0xm1")[0], members(t, h, "0xm2")[0]
 	light := TargetDevice(idOf(t, h, "0xbulb"), "light")
 	office, _ := h.CreateAggregate("Office", []Target{m1}, "", "")
 	living, _ := h.CreateAggregate("Living room", []Target{TargetAggregate(office), m2}, "", "")
 	general, _ := h.CreateAggregate("General", []Target{TargetAggregate(living)}, "", "")
-	before, savedBefore := snapshot(h).Aggregates, *saved
+	before, savedBefore := snapshot(h).Aggregates, onDisk(t, dir).aggregates
 	drain(updates)
 
 	if _, err := h.CreateAggregate("Kitchen", []Target{TargetAggregate("nope")}, "", ""); !errors.Is(err, ErrNotFound) {
@@ -654,13 +651,13 @@ func TestNestedAggregateRefusals(t *testing.T) {
 			t.Errorf("%s: err = %v, want ErrInvalid", name, err)
 		}
 	}
-	if len(drain(updates)) != 0 || !reflect.DeepEqual(*saved, savedBefore) || !reflect.DeepEqual(snapshot(h).Aggregates, before) {
+	if len(drain(updates)) != 0 || !reflect.DeepEqual(onDisk(t, dir).aggregates, savedBefore) || !reflect.DeepEqual(snapshot(h).Aggregates, before) {
 		t.Fatal("a refused definition changed, saved or announced the Aggregates")
 	}
 }
 
 func TestNestedAggregateFollowsTheFunctionsItResolvesTo(t *testing.T) {
-	h, updates, devices, saved := aggregates(t)
+	h, updates, dir := aggregates(t)
 	port(h).SyncDevices([]bridge.Device{thermometer("0xt1"), thermometer("0xt2"), thermometer("0xt3")})
 	var t1, t2, t3 Target
 	for address, m := range map[string]*Target{"0xt1": &t1, "0xt2": &t2, "0xt3": &t3} {
@@ -689,7 +686,7 @@ func TestNestedAggregateFollowsTheFunctionsItResolvesTo(t *testing.T) {
 		t.Errorf("after editing Office: Living room updates = %v, want %v", got, want)
 	}
 
-	restarted := newHome(&fakeBridge{}, *devices, *saved, nil, nil, nil, nil, nil)
+	restarted := restart(t, dir)
 	for _, a := range snapshot(restarted).Aggregates {
 		if a.ID == house && (a.Kind != "temperature" || len(a.Capabilities) == 0) {
 			t.Errorf("restored House %+v, want derived through Living room", a)
@@ -704,7 +701,7 @@ func TestNestedAggregateFollowsTheFunctionsItResolvesTo(t *testing.T) {
 		t.Errorf("after deleting Office: Living room updates = %v, want %v", got, want)
 	}
 	announced := us[slices.IndexFunc(us, func(u Update) bool { return u.Kind == AggregatesChanged })].Aggregates
-	for what, as := range map[string][]Aggregate{"saved": *saved, "announced": announced} {
+	for what, as := range map[string][]Aggregate{"saved": onDisk(t, dir).aggregates, "announced": announced} {
 		i := slices.IndexFunc(as, func(a Aggregate) bool { return a.ID == living })
 		if len(as) != 2 || i < 0 || !slices.Equal(as[i].Members, []Target{t1, t2}) {
 			t.Errorf("%s: %+v, want Office gone from Living room", what, as)

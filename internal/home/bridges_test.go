@@ -19,12 +19,12 @@ func TestHomeIsKnownOnceEveryBridgeHasReplayed(t *testing.T) {
 			return false
 		}
 	}
-	h := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := New(nil)
 	if !known(h) {
 		t.Error("with no Bridge, the home is known at once")
 	}
 
-	h = New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h = New(nil)
 	zb, hk := h.Attach("zigbee2mqtt", &fakeBridge{}), h.Attach("homekit", &fakeBridge{})
 	if known(h) || !slices.Equal(h.Waiting(), []string{"homekit", "zigbee2mqtt"}) {
 		t.Fatalf("known before any Replay; waiting for %v", h.Waiting())
@@ -44,7 +44,7 @@ func TestHomeIsKnownOnceEveryBridgeHasReplayed(t *testing.T) {
 // Devices, a Bridge's list detaches only its own, and a Bridge offline blanks
 // and refuses only its own.
 func TestBridgesKeepToTheirOwnDevices(t *testing.T) {
-	h := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := New(nil)
 	zb, hk := &fakeBridge{}, &fakeBridge{}
 	z, k := h.Attach("zigbee2mqtt", zb), h.Attach("homekit", hk)
 	z.SetOnline(true)

@@ -20,7 +20,8 @@ func derived(h *Home, area AreaID, kind string) (Aggregate, bool) {
 }
 
 func TestAreaAggregatesFollowTheAreas(t *testing.T) {
-	h, disk := areas(t, nil)
+	dir := t.TempDir()
+	h := opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{bulb, motion("0xm1"), motion("0xm2")})
 	bulbID, m1, m2 := idOf(t, h, "0xbulb"), idOf(t, h, "0xm1"), idOf(t, h, "0xm2")
 	living, _ := h.CreateArea("Living room")
@@ -43,8 +44,8 @@ func TestAreaAggregatesFollowTheAreas(t *testing.T) {
 	if !ok || presence.Binary != Any || len(presence.Members) != 2 {
 		t.Fatalf("occupancy Aggregate: %+v", presence)
 	}
-	if len(disk.aggregates) != 0 {
-		t.Fatalf("an Area Aggregate is never saved: %+v", disk.aggregates)
+	if saved := onDisk(t, dir).aggregates; len(saved) != 0 {
+		t.Fatalf("an Area Aggregate is never saved: %+v", saved)
 	}
 
 	port(h).Report("0xm2", []bridge.Reading{{Function: "occupancy", Capability: "occupancy", Data: true}}, time.Now())
@@ -79,7 +80,7 @@ func TestAreaAggregatesFollowTheAreas(t *testing.T) {
 		t.Fatal("back in the Lounge, under the same identity")
 	}
 
-	restarted, _ := areas(t, disk)
+	restarted := opened(t, dir)
 	port(restarted).SyncDevices([]bridge.Device{bulb, motion("0xm1"), motion("0xm2")})
 	if _, ok := derived(restarted, living, "occupancy"); !ok {
 		t.Fatal("after restart")
@@ -98,7 +99,7 @@ var door = bridge.Device{NativeAddress: "0xdoor", Name: "0xdoor", Functions: []b
 	Capabilities: []Capability{{Key: "contact", Type: Binary, Category: Primary, Access: Access{Observable: true}}}}}}
 
 func TestAreasAggregateDoorsAndClimate(t *testing.T) {
-	h, _ := areas(t, nil)
+	h := opened(t, t.TempDir())
 	port(h).SyncDevices([]bridge.Device{climate("0xc1"), climate("0xc2"), door})
 	living, _ := h.CreateArea("Living room")
 	for _, a := range []string{"0xc1", "0xc2", "0xdoor"} {
@@ -141,7 +142,7 @@ func snapshotValue(h *Home, r Ref) any {
 }
 
 func TestAnAreaAggregateIsNotEditedByHand(t *testing.T) {
-	h, _ := areas(t, nil)
+	h := opened(t, t.TempDir())
 	port(h).SyncDevices([]bridge.Device{motion("0xm1")})
 	living, _ := h.CreateArea("Living room")
 	if err := h.SetArea(TargetDevice(idOf(t, h, "0xm1"), ""), living); err != nil {
@@ -161,7 +162,8 @@ func TestAnAreaAggregateIsNotEditedByHand(t *testing.T) {
 }
 
 func TestDeletingAnAreaDropsItsAggregatesFromOthers(t *testing.T) {
-	h, disk := areas(t, nil)
+	dir := t.TempDir()
+	h := opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{motion("0xm1"), motion("0xm2")})
 	living, _ := h.CreateArea("Living room")
 	if err := h.SetArea(TargetDevice(idOf(t, h, "0xm1"), ""), living); err != nil {
@@ -180,7 +182,7 @@ func TestDeletingAnAreaDropsItsAggregatesFromOthers(t *testing.T) {
 	if _, ok := derived(h, living, "occupancy"); ok {
 		t.Fatal("the Area's Aggregates go with it")
 	}
-	if got := disk.aggregates[0].Members; !slices.Equal(got, members(t, h, "0xm2")) {
+	if got := onDisk(t, dir).aggregates[0].Members; !slices.Equal(got, members(t, h, "0xm2")) {
 		t.Fatalf("House still holds the deleted Area's Aggregate: %v", got)
 	}
 }

@@ -14,7 +14,7 @@ import (
 func TestCommandsCarryTheirOriginAndAreKept(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var kept []CommandRecord
-		h := newHome(&fakeBridge{}, nil, nil, nil, nil, nil, nil, func(c CommandRecord) { kept = append(kept, c) })
+		h := newHome(&fakeBridge{}, func(c CommandRecord) { kept = append(kept, c) })
 		port(h).SetOnline(true)
 		port(h).SyncDevices([]bridge.Device{lamp("0xl1", 1, 254), lamp("0xl2", 0, 100)})
 		both, err := h.CreateAggregate("Both", lightMembers(t, h, "0xl1", "0xl2"), "", "")

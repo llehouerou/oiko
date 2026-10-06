@@ -77,7 +77,7 @@ func (p port) SyncDevices(devices []bridge.Device) {
 
 // New attaches b, which receives the Commands; nil if the test issues none.
 func New(b bridge.Bridge) *Home {
-	h := home.New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := home.New(nil)
 	return &Home{h: h, port: port{Port: h.Attach(name, b), mu: &sync.Mutex{}, listed: &[]string{}}}
 }
 

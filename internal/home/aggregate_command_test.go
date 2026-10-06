@@ -26,7 +26,7 @@ func lamp(address string, minBrightness, maxBrightness float64, caps ...Capabili
 func lights(t *testing.T) (*Home, *fakeBridge, <-chan Update, AggregateID) {
 	t.Helper()
 	b := &fakeBridge{}
-	h := newHome(b, nil, nil, nil, nil, nil, nil, nil)
+	h := newHome(b, nil)
 	port(h).SetOnline(true)
 	port(h).SyncDevices([]bridge.Device{lamp("0xl1", 1, 254), lamp("0xl2", 0, 100)})
 	id, err := h.CreateAggregate("Parents' bedroom", lightMembers(t, h, "0xl1", "0xl2"), "", "")
@@ -69,7 +69,7 @@ func TestAggregateCapabilitiesIntersectSettableAndBounds(t *testing.T) {
 	colorTemp := func(access Access) Capability {
 		return Capability{Key: "color_temp", Type: Numeric, Min: ptr(150), Max: ptr(500), Category: Primary, Access: access}
 	}
-	h := newHome(&fakeBridge{}, nil, nil, nil, nil, nil, nil, nil)
+	h := newHome(&fakeBridge{}, nil)
 	port(h).SyncDevices([]bridge.Device{
 		lamp("0xl1", 1, 254, effect("blink", "breathe"), colorTemp(settable)),
 		lamp("0xl2", 0, 100, effect("blink", "okay"), colorTemp(Access{Observable: true})),
@@ -139,7 +139,7 @@ func TestAggregateCommandIsRefusedAsAWhole(t *testing.T) {
 func TestAggregateCommandIsRelayedToCountedMembers(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		b := &fakeBridge{}
-		h := newHome(b, nil, nil, nil, nil, nil, nil, nil)
+		h := newHome(b, nil)
 		port(h).SetOnline(true)
 		port(h).SyncDevices([]bridge.Device{lamp("0xl1", 1, 254), lamp("0xl2", 0, 100), lamp("0xl3", 0, 254), lamp("0xl4", 0, 254)})
 		id, err := h.CreateAggregate("Parents' bedroom", lightMembers(t, h, "0xl1", "0xl2", "0xl3", "0xl4"), "", "")

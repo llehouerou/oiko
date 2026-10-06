@@ -7,15 +7,14 @@ import (
 	"testing"
 )
 
-// flags is a Home without a Bridge, whose saved Flags are captured as they
-// would be on disk.
-func flags(t *testing.T) (*Home, <-chan Update, *[]SavedFlag) {
+// flags is a Home whose Bridge is not online, saved in the dir it answers.
+func flags(t *testing.T) (*Home, <-chan Update, string) {
 	t.Helper()
-	saved := &[]SavedFlag{}
-	h := newHome(&fakeBridge{}, nil, nil, nil, nil, nil, func(f []SavedFlag) error { *saved = f; return nil }, nil)
+	dir := t.TempDir()
+	h := restart(t, dir)
 	_, updates, cancel := h.Subscribe()
 	t.Cleanup(cancel)
-	return h, updates, saved
+	return h, updates, dir
 }
 
 func flagValue(h *Home, id FlagID) (Value, bool) {
@@ -28,7 +27,7 @@ func flagValue(h *Home, id FlagID) (Value, bool) {
 }
 
 func TestNewFlagIsOffAndOnline(t *testing.T) {
-	h, updates, saved := flags(t)
+	h, updates, dir := flags(t)
 	id, err := h.CreateFlag("  Night ")
 	if err != nil {
 		t.Fatal(err)
@@ -50,8 +49,8 @@ func TestNewFlagIsOffAndOnline(t *testing.T) {
 	if v, ok := flagValue(h, id); !ok || v.Data != false {
 		t.Errorf("value = %+v, %v; want off", v, ok)
 	}
-	if len(*saved) != 1 || (*saved)[0].ID != id || (*saved)[0].Value.Data != false {
-		t.Errorf("saved = %+v", *saved)
+	if len(onDisk(t, dir).flags) != 1 || onDisk(t, dir).flags[0].ID != id || onDisk(t, dir).flags[0].Value.Data != false {
+		t.Errorf("saved = %+v", onDisk(t, dir).flags)
 	}
 
 	for name, bad := range map[string]string{"blank": " ", "long": strings.Repeat("x", 101)} {
@@ -62,7 +61,7 @@ func TestNewFlagIsOffAndOnline(t *testing.T) {
 }
 
 func TestFlagCommandIsConfirmedAtOnceWithoutBridge(t *testing.T) {
-	h, updates, saved := flags(t)
+	h, updates, dir := flags(t)
 	id, _ := h.CreateFlag("Night")
 	drain(updates)
 
@@ -85,8 +84,8 @@ func TestFlagCommandIsConfirmedAtOnceWithoutBridge(t *testing.T) {
 		if u := us[1]; *u.Ref != TargetFlag(id).Ref("on") || u.Value.Data != want {
 			t.Errorf("value update = %+v, want %v", u, want)
 		}
-		if (*saved)[0].Value.Data != want {
-			t.Errorf("saved %+v, want %v", *saved, want)
+		if onDisk(t, dir).flags[0].Value.Data != want {
+			t.Errorf("saved %+v, want %v", onDisk(t, dir).flags, want)
 		}
 	}
 
@@ -110,12 +109,12 @@ func TestFlagCommandIsConfirmedAtOnceWithoutBridge(t *testing.T) {
 }
 
 func TestFlagSurvivesRestart(t *testing.T) {
-	h, _, saved := flags(t)
+	h, _, dir := flags(t)
 	id, _ := h.CreateFlag("Holiday")
 	h.Command(TargetFlag(id), Request{Values: map[string]any{"on": true}})
 	before, _ := flagValue(h, id)
 
-	restarted := newHome(&fakeBridge{}, nil, nil, *saved, nil, nil, nil, nil)
+	restarted := restart(t, dir)
 	s := snapshot(restarted)
 	if len(s.Flags) != 1 || s.Flags[0].ID != id || s.Flags[0].Name != "Holiday" || s.Availability[TargetFlag(id)] != Online {
 		t.Fatalf("restored %+v, availability %+v", s.Flags, s.Availability)
@@ -126,15 +125,15 @@ func TestFlagSurvivesRestart(t *testing.T) {
 }
 
 func TestRenameAndDeleteFlag(t *testing.T) {
-	h, updates, saved := flags(t)
+	h, updates, dir := flags(t)
 	id, _ := h.CreateFlag("Night")
 	drain(updates)
 
 	if err := h.RenameFlag(id, " Night mode "); err != nil {
 		t.Fatal(err)
 	}
-	if us := drain(updates); len(us) != 1 || us[0].Kind != FlagsChanged || us[0].Flags[0].Name != "Night mode" || (*saved)[0].Name != "Night mode" {
-		t.Fatalf("rename updates %+v, saved %+v", us, *saved)
+	if us := drain(updates); len(us) != 1 || us[0].Kind != FlagsChanged || us[0].Flags[0].Name != "Night mode" || onDisk(t, dir).flags[0].Name != "Night mode" {
+		t.Fatalf("rename updates %+v, saved %+v", us, onDisk(t, dir).flags)
 	}
 	if err := h.RenameFlag(id, ""); !errors.Is(err, ErrInvalid) {
 		t.Errorf("blank rename: err = %v", err)
@@ -147,8 +146,8 @@ func TestRenameAndDeleteFlag(t *testing.T) {
 		t.Fatal(err)
 	}
 	if us := drain(updates); len(us) != 2 || us[0].Kind != TargetDeleted || us[0].Target != TargetFlag(id) ||
-		us[1].Kind != FlagsChanged || len(us[1].Flags) != 0 || len(*saved) != 0 {
-		t.Fatalf("delete updates %+v, saved %+v", us, *saved)
+		us[1].Kind != FlagsChanged || len(us[1].Flags) != 0 || len(onDisk(t, dir).flags) != 0 {
+		t.Fatalf("delete updates %+v, saved %+v", us, onDisk(t, dir).flags)
 	}
 	if _, ok := flagValue(h, id); ok || len(snapshot(h).Flags) != 0 {
 		t.Error("the deleted Flag is still in the Snapshot")
@@ -159,7 +158,7 @@ func TestRenameAndDeleteFlag(t *testing.T) {
 }
 
 func TestAggregateOfFlags(t *testing.T) {
-	h, updates, saved := flags(t)
+	h, updates, dir := flags(t)
 	night, _ := h.CreateFlag("Night")
 	holiday, _ := h.CreateFlag("Holiday")
 	id, err := h.CreateAggregate("Sleeping house", []Target{TargetFlag(night), TargetFlag(holiday), TargetFlag(night)}, Any, "")
@@ -206,7 +205,7 @@ func TestAggregateOfFlags(t *testing.T) {
 	}
 
 	h.Command(TargetFlag(holiday), Request{Values: map[string]any{"on": true}})
-	restarted := newHome(&fakeBridge{}, nil, snapshot(h).Aggregates, *saved, nil, nil, nil, nil)
+	restarted := restart(t, dir)
 	s := snapshot(restarted)
 	if !slices.ContainsFunc(s.Values, func(rv RefValue) bool { return rv.Ref == TargetAggregate(id).Ref("on") && rv.Value.Data == true }) || s.Availability[TargetAggregate(id)] != Online {
 		t.Errorf("after a restart: values %+v, availability %q; want on and online", s.Values, s.Availability[TargetAggregate(id)])

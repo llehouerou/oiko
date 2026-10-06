@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"maps"
+	"path/filepath"
 	"slices"
 	"sync"
 	"time"
@@ -248,12 +250,9 @@ type RefValue struct {
 // Home is the single source of truth at runtime. Every mutation happens under
 // one lock and emits its Updates in order.
 type Home struct {
-	save           func([]Device) error             // persists the registry; nil in tests that don't care
-	saveAggregates func([]Aggregate) error          // persists Aggregate definitions; nil in tests that don't care
-	saveFlags      func([]SavedFlag) error          // persists Flags; nil in tests that don't care
-	saveAreas      func([]Area) error               // persists Areas; nil in tests that don't care
-	history        func(CommandRecord)              // keeps Commands; nil in tests that don't care
-	recall         func(Ref, any) (time.Time, bool) // see Recall; nil in tests that don't care
+	dir     string                           // where its documents are saved; "" if it saves nothing
+	history func(CommandRecord)              // keeps Commands; nil in tests that don't care
+	recall  func(Ref, any) (time.Time, bool) // see Recall; nil in tests that don't care
 
 	mu           sync.Mutex
 	seq          uint64
@@ -276,26 +275,68 @@ type Home struct {
 	followers             map[*func(Update)]struct{}
 }
 
-// The formats of the saved Devices, Aggregates, Flags and Areas (ADR 0019).
-var DevicesFormat, AggregatesFormat, FlagsFormat, AreasFormat store.Format
+// The documents a Home saves in its directory, and their formats (ADR 0019).
+const (
+	devicesFile    = "devices.json"
+	aggregatesFile = "aggregates.json"
+	flagsFile      = "flags.json"
+	areasFile      = "areas.json"
+)
 
-// New starts from previously saved Devices, Aggregates, Flags and Areas and
-// saves each of them again, through save, saveAggregates, saveFlags and
-// saveAreas, whenever they change. history is handed every accepted Command,
-// then each later status of it, under Home's lock: it must return at once.
-// Bridges are attached next.
-func New(saved []Device, savedAggregates []Aggregate, savedFlags []SavedFlag, savedAreas []Area,
-	save func([]Device) error, saveAggregates func([]Aggregate) error, saveFlags func([]SavedFlag) error,
-	saveAreas func([]Area) error,
-	history func(CommandRecord),
-) *Home {
+var devicesFormat, aggregatesFormat, flagsFormat, areasFormat store.Format
+
+// saved are a Home's documents, as its directory holds them.
+type saved struct {
+	devices    []Device
+	aggregates []Aggregate
+	flags      []SavedFlag
+	areas      []Area
+}
+
+// New is an empty Home that saves nothing. history is handed every accepted
+// Command, then each later status of it, under Home's lock: it must return
+// at once. Bridges are attached next.
+func New(history func(CommandRecord)) *Home {
+	return fromSaved("", saved{}, history)
+}
+
+// Open is the Home whose Devices, Aggregates, Flags and Areas are saved in
+// dir: it loads them, migrating them if need be, and saves each again
+// whenever it changes. history is as New's.
+func Open(dir string, history func(CommandRecord)) (*Home, error) {
+	s, err := load(dir)
+	if err != nil {
+		return nil, err
+	}
+	return fromSaved(dir, s, history), nil
+}
+
+// load reads the documents saved in dir; none on a first start.
+func load(dir string) (saved, error) {
+	var s saved
+	for _, doc := range []struct {
+		file   string
+		format store.Format
+		v      any
+	}{
+		{devicesFile, devicesFormat, &s.devices},
+		{aggregatesFile, aggregatesFormat, &s.aggregates},
+		{flagsFile, flagsFormat, &s.flags},
+		{areasFile, areasFormat, &s.areas},
+	} {
+		path := filepath.Join(dir, doc.file)
+		if err := store.Load(path, doc.format, doc.v); err != nil {
+			return saved{}, fmt.Errorf("loading %s: %w", path, err)
+		}
+	}
+	return s, nil
+}
+
+func fromSaved(dir string, s saved, history func(CommandRecord)) *Home {
 	h := &Home{
-		save:                  save,
-		saveAggregates:        saveAggregates,
+		dir:                   dir,
 		history:               history,
-		saveFlags:             saveFlags,
-		saveAreas:             saveAreas,
-		areas:                 slices.Clone(savedAreas), // changed in place
+		areas:                 s.areas, // changed in place: its own
 		devices:               map[DeviceID]*Device{},
 		links:                 map[string]*link{},
 		known:                 make(chan struct{}),
@@ -311,14 +352,14 @@ func New(saved []Device, savedAggregates []Aggregate, savedFlags []SavedFlag, sa
 		followers:             map[*func(Update)]struct{}{},
 	}
 	h.commands = newCommands(&h.mu, h.commandChanged)
-	for _, d := range saved {
+	for _, d := range s.devices {
 		h.devices[d.ID] = &d
 		h.byAddress[native{d.Bridge, d.NativeAddress}] = d.ID
 	}
-	for _, a := range savedAggregates {
+	for _, a := range s.aggregates {
 		h.aggregates[a.ID] = &a
 	}
-	for _, f := range savedFlags {
+	for _, f := range s.flags {
 		h.flags[f.ID] = Flag{ID: f.ID, Name: f.Name, Area: f.Area}
 		h.values[flagRef(f.ID)] = f.Value
 	}
@@ -326,6 +367,18 @@ func New(saved []Device, savedAggregates []Aggregate, savedFlags []SavedFlag, sa
 	h.syncAggregateValues()       // from the Flags' Values
 	h.syncAggregateAvailability() // unknown until the Bridge is online, unless made of Flags
 	return h
+}
+
+// save writes v as file, in format, to the Home's directory, if it has one.
+func (h *Home) save(file string, format store.Format, v any) error {
+	if h.dir == "" {
+		return nil
+	}
+	if err := store.Save(filepath.Join(h.dir, file), format, v); err != nil {
+		log.Printf("home: saving %s: %v", file, err)
+		return err
+	}
+	return nil
 }
 
 // Subscribe returns the current Snapshot and the channel of every later

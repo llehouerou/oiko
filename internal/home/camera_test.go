@@ -12,7 +12,8 @@ import (
 var camera = bridge.Device{NativeAddress: "cam1", Name: "Garden", Functions: []bridge.Function{{Key: "camera", Kind: Camera}}}
 
 func TestACameraWithoutCapabilitiesIsADeviceLikeAnyOther(t *testing.T) {
-	h, disk := registry(t, nil)
+	dir := t.TempDir()
+	h := opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{camera})
 	id := idOf(t, h, "cam1")
 	area, err := h.CreateArea("Garden")
@@ -35,7 +36,7 @@ func TestACameraWithoutCapabilitiesIsADeviceLikeAnyOther(t *testing.T) {
 		}
 	}
 
-	restarted, _ := registry(t, *disk)
+	restarted := opened(t, dir)
 	port(restarted).SyncDevices(nil) // the camera is gone from its Bridge
 	if _, _, err := CameraBridge[bridge.Cameras](restarted, TargetDevice(id, "camera")); !errors.Is(err, ErrNotFound) {
 		t.Errorf("a Detached camera's Bridge: %v, want ErrNotFound", err)

@@ -3,7 +3,6 @@ package home
 import (
 	"cmp"
 	"fmt"
-	"log"
 	"maps"
 	"reflect"
 	"slices"
@@ -230,16 +229,11 @@ func (h *Home) dropMembers(drop func(Target) bool) bool {
 // brings their Values and Availability in line. Callers hold h.mu.
 func (h *Home) aggregatesChanged() error {
 	h.deriveAll()
-	var err error
-	if h.saveAggregates != nil {
-		list := slices.DeleteFunc(h.aggregateList(), func(a Aggregate) bool { return a.Derived })
-		for i := range list {
-			list[i].Kind, list[i].Capabilities = "", nil
-		}
-		if err = h.saveAggregates(list); err != nil {
-			log.Printf("home: saving aggregates: %v", err)
-		}
+	list := slices.DeleteFunc(h.aggregateList(), func(a Aggregate) bool { return a.Derived })
+	for i := range list {
+		list[i].Kind, list[i].Capabilities = "", nil
 	}
+	err := h.save(aggregatesFile, aggregatesFormat, list)
 	h.emit(Update{Kind: AggregatesChanged, Aggregates: h.aggregateList()})
 	h.syncAggregateValues()
 	h.syncAggregateAvailability()

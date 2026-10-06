@@ -170,7 +170,7 @@ func TestADroppedPointIsRecordedAtTheNextRefresh(t *testing.T) {
 // following feeds a new Home to s and runs s's writer until stop is called.
 func following(t *testing.T, s *Store) (*home.Home, func()) {
 	t.Helper()
-	h := home.New(nil, nil, nil, nil, nil, nil, nil, nil, s.Command)
+	h := home.New(s.Command)
 	h.Follow(s.Follow)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

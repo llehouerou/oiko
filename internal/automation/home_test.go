@@ -44,7 +44,7 @@ var described = []bridge.Device{
 // realHome is a Home with its Bridge online and replayed, a lamp and a remote.
 func realHome(t *testing.T) (c *counted, lamp, remote home.DeviceID) {
 	t.Helper()
-	h := home.New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := home.New(nil)
 	z := h.Attach("zigbee2mqtt", nopBridge{})
 	z.SetOnline(true)
 	z.Replayed()

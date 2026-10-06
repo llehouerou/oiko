@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
-	"log"
 	"maps"
 	"slices"
 
@@ -327,12 +326,7 @@ func (h *Home) area(id AreaID) int {
 // areasChanged saves the Areas and announces them, then brings the Area
 // Aggregates in line. Callers hold h.mu.
 func (h *Home) areasChanged() error {
-	var err error
-	if h.saveAreas != nil {
-		if err = h.saveAreas(h.areas); err != nil {
-			log.Printf("home: saving areas: %v", err)
-		}
-	}
+	err := h.save(areasFile, areasFormat, h.areas)
 	h.emit(Update{Kind: AreasChanged, Areas: slices.Clone(h.areas)})
 	return errors.Join(err, h.rederive())
 }

@@ -27,7 +27,7 @@ func TestBurstOf1000ReportsLosesNoTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	h := home.New(nil, nil, nil, nil, nil, nil, nil, nil, store.Command)
+	h := home.New(store.Command)
 	z := h.Attach("zigbee2mqtt", nopBridge{})
 	z.SetOnline(true)
 	z.Replayed()

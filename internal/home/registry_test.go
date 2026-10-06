@@ -9,15 +9,6 @@ import (
 	"github.com/llehouerou/oiko/bridge"
 )
 
-// registry is a Home whose saves are captured, as they would be on disk.
-func registry(t *testing.T, saved []Device) (*Home, *[]Device) {
-	t.Helper()
-	disk := &[]Device{}
-	h := newHome(&fakeBridge{}, saved, nil, nil, func(d []Device) error { *disk = d; return nil }, nil, nil, nil)
-	port(h).SetOnline(true)
-	return h, disk
-}
-
 func idOf(t *testing.T, h *Home, address string) DeviceID {
 	t.Helper()
 	snap, _, cancel := h.Subscribe()
@@ -45,14 +36,15 @@ func deviceByID(t *testing.T, h *Home, id DeviceID) Device {
 }
 
 func TestIdentityAndNameSurviveRestart(t *testing.T) {
-	h, disk := registry(t, nil)
+	dir := t.TempDir()
+	h := opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{bulb})
 	id := idOf(t, h, "0xbulb")
 	if err := h.Rename(id, "  Ceiling  "); err != nil {
 		t.Fatal(err)
 	}
 
-	restarted, _ := registry(t, *disk)
+	restarted := opened(t, dir)
 	port(restarted).SyncDevices([]bridge.Device{bulb}) // z2m describes it again, with its own name
 	if got := deviceByID(t, restarted, id); got.Name != "Ceiling" {
 		t.Fatalf("after restart: name %q, want %q", got.Name, "Ceiling")
@@ -60,7 +52,7 @@ func TestIdentityAndNameSurviveRestart(t *testing.T) {
 }
 
 func TestRenameRejectsBlankNames(t *testing.T) {
-	h, _ := registry(t, nil)
+	h := opened(t, t.TempDir())
 	port(h).SyncDevices([]bridge.Device{bulb})
 	if err := h.Rename(idOf(t, h, "0xbulb"), "   "); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("got %v, want ErrInvalid", err)
@@ -71,7 +63,8 @@ func TestRenameRejectsBlankNames(t *testing.T) {
 }
 
 func TestDeleteOnlyDetached(t *testing.T) {
-	h, disk := registry(t, nil)
+	dir := t.TempDir()
+	h := opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{bulb})
 	id := idOf(t, h, "0xbulb")
 	if err := h.Delete(id); !errors.Is(err, ErrInvalid) {
@@ -81,13 +74,14 @@ func TestDeleteOnlyDetached(t *testing.T) {
 	if err := h.Delete(id); err != nil {
 		t.Fatal(err)
 	}
-	if len(*disk) != 0 {
-		t.Fatalf("saved %d devices, want 0", len(*disk))
+	if saved := onDisk(t, dir).devices; len(saved) != 0 {
+		t.Fatalf("saved %d devices, want 0", len(saved))
 	}
 }
 
 func TestReplaceKeepsIdentityAndTakesNewHardware(t *testing.T) {
-	h, disk := registry(t, nil)
+	dir := t.TempDir()
+	h := opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{bulb})
 	oldID := idOf(t, h, "0xbulb")
 	if err := h.Rename(oldID, "Ceiling"); err != nil {
@@ -112,8 +106,8 @@ func TestReplaceKeepsIdentityAndTakesNewHardware(t *testing.T) {
 	if got.Name != "Ceiling" || got.NativeAddress != "0xnew" || got.Detached {
 		t.Fatalf("replaced device = %+v", got)
 	}
-	if len(*disk) != 1 {
-		t.Fatalf("saved %d devices, want 1", len(*disk))
+	if saved := onDisk(t, dir).devices; len(saved) != 1 {
+		t.Fatalf("saved %d devices, want 1", len(saved))
 	}
 	snap, _, cancel := h.Subscribe()
 	defer cancel()

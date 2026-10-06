@@ -3,7 +3,6 @@ package home
 import (
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"unicode/utf8"
 )
@@ -169,12 +168,5 @@ func (h *Home) registryChanged() error {
 
 // persist saves the registry. Callers hold h.mu.
 func (h *Home) persist() error {
-	if h.save == nil {
-		return nil
-	}
-	if err := h.save(h.deviceList()); err != nil {
-		log.Printf("home: saving devices: %v", err)
-		return err
-	}
-	return nil
+	return h.save(devicesFile, devicesFormat, h.deviceList())
 }

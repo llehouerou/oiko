@@ -278,16 +278,8 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	devicesFile := filepath.Join(dataDir, "devices.json")
-	aggregatesFile := filepath.Join(dataDir, "aggregates.json")
-	flagsFile := filepath.Join(dataDir, "flags.json")
-	areasFile := filepath.Join(dataDir, "areas.json")
 	automationsFile := filepath.Join(dataDir, "automations.json")
 	automationStateFile := filepath.Join(dataDir, "automation-state.json")
-	var saved []home.Device
-	var savedAggregates []home.Aggregate
-	var savedFlags []home.SavedFlag
-	var savedAreas []home.Area
 	var savedAutomations []automation.Document
 	var automationState map[string]automation.State
 	// ponytail: each store migrates or refuses as it is loaded, so a refusal
@@ -298,8 +290,6 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 		f    store.Format
 		v    any
 	}{
-		{devicesFile, home.DevicesFormat, &saved}, {aggregatesFile, home.AggregatesFormat, &savedAggregates},
-		{flagsFile, home.FlagsFormat, &savedFlags}, {areasFile, home.AreasFormat, &savedAreas},
 		{automationsFile, automation.DocumentsFormat, &savedAutomations}, {automationStateFile, automation.StateFormat, &automationState},
 	} {
 		if err := store.Load(s.file, s.f, s.v); err != nil {
@@ -324,15 +314,10 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 		close(written)
 	}()
 
-	h := home.New(saved, savedAggregates, savedFlags, savedAreas,
-		func(devices []home.Device) error { return store.Save(devicesFile, home.DevicesFormat, devices) },
-		func(aggregates []home.Aggregate) error {
-			return store.Save(aggregatesFile, home.AggregatesFormat, aggregates)
-		},
-		func(flags []home.SavedFlag) error { return store.Save(flagsFile, home.FlagsFormat, flags) },
-		func(areas []home.Area) error { return store.Save(areasFile, home.AreasFormat, areas) },
-		hist.Command,
-	)
+	h, err := home.Open(dataDir, hist.Command)
+	if err != nil {
+		log.Fatal(err)
+	}
 	h.Recall(hist.Recall)
 	running := make([]func(), 0, len(bridges))
 	for _, b := range bridges {

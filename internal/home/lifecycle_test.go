@@ -1,8 +1,7 @@
 package home
 
 import (
-	"errors"
-	"sync/atomic"
+	"os"
 	"testing"
 
 	"github.com/llehouerou/oiko/bridge"
@@ -11,16 +10,11 @@ import (
 // Home announces every Delete and Replace it applied, even when saving it
 // fails afterwards: the History follows them.
 func TestDeletesAndReplacesAreAnnouncedEvenWhenSavingFails(t *testing.T) {
-	var full atomic.Bool
-	fail := func() error {
-		if full.Load() {
-			return errors.New("disk full")
-		}
-		return nil
+	dir := t.TempDir()
+	h, err := Open(dir, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	h := New(nil, nil, nil, nil,
-		func([]Device) error { return fail() }, func([]Aggregate) error { return fail() },
-		func([]SavedFlag) error { return fail() }, func([]Area) error { return fail() }, nil)
 	h.Attach(zb, &fakeBridge{})
 	port(h).SetOnline(true)
 	port(h).SyncDevices([]bridge.Device{bulb, remote})
@@ -52,7 +46,7 @@ func TestDeletesAndReplacesAreAnnouncedEvenWhenSavingFails(t *testing.T) {
 	})
 	defer cancel()
 
-	full.Store(true)
+	os.RemoveAll(dir) // every save fails from now on
 	for name, err := range map[string]error{
 		"Replace":         h.Replace(old, replacing),
 		"Delete":          h.Delete(gone),

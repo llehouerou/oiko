@@ -8,33 +8,6 @@ import (
 	"github.com/llehouerou/oiko/bridge"
 )
 
-// areaDisk is what a Home saved, as it would be on disk.
-type areaDisk struct {
-	devices    []Device
-	aggregates []Aggregate
-	flags      []SavedFlag
-	areas      []Area
-}
-
-// areas is a Home with no Device yet, started from saved, whose saves land
-// in the areaDisk it returns.
-func areas(t *testing.T, saved *areaDisk) (*Home, *areaDisk) {
-	t.Helper()
-	disk := &areaDisk{}
-	if saved == nil {
-		saved = &areaDisk{}
-	}
-	h := New(saved.devices, saved.aggregates, saved.flags, saved.areas,
-		func(d []Device) error { disk.devices = d; return nil },
-		func(a []Aggregate) error { disk.aggregates = a; return nil },
-		func(f []SavedFlag) error { disk.flags = f; return nil },
-		func(a []Area) error { disk.areas = a; return nil },
-		nil)
-	h.Attach(zb, &fakeBridge{})
-	port(h).SetOnline(true)
-	return h, disk
-}
-
 func areaIDs(as []Area) []AreaID {
 	var ids []AreaID
 	for _, a := range as {
@@ -44,7 +17,8 @@ func areaIDs(as []Area) []AreaID {
 }
 
 func TestAreasKeepTheirOrderAndSurviveARestart(t *testing.T) {
-	h, disk := areas(t, nil)
+	dir := t.TempDir()
+	h := opened(t, dir)
 	if snapshot(h).Areas == nil {
 		t.Fatal("no Area is [] in JSON, not null")
 	}
@@ -56,7 +30,7 @@ func TestAreasKeepTheirOrderAndSurviveARestart(t *testing.T) {
 	if err := h.OrderAreas([]AreaID{office, living}); err != nil {
 		t.Fatal(err)
 	}
-	restarted, _ := areas(t, disk)
+	restarted := opened(t, dir)
 	got := snapshot(restarted).Areas
 	if !slices.Equal(areaIDs(got), []AreaID{office, living}) || got[0].Name != "Dave's office" {
 		t.Fatalf("after restart: %+v", got)
@@ -72,7 +46,8 @@ func TestAreasKeepTheirOrderAndSurviveARestart(t *testing.T) {
 }
 
 func TestAreaAssignmentSurvivesSyncRestartAndReplace(t *testing.T) {
-	h, disk := areas(t, nil)
+	dir := t.TempDir()
+	h := opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{bulb})
 	id := idOf(t, h, "0xbulb")
 	living, _ := h.CreateArea("Living room")
@@ -92,7 +67,7 @@ func TestAreaAssignmentSurvivesSyncRestartAndReplace(t *testing.T) {
 	}
 	check("assigned", h)
 
-	restarted, _ := areas(t, disk)
+	restarted := opened(t, dir)
 	port(restarted).SyncDevices([]bridge.Device{bulb}) // described again, with no Area
 	check("after restart", restarted)
 
@@ -113,7 +88,8 @@ func TestAreaAssignmentSurvivesSyncRestartAndReplace(t *testing.T) {
 }
 
 func TestFlagsAndAggregatesHaveAnArea(t *testing.T) {
-	h, disk := areas(t, nil)
+	dir := t.TempDir()
+	h := opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{motion("0xm1")})
 	living, _ := h.CreateArea("Living room")
 	flag, _ := h.CreateFlag("Guests")
@@ -126,7 +102,7 @@ func TestFlagsAndAggregatesHaveAnArea(t *testing.T) {
 	if err := h.EditAggregate(agg, "Motion", members(t, h, "0xm1"), All, ""); err != nil {
 		t.Fatal(err)
 	}
-	restarted, _ := areas(t, disk)
+	restarted := opened(t, dir)
 	s := snapshot(restarted)
 	if s.Flags[0].Area != living || s.Aggregates[0].Area != living {
 		t.Fatalf("after edit and restart: flag in %q, aggregate in %q", s.Flags[0].Area, s.Aggregates[0].Area)
@@ -134,7 +110,8 @@ func TestFlagsAndAggregatesHaveAnArea(t *testing.T) {
 }
 
 func TestDeletingAnAreaLeavesWhatItHeldWithoutOne(t *testing.T) {
-	h, disk := areas(t, nil)
+	dir := t.TempDir()
+	h := opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{bulb, motion("0xm1")})
 	bulbID := idOf(t, h, "0xbulb")
 	living, _ := h.CreateArea("Living room")
@@ -161,6 +138,7 @@ func TestDeletingAnAreaLeavesWhatItHeldWithoutOne(t *testing.T) {
 	if got := deviceByID(t, h, idOf(t, h, "0xm1")).Area; got != office {
 		t.Fatalf("another Area's Device moved: %q", got)
 	}
+	disk := onDisk(t, dir)
 	if !slices.Equal(areaIDs(disk.areas), []AreaID{office}) {
 		t.Fatalf("saved Areas: %+v", disk.areas)
 	}
@@ -172,7 +150,8 @@ func TestDeletingAnAreaLeavesWhatItHeldWithoutOne(t *testing.T) {
 }
 
 func TestAreaDisplaySurvivesARestart(t *testing.T) {
-	h, disk := areas(t, nil)
+	dir := t.TempDir()
+	h := opened(t, dir)
 	living, _ := h.CreateArea("Living room")
 	hidden := []Target{TargetDevice("d1", ""), TargetFlag("f1")}
 	if err := h.SetAreaDisplay(living, hidden, []string{"occupancy"}); err != nil {
@@ -181,7 +160,7 @@ func TestAreaDisplaySurvivesARestart(t *testing.T) {
 	if err := h.RenameArea(living, "Lounge"); err != nil {
 		t.Fatal(err)
 	}
-	restarted, _ := areas(t, disk)
+	restarted := opened(t, dir)
 	a := snapshot(restarted).Areas[0]
 	if !slices.Equal(a.Hidden, hidden) || !slices.Equal(a.HiddenAggregates, []string{"occupancy"}) {
 		t.Fatalf("after rename and restart: %+v", a)
@@ -195,14 +174,15 @@ func TestAreaDisplaySurvivesARestart(t *testing.T) {
 }
 
 func TestAreaLayoutSurvivesARestart(t *testing.T) {
-	h, disk := areas(t, nil)
+	dir := t.TempDir()
+	h := opened(t, dir)
 	living, _ := h.CreateArea("Living room")
 	lamp, flag := TargetDevice("d1", ""), TargetFlag("f1")
 	layout := []Placement{{Tile: lamp, Col: 1, Row: 0, Width: 2, Height: 3}, {Tile: flag, Col: 0, Row: 2, Width: 1}}
 	if err := h.SetAreaLayout(living, 3, layout); err != nil {
 		t.Fatal(err)
 	}
-	restarted, _ := areas(t, disk)
+	restarted := opened(t, dir)
 	a := snapshot(restarted).Areas[0]
 	if a.Columns != 3 || !slices.Equal(a.Layout, layout) {
 		t.Fatalf("after restart: %+v", a)
@@ -231,7 +211,7 @@ func TestAreaLayoutSurvivesARestart(t *testing.T) {
 }
 
 func TestSetAreaRefusals(t *testing.T) {
-	h, _ := areas(t, nil)
+	h := opened(t, t.TempDir())
 	port(h).SyncDevices([]bridge.Device{bulb})
 	id := idOf(t, h, "0xbulb")
 	living, _ := h.CreateArea("Living room")

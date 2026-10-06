@@ -54,7 +54,7 @@ func handlerIn(t *testing.T, dir string, public *url.URL, now func() time.Time) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := home.New(nil, nil, nil, nil, nil, nil, nil, nil, store.Command)
+	h := home.New(store.Command)
 	e := automation.New(h, nil, nil, nil, nil, nil, store.Record)
 	h.Follow(store.Follow)
 	ctx, cancel := context.WithCancel(context.Background())

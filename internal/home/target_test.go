@@ -88,7 +88,7 @@ func TestEveryTargetKindHonoursTheCommandContract(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				h := newHome(&fakeBridge{}, nil, nil, nil, nil, nil, nil, nil)
+				h := newHome(&fakeBridge{}, nil)
 				port(h).SetOnline(true)
 				port(h).SyncDevices([]bridge.Device{plug})
 				id := idOf(t, h, "0xplug")

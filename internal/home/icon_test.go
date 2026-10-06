@@ -8,14 +8,15 @@ import (
 )
 
 func TestDeviceIconSurvivesRestartAndReplace(t *testing.T) {
-	h, disk := registry(t, nil)
+	dir := t.TempDir()
+	h := opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{bulb})
 	id := idOf(t, h, "0xbulb")
 	if err := h.SetIcon(TargetDevice(id, ""), "floor-lamp"); err != nil {
 		t.Fatal(err)
 	}
 
-	restarted, _ := registry(t, *disk)
+	restarted := opened(t, dir)
 	port(restarted).SyncDevices([]bridge.Device{bulb}) // described again, with no icon
 	if got := deviceByID(t, restarted, id).Icon; got != "floor-lamp" {
 		t.Fatalf("after restart: icon %q", got)
@@ -33,7 +34,7 @@ func TestDeviceIconSurvivesRestartAndReplace(t *testing.T) {
 }
 
 func TestAggregateIconSurvivesEdit(t *testing.T) {
-	h, _, _, saved := aggregates(t)
+	h, _, dir := aggregates(t)
 	id, _ := h.CreateAggregate("Veranda", members(t, h, "0xm1", "0xm2"), Any, "")
 	if err := h.SetIcon(TargetAggregate(id), "ceiling-light-multiple"); err != nil {
 		t.Fatal(err)
@@ -44,7 +45,7 @@ func TestAggregateIconSurvivesEdit(t *testing.T) {
 	if got := snapshot(h).Aggregates[0].Icon; got != "ceiling-light-multiple" {
 		t.Fatalf("after edit: icon %q", got)
 	}
-	if got := (*saved)[0].Icon; got != "ceiling-light-multiple" {
+	if got := onDisk(t, dir).aggregates[0].Icon; got != "ceiling-light-multiple" {
 		t.Fatalf("saved icon %q", got)
 	}
 	if err := h.SetIcon(TargetAggregate(id), ""); err != nil || snapshot(h).Aggregates[0].Icon != "" {
@@ -53,7 +54,7 @@ func TestAggregateIconSurvivesEdit(t *testing.T) {
 }
 
 func TestSetIconRefusals(t *testing.T) {
-	h, _ := registry(t, nil)
+	h := opened(t, t.TempDir())
 	port(h).SyncDevices([]bridge.Device{bulb})
 	id := idOf(t, h, "0xbulb")
 	for _, c := range []struct {

@@ -3,7 +3,6 @@ package home
 import (
 	"cmp"
 	"errors"
-	"log"
 	"slices"
 	"time"
 
@@ -136,18 +135,11 @@ func (h *Home) flagsChanged() error {
 
 // saveFlagList saves every Flag with its Value. Callers hold h.mu.
 func (h *Home) saveFlagList() error {
-	if h.saveFlags == nil {
-		return nil
-	}
 	list := make([]SavedFlag, 0, len(h.flags))
 	for _, f := range h.flagList() {
 		list = append(list, SavedFlag{ID: f.ID, Name: f.Name, Area: f.Area, Value: h.values[flagRef(f.ID)]})
 	}
-	if err := h.saveFlags(list); err != nil {
-		log.Printf("home: saving flags: %v", err)
-		return err
-	}
-	return nil
+	return h.save(flagsFile, flagsFormat, list)
 }
 
 func (h *Home) flagList() []Flag {

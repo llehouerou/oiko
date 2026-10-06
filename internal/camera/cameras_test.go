@@ -26,7 +26,7 @@ func (plain) Send(context.Context, string, string, map[string]any, time.Duration
 // recorded.
 func cameras(t *testing.T) (*home.Home, *Cameras, <-chan history.LiveView) {
 	t.Helper()
-	h := home.New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := home.New(nil)
 	recorded := make(chan history.LiveView, 10)
 	return h, New(h, func(v history.LiveView) { recorded <- v }), recorded
 }

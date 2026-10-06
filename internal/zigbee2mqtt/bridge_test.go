@@ -24,7 +24,7 @@ func newTestBridge(t testing.TB) (*Bridge, *home.Home) {
 		t.Fatal(err)
 	}
 	b := newBridge("zigbee2mqtt", nil, slog.Default())
-	h := home.New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := home.New(nil)
 	b.home = h.Attach("zigbee2mqtt", b)
 	b.handle("zigbee2mqtt/bridge/state", []byte(`{"state":"online"}`), true)
 	b.handle("zigbee2mqtt/bridge/devices", fixture, true)
@@ -225,7 +225,7 @@ func (h issuing) Command(t home.Target, req home.Request) (string, error) {
 func TestReplayedOnceOnlineAndItsRetainedStateReplayed(t *testing.T) {
 	for _, online := range []bool{true, false} {
 		b := newBridge("zigbee2mqtt", nil, slog.Default())
-		h := home.New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		h := home.New(nil)
 		b.home = h.Attach("zigbee2mqtt", b)
 		replayed := func(*Bridge) bool {
 			select {

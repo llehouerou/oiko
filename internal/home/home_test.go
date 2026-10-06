@@ -45,14 +45,42 @@ func ptr(f float64) *float64 { return &f }
 // zb is the name of the one Bridge of most tests.
 const zb = "zigbee2mqtt"
 
-// newHome is a Home with b attached as zb.
-func newHome(b Bridge, saved []Device, savedAggregates []Aggregate, savedFlags []SavedFlag,
-	save func([]Device) error, saveAggregates func([]Aggregate) error, saveFlags func([]SavedFlag) error,
-	history func(CommandRecord),
-) *Home {
-	h := New(saved, savedAggregates, savedFlags, nil, save, saveAggregates, saveFlags, nil, history)
+// newHome is a Home that saves nothing, with b attached as zb.
+func newHome(b Bridge, history func(CommandRecord)) *Home {
+	h := New(history)
 	h.Attach(zb, b)
 	return h
+}
+
+// opened is the Home saved in dir, with a Bridge attached online as zb: open
+// it again on the same dir to restart it.
+func opened(t *testing.T, dir string) *Home {
+	t.Helper()
+	h := restart(t, dir)
+	port(h).SetOnline(true)
+	return h
+}
+
+// restart is the Home saved in dir as Oiko starts: its Bridge attached as
+// zb, not online yet.
+func restart(t *testing.T, dir string) *Home {
+	t.Helper()
+	h, err := Open(dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Attach(zb, &fakeBridge{})
+	return h
+}
+
+// onDisk is what a Home saved in dir.
+func onDisk(t *testing.T, dir string) saved {
+	t.Helper()
+	s, err := load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
 }
 
 // port is how zb feeds h.
@@ -79,7 +107,7 @@ var remote = bridge.Device{
 func setup(t *testing.T) (*Home, *fakeBridge, <-chan Update, DeviceID) {
 	t.Helper()
 	b := &fakeBridge{}
-	h := newHome(b, nil, nil, nil, nil, nil, nil, nil)
+	h := newHome(b, nil)
 	port(h).SetOnline(true)
 	port(h).SyncDevices([]bridge.Device{bulb, remote})
 	snap, updates, cancel := h.Subscribe()
@@ -179,7 +207,7 @@ func TestCommandIsConfirmedByMatchingReport(t *testing.T) {
 func TestCommandIsConfirmedDespiteTriggersAndRounding(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		b := &fakeBridge{}
-		h := newHome(b, nil, nil, nil, nil, nil, nil, nil)
+		h := newHome(b, nil)
 		port(h).SetOnline(true)
 		rw := Access{Observable: true, Settable: true}
 		port(h).SyncDevices([]bridge.Device{{NativeAddress: "0xstrip", Functions: []bridge.Function{{Key: "light", Kind: "light", Capabilities: []Capability{
