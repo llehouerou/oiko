@@ -19,6 +19,7 @@ import {
   mdiLogout,
   mdiPlus,
   mdiRobotOutline,
+  mdiTabletDashboard,
   mdiTimelineClockOutline,
   mdiViewDashboardEditOutline,
   mdiViewDashboardOutline,
@@ -101,8 +102,8 @@ function ConnectionBadge() {
   )
 }
 
-// Who is signed in, with a menu to their own page, an Admin's pages (Persons, Programs, the Audit log), and
-// signing out.
+// Who is signed in, with a menu to their own page, an Admin's pages (Persons, Kiosks, Programs, the Audit
+// log), and signing out, which a Kiosk never does (ADR 0029).
 function Account() {
   const me = useMe()
   if (!me?.identity) return null
@@ -145,6 +146,16 @@ function Account() {
         )}
         {me.level === 'admin' && 'person' in me.identity && (
           <a
+            href="#kiosks"
+            onClick={() => document.getElementById('account')?.hidePopover()}
+            className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-neutral-800"
+          >
+            <Svg path={mdiTabletDashboard} className="size-5 text-neutral-400" />
+            Kiosks
+          </a>
+        )}
+        {me.level === 'admin' && 'person' in me.identity && (
+          <a
             href="#programs"
             onClick={() => document.getElementById('account')?.hidePopover()}
             className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-neutral-800"
@@ -163,15 +174,17 @@ function Account() {
             Audit log
           </a>
         )}
-        <button
-          popoverTarget="account"
-          popoverTargetAction="hide"
-          onClick={() => void signOut()}
-          className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-neutral-800"
-        >
-          <Svg path={mdiLogout} className="size-5 text-neutral-400" />
-          Sign out
-        </button>
+        {!('kiosk' in me.identity) && (
+          <button
+            popoverTarget="account"
+            popoverTargetAction="hide"
+            onClick={() => void signOut()}
+            className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-neutral-800"
+          >
+            <Svg path={mdiLogout} className="size-5 text-neutral-400" />
+            Sign out
+          </button>
+        )}
       </div>
     </>
   )

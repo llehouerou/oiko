@@ -132,7 +132,7 @@ func handlePersons(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 			reply(w, err)
 			return
 		}
-		setSession(w, session, int(access.SessionLimit.Seconds()))
+		setCookie(w, sessionCookie, session, int(access.SessionLimit.Seconds()))
 		w.WriteHeader(http.StatusNoContent)
 	}))
 }

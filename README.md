@@ -82,7 +82,9 @@ versions are read the same way.
 
 Every API request but signing in needs a Session, signed in on the dashboard, or a Program's Token, sent as
 `Authorization: Bearer`; the dashboard's page itself is served to anyone. While Oiko has no Admin,
-its log prints at each start a Setup link that claims it.
+its log prints at each start a Setup link that claims it. A shared screen, such as a wall tablet,
+signs in as a Kiosk: its sign-in page offers a QR code, which an Admin scans from a signed-in
+phone and approves.
 
 The host is the last way back in, for an Admin who lost every Passkey: while Oiko runs,
 `oiko -data <dir> sign-in-link` lists the Persons (Name, Access level, id), and

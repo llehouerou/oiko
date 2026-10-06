@@ -69,6 +69,8 @@ import { Setup } from './Setup'
 import { SignIn } from './SignIn'
 import { Programs } from './Programs'
 import { Persons } from './Persons'
+import { Kiosks } from './Kiosks'
+import { ApprovePairing } from './Pairing'
 import { SignInLink } from './SignInLink'
 import { Account } from './Account'
 import { AuditPage } from './Audit'
@@ -88,7 +90,7 @@ import {
 export function App() {
   const me = useMe()
   const [page, setPage] = useState(location.hash)
-  const [landing, setLanding] = useState(location.pathname) // a Setup or Sign-in link's page, its secret as the hash
+  const [landing, setLanding] = useState(location.pathname) // a Setup, Sign-in or pairing link's page, its secret as the hash
   useEffect(() => {
     const follow = () => setPage(location.hash)
     addEventListener('hashchange', follow)
@@ -100,6 +102,8 @@ export function App() {
   const done = () => (history.replaceState(null, '', '/'), setPage(''), setLanding('/'))
   if (landing === '/setup') return <Setup onDone={done} />
   if (landing === '/sign-in') return <SignInLink onDone={done} />
+  // Approving a Kiosk pairing needs an Admin signed in here first.
+  if (landing === '/pair' && me?.identity) return <ApprovePairing onDone={done} />
   switch (screen(me, page)) {
     case null:
       return null
@@ -107,6 +111,8 @@ export function App() {
       return <SignIn me={me!} />
     case 'persons':
       return <Persons />
+    case 'kiosks':
+      return <Kiosks />
     case 'programs':
       return <Programs />
     case 'audit':

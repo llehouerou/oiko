@@ -35,6 +35,7 @@ const sentences: Record<string, (e: Entry, a: string, s: string) => string> = {
   'passkey-refused': (e, _, s) => (e.subject.kind === 'unknown' ? 'An unknown Passkey was refused' : `A Passkey for ${s} was refused`),
   'token-refused': () => 'A Token was refused',
   'step-up-refused': (_, a) => `${a} did not confirm a Passkey`,
+  'pairing-refused': (e, a) => (e.actor.kind === 'unknown' ? 'A Kiosk pairing request was refused' : `${a} used a Kiosk pairing code that had expired`),
   'signed-in': (e, _, s) => {
     const by = e.detail?.by as Party | undefined
     const how: Record<string, string> = {
@@ -42,6 +43,7 @@ const sentences: Record<string, (e: Entry, a: string, s: string) => string> = {
       passkey: 'with a Passkey',
       link: by ? `with a Sign-in link from ${who(by)}` : 'with a Sign-in link',
       host: "with a Sign-in link from Oiko's host",
+      pairing: `as paired by ${who(by)}`,
     }
     return `${s} signed in ${how[String(e.detail?.method)] ?? ''}`.trim()
   },
@@ -51,6 +53,7 @@ const sentences: Record<string, (e: Entry, a: string, s: string) => string> = {
       expired: `A Session of ${s} expired`,
       'access ended': `A Session of ${s} ended with their access`,
       removed: `A Session of ${s} ended with their removal`,
+      'paired again': `A Session of ${s} ended as it was paired again`,
     }
     return reasons[String(e.detail?.reason)] ?? `${a} ended a Session of ${s}`
   },
@@ -69,6 +72,10 @@ const sentences: Record<string, (e: Entry, a: string, s: string) => string> = {
   'link-expired': (_, __, s) => `The Sign-in link of ${s} expired unused`,
   'passkey-added': (e, a) => `${a} added a Passkey${e.detail?.provider ? ` (${e.detail.provider})` : ''}`,
   'passkey-removed': (e, a) => `${a} removed a Passkey${e.detail?.provider ? ` (${e.detail.provider})` : ''}`,
+  'kiosk-created': (e, a, s) => `${a} created the Kiosk ${s}, ${level(e.detail?.level)}`,
+  'kiosk-paired': (_, a, s) => `${a} paired a screen as ${s}`,
+  'kiosk-renamed': (e, a, s) => `${a} renamed the Kiosk ${e.detail?.from} to ${s}`,
+  'kiosk-removed': (_, a, s) => `${a} removed the Kiosk ${s}`,
   'program-created': (e, a, s) => `${a} created the Program ${s}, ${level(e.detail?.level)}`,
   'program-renamed': (e, a, s) => `${a} renamed the Program ${e.detail?.from} to ${s}`,
   'program-removed': (_, a, s) => `${a} removed the Program ${s}`,

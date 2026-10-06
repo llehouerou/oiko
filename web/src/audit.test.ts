@@ -18,6 +18,20 @@ test('an entry reads as a sentence naming who acted and whom it concerns as they
   ).toBe('Alice changed Node-RED from Member to Admin')
 })
 
+test('a Kiosk pairing reads as who approved it, for which screen', () => {
+  const hall = { kind: 'kiosk', id: 'k1', name: 'Hall tablet' } as const
+  expect(tell(entry({ event: 'kiosk-created', actor: alice, subject: hall, detail: { level: 'guest' } }))).toBe('Alice created the Kiosk Hall tablet, Guest')
+  expect(tell(entry({ event: 'kiosk-paired', actor: alice, subject: hall }))).toBe('Alice paired a screen as Hall tablet')
+  expect(tell(entry({ event: 'signed-in', actor: hall, subject: hall, detail: { method: 'pairing', by: alice } }))).toBe(
+    'Hall tablet signed in as paired by Alice',
+  )
+  expect(tell(entry({ event: 'session-ended', actor: alice, subject: hall, detail: { reason: 'paired again' } }))).toBe(
+    'A Session of Hall tablet ended as it was paired again',
+  )
+  expect(tell(entry({ event: 'pairing-refused', actor: alice }))).toBe('Alice used a Kiosk pairing code that had expired')
+  expect(tell(entry({ event: 'pairing-refused' }))).toBe('A Kiosk pairing request was refused')
+})
+
 test('anonymous refusals past the budget read as a count for the hour', () => {
   expect(tell(entry({ event: 'token-refused' }))).toBe('A Token was refused')
   expect(tell(entry({ event: 'token-refused', detail: { count: 37 } }))).toBe('A Token was refused, 37 more times that hour')

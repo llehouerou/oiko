@@ -220,7 +220,7 @@ func (s *Store) FinishSignIn(origin string, response []byte, browser string) (st
 	x := session{Person: p.ID, Browser: browser, Method: "passkey", Provider: Provider(credential.Authenticator.AAGUID)}
 	secret, err := s.signIn(&x)
 	if err == nil {
-		s.recordSignIn(p, x)
+		s.recordSignIn(personParty(p), x)
 	}
 	return secret, err
 }

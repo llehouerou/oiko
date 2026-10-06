@@ -1,15 +1,18 @@
 // The page a browser that is not signed in gets, in place of the view it asked for: signing in
-// returns to it (ADR 0027).
+// returns to it (ADR 0027). Where sign-in works, it also offers to pair the screen as a Kiosk, at
+// once on a screen that was one, whose Session ended (ADR 0029).
 
 import { useState } from 'react'
 import { mdiHomeAutomation } from '@mdi/js'
 import { Svg } from './icons'
-import { signInPage, type Me } from './access'
+import { forgetKiosk, signInPage, wasKiosk, type Me } from './access'
 import { signInWithPasskey } from './passkeys'
+import { KioskOffer } from './Pairing'
 
 export function SignIn({ me }: { me: Me }) {
   const page = signInPage(me, location.origin)
   const [error, setError] = useState<string | null>(null)
+  const [kiosk, setKiosk] = useState(wasKiosk)
   return (
     <main className="grid min-h-dvh place-items-center p-4 text-neutral-100">
       <div className="w-full max-w-sm space-y-5 rounded-xl bg-neutral-900 p-6 text-sm">
@@ -35,7 +38,8 @@ export function SignIn({ me }: { me: Me }) {
             .
           </p>
         )}
-        {page === 'here' && (
+        {page === 'here' && kiosk && <KioskOffer me={me} onCancel={() => (forgetKiosk(), setKiosk(false))} />}
+        {page === 'here' && !kiosk && (
           <>
             <p>You are not signed in on this browser.</p>
             {error && <p className="text-red-400">{error}</p>}
@@ -46,6 +50,9 @@ export function SignIn({ me }: { me: Me }) {
               Sign in with a Passkey
             </button>
             <p className="text-neutral-400">No Passkey on this device? Your browser can use your phone's. Otherwise, ask an Admin for a Sign-in link.</p>
+            <button onClick={() => setKiosk(true)} className="text-neutral-400 hover:text-white">
+              Use this screen as a Kiosk
+            </button>
           </>
         )}
       </div>

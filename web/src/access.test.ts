@@ -1,5 +1,20 @@
 import { afterEach, expect, test, vi } from 'vitest'
-import { allows, api, linkPerson, loadMe, meNow, screen, signInLink, signInPage, signInWithLink, type Level, type Me } from './access'
+import {
+  allows,
+  api,
+  claimPairing,
+  linkPerson,
+  loadMe,
+  meNow,
+  pairLink,
+  screen,
+  signInLink,
+  signInPage,
+  signInWithLink,
+  wasKiosk,
+  type Level,
+  type Me,
+} from './access'
 
 const alice: Me = { identity: { person: 'p1' }, name: 'Alice', level: 'admin', fresh: false, claimed: true, publicUrl: 'https://oiko.example' }
 const nobody: Me = { identity: null, fresh: false, claimed: true, publicUrl: 'https://oiko.example' }
@@ -10,7 +25,7 @@ function oiko(answers: Record<string, [number, unknown]>) {
     'fetch',
     vi.fn(async (path: string) => {
       const [status, body] = answers[path] ?? [404, 'not found']
-      return new Response(JSON.stringify(body), { status })
+      return new Response(status === 204 ? null : JSON.stringify(body), { status })
     }),
   )
 }
@@ -45,14 +60,15 @@ test('each view has its hash; any other is the dashboard', () => {
 })
 
 test('each Access level sees its views, and the dashboard for any other', () => {
-  const hashes = ['#', '#history', '#automations/a1', '#persons', '#programs', '#audit', '#account']
+  const hashes = ['#', '#history', '#automations/a1', '#persons', '#kiosks', '#programs', '#audit', '#account']
   const views = (me: Me) => hashes.map((h) => screen(me, h))
   const as = (level: Level): Me => ({ ...alice, level })
-  expect(views(as('guest'))).toEqual(['home', 'home', 'home', 'home', 'home', 'home', 'account'])
-  expect(views(as('member'))).toEqual(['home', 'history', 'automations', 'home', 'home', 'home', 'account'])
-  expect(views(as('admin'))).toEqual(['home', 'history', 'automations', 'persons', 'programs', 'audit', 'account'])
-  // A Program has no account, and manages no access, whatever its level.
-  expect(views({ ...alice, identity: { program: 'x1' } })).toEqual(['home', 'history', 'automations', 'home', 'home', 'home', 'home'])
+  expect(views(as('guest'))).toEqual(['home', 'home', 'home', 'home', 'home', 'home', 'home', 'account'])
+  expect(views(as('member'))).toEqual(['home', 'history', 'automations', 'home', 'home', 'home', 'home', 'account'])
+  expect(views(as('admin'))).toEqual(['home', 'history', 'automations', 'persons', 'kiosks', 'programs', 'audit', 'account'])
+  // A Program, or a Kiosk, has no account, and manages no access, whatever its level.
+  expect(views({ ...alice, identity: { program: 'x1' } })).toEqual(['home', 'history', 'automations', 'home', 'home', 'home', 'home', 'home'])
+  expect(views({ ...alice, level: 'member', identity: { kiosk: 'k1' } })).toEqual(['home', 'history', 'automations', 'home', 'home', 'home', 'home', 'home'])
 })
 
 test('each Access level allows what those below it do', () => {
@@ -86,6 +102,26 @@ test('sign-in is offered on the Public URL and http://localhost only', () => {
 test('a Sign-in link points at the Public URL, its secret in the fragment', () => {
   expect(signInLink(alice, 'http://localhost:8080', 's3cret')).toBe('https://oiko.example/sign-in#s3cret')
   expect(signInLink({ ...alice, publicUrl: null }, 'http://localhost:8080', 's3cret')).toBe('http://localhost:8080/sign-in#s3cret')
+})
+
+test('a pairing approval points at the Public URL, its secret in the fragment', () => {
+  expect(pairLink(alice, 'http://localhost:8080', 's3cret')).toBe('https://oiko.example/pair#s3cret')
+  expect(pairLink({ ...alice, publicUrl: null }, 'http://localhost:8080', 's3cret')).toBe('http://localhost:8080/pair#s3cret')
+})
+
+test('a screen waits for its pairing, then signs in as the Kiosk and remembers it', async () => {
+  const storage = new Map<string, string>()
+  vi.stubGlobal('localStorage', { getItem: (k: string) => storage.get(k) ?? null, setItem: (k: string, v: string) => storage.set(k, v) })
+  const kiosk: Me = { ...nobody, identity: { kiosk: 'k1' }, name: 'Hall tablet', level: 'guest' }
+  oiko({ '/api/kiosk-pairing/claim': [202, null] })
+  expect(await claimPairing()).toBe('waiting')
+  expect(wasKiosk()).toBe(false)
+  oiko({ '/api/kiosk-pairing/claim': [204, null], '/api/me': [200, kiosk] })
+  expect(await claimPairing()).toBe('paired')
+  expect(meNow()).toEqual(kiosk)
+  expect(wasKiosk()).toBe(true)
+  oiko({ '/api/kiosk-pairing/claim': [403, 'expired'] })
+  expect(await claimPairing()).toBe('ended')
 })
 
 test('a Sign-in link tells whom it signs in, or why it no longer does', async () => {

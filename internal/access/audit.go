@@ -37,16 +37,17 @@ const (
 	PasskeyRefused Event = "passkey-refused" // an unknown Passkey, a counter that went backwards, an answer that does not verify
 	TokenRefused   Event = "token-refused"   // a Token that is not, or no longer, valid
 	StepUpRefused  Event = "step-up-refused" // a Passkey that did not confirm a step-up
+	PairingRefused Event = "pairing-refused" // a Kiosk pairing request that expired, was already used or never existed, viewed or approved by an Admin, or claimed by a screen
 )
 
 // Changes to access.
 const (
-	SignedIn       Event = "signed-in"        // a Session started; "method" tells how: setup, passkey, link (its "by" if not their own) or host
-	SessionEnded   Event = "session-ended"    // "reason": signed out, expired, access ended, or removed with its Person
+	SignedIn       Event = "signed-in"        // a Session started; "method" tells how: setup, passkey, link (its "by" if not their own), host, or a Kiosk's pairing (its "by")
+	SessionEnded   Event = "session-ended"    // "reason": signed out, expired, access ended, revoked, removed with its Person or Kiosk, or a Kiosk's paired again
 	PersonCreated  Event = "person-created"   // "level"
 	PersonRenamed  Event = "person-renamed"   // "from" the previous Name
 	PersonRemoved  Event = "person-removed"   //
-	LevelChanged   Event = "level-changed"    // a Person's or a Program's, "from" and "to"
+	LevelChanged   Event = "level-changed"    // a Person's, a Kiosk's or a Program's, "from" and "to"
 	EndDateChanged Event = "end-date-changed" // a Guest's, set, changed or removed: "from" and "to", null for none
 	EndDateReached Event = "end-date-reached" // dated when it came: the Guest's Sessions ended
 	LinkCreated    Event = "link-created"     // "expires"
@@ -54,6 +55,10 @@ const (
 	LinkExpired    Event = "link-expired"     // unused, dated when it expired
 	PasskeyAdded   Event = "passkey-added"    // "provider", if known
 	PasskeyRemoved Event = "passkey-removed"  // "provider", if known
+	KioskCreated   Event = "kiosk-created"    // "level", as its pairing is approved
+	KioskPaired    Event = "kiosk-paired"     // its pairing approved for the screen in the entry's browser
+	KioskRenamed   Event = "kiosk-renamed"    // "from" the previous Name
+	KioskRemoved   Event = "kiosk-removed"    //
 	ProgramCreated Event = "program-created"  // "level"
 	ProgramRenamed Event = "program-renamed"  // "from" the previous Name
 	ProgramRemoved Event = "program-removed"  //

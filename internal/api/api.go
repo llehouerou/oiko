@@ -160,14 +160,15 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	handleAccess(mux, acc, public)
 	handlePasskeys(mux, acc, public)
 	handlePrograms(mux, acc)
+	handleKiosks(mux, acc, public)
 	handlePersons(mux, acc, public)
 	handleSessions(mux, acc)
 	handleAudit(mux, acc, hist)
 
 	client := files(static)
 	mux.Handle("GET /", client)
-	// The pages a Setup link and a Sign-in link open, their secret in the
-	// fragment, which never reaches Oiko.
+	// The pages a Setup link, a Sign-in link and a Kiosk's pairing QR code
+	// open, their secret in the fragment, which never reaches Oiko.
 	page := func(w http.ResponseWriter, r *http.Request) {
 		r = r.Clone(r.Context())
 		r.URL.Path = "/"
@@ -175,6 +176,7 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	}
 	mux.HandleFunc("GET /setup", page)
 	mux.HandleFunc("GET /sign-in", page)
+	mux.HandleFunc("GET /pair", page)
 	return secure(http.NewCrossOriginProtection().Handler(identify(acc, public, mux)))
 }
 

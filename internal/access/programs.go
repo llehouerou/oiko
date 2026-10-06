@@ -204,8 +204,8 @@ func (s *Store) PersonName(id string) string {
 	return ""
 }
 
-// Names answers the Name of every Person and Program, by kind then id, to a
-// Member or an Admin: who reads Origins (ADR 0031).
+// Names answers the Name of every Person, Kiosk and Program, by kind then
+// id, to a Member or an Admin: who reads Origins (ADR 0031).
 func (s *Store) Names(by Identity) (map[Kind]map[string]string, error) {
 	if !by.Level.Allows(Member) {
 		return nil, fmt.Errorf("%w: only a Member or an Admin reads who did what", ErrRefused)
@@ -225,9 +225,12 @@ func (s *Store) CurrentNames() map[Kind]map[string]string {
 
 // names is the Name of every identity, by kind then id. Callers hold s.mu.
 func (s *Store) names() map[Kind]map[string]string {
-	names := map[Kind]map[string]string{PersonKind: {}, ProgramKind: {}}
+	names := map[Kind]map[string]string{PersonKind: {}, KioskKind: {}, ProgramKind: {}}
 	for _, p := range s.persons {
 		names[PersonKind][p.ID] = p.Name
+	}
+	for _, k := range s.kiosks {
+		names[KioskKind][k.ID] = k.Name
 	}
 	for _, p := range s.programs {
 		names[ProgramKind][p.ID] = p.Name

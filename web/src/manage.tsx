@@ -101,15 +101,18 @@ export function PasskeyList({ passkeys, onRemove }: { passkeys: Passkey[]; onRem
   )
 }
 
-export function LevelSelect(props: { name?: string; defaultValue?: Level; value?: Level; onChange?: (l: Level) => void }) {
-  const { onChange, ...rest } = props
+// Picks an Access level among only, every one by default: a Kiosk is never an Admin.
+export function LevelSelect(props: { name?: string; defaultValue?: Level; value?: Level; onChange?: (l: Level) => void; only?: Level[] }) {
+  const { onChange, only, ...rest } = props
   return (
     <select {...rest} aria-label="Access level" onChange={onChange && ((e) => onChange(e.target.value as Level))} className="rounded bg-neutral-800 px-2 py-1">
-      {Object.entries(levels).map(([l, label]) => (
-        <option key={l} value={l}>
-          {label}
-        </option>
-      ))}
+      {Object.entries(levels)
+        .filter(([l]) => !only || only.includes(l as Level))
+        .map(([l, label]) => (
+          <option key={l} value={l}>
+            {label}
+          </option>
+        ))}
     </select>
   )
 }
@@ -143,22 +146,23 @@ export function qrPath(text: string) {
   return { size, d }
 }
 
-// A Sign-in link just created, shown this once: its QR code, drawn inline (the CSP refuses data:
-// URLs), to scan from another device, or the link itself to copy or share through a messenger.
+// text's QR code, drawn inline: the CSP refuses data: URLs.
+export function QrCode({ text, label }: { text: string; label: string }) {
+  const { size, d } = qrPath(text)
+  return (
+    <svg viewBox={`-4 -4 ${size + 8} ${size + 8}`} role="img" aria-label={label} shapeRendering="crispEdges" className="size-56 rounded bg-white">
+      <path d={d} fill="#000" />
+    </svg>
+  )
+}
+
+// A Sign-in link just created, shown this once: its QR code to scan from another device, or the link
+// itself to copy or share through a messenger.
 export function ShareLink({ link, expires, onDone }: { link: string; expires: string; onDone: () => void }) {
-  const { size, d } = qrPath(link)
   return (
     <div className="space-y-3 rounded-lg border border-amber-400/40 bg-amber-400/10 p-3">
       <p className="text-amber-200">Scan it on the other device, or send it: it signs in once, until {date(expires)}. It will not be shown again.</p>
-      <svg
-        viewBox={`-4 -4 ${size + 8} ${size + 8}`}
-        role="img"
-        aria-label="QR code of the Sign-in link"
-        shapeRendering="crispEdges"
-        className="size-56 rounded bg-white"
-      >
-        <path d={d} fill="#000" />
-      </svg>
+      <QrCode text={link} label="QR code of the Sign-in link" />
       <div className="flex flex-wrap items-center gap-2">
         <code className="min-w-0 flex-1 rounded bg-neutral-950 px-2 py-1 break-all select-all">{link}</code>
         <CopyButton text={link} />

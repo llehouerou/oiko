@@ -38,7 +38,7 @@ func handlePasskeys(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 			reply(w, err)
 			return
 		}
-		setSession(w, secret, int(access.SessionLimit.Seconds()))
+		setCookie(w, sessionCookie, secret, int(access.SessionLimit.Seconds()))
 		w.WriteHeader(http.StatusNoContent)
 	}))
 

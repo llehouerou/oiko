@@ -19,23 +19,28 @@ type identityKey struct{}
 
 // openEndpoints are those of the API a request without credentials
 // reaches: who am I, the Setup link, signing in with a Passkey or a Sign-in
-// link, and signing out, which clears the cookie of a Session that already
-// ended.
+// link, pairing a Kiosk from its screen, and signing out, which clears the
+// cookie of a Session that already ended.
 var openEndpoints = map[string]bool{
 	"/api/me": true, "/api/setup": true, "/api/sign-in/passkey/options": true, "/api/sign-in/passkey": true,
 	"/api/sign-in/link/person": true, "/api/sign-in/link": true, "/api/sign-out": true,
+	"/api/kiosk-pairing": true, "/api/kiosk-pairing/claim": true,
 }
 
 // identify resolves each request, by its Token or else its Session, to its
 // identity, which the request then carries. Without either, it reaches the
 // web client and the open endpoints only; with a Token that is not valid,
-// nothing. The network never stands for credentials (ADR 0027).
+// nothing. The network never stands for credentials (ADR 0027). A Kiosk's
+// cookie is set again, for a Session with no limit but idleness (ADR 0029).
 func identify(acc *access.Store, public *url.URL, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id, ok := resolve(acc, r)
 		_, isBearer := bearer(r)
 		switch {
 		case ok:
+			if id.Kind == access.KioskKind {
+				setCookie(w, sessionCookie, sessionSecret(r), int(kioskCookieAge.Seconds()))
+			}
 			r = r.WithContext(context.WithValue(r.Context(), identityKey{}, id))
 		case isBearer:
 			w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
@@ -87,6 +92,8 @@ func origin(r *http.Request) home.Origin {
 	switch id.Kind {
 	case access.PersonKind:
 		return home.Origin{Person: id.ID}
+	case access.KioskKind:
+		return home.Origin{Kiosk: id.ID}
 	case access.ProgramKind:
 		return home.Origin{Program: id.ID}
 	}
@@ -135,7 +142,7 @@ func handleAccess(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 	// before: whether Oiko has an Admin, where sign-in works.
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) {
 		me := struct {
-			Identity  map[access.Kind]string `json:"identity"` // {"person": id} or {"program": id}; null if anonymous
+			Identity  map[access.Kind]string `json:"identity"` // {"person": id}, {"kiosk": id} or {"program": id}; null if anonymous
 			Name      string                 `json:"name,omitempty"`
 			Level     access.Level           `json:"level,omitempty"`
 			Fresh     bool                   `json:"fresh"`
@@ -161,11 +168,11 @@ func handleAccess(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 			reply(w, err)
 			return
 		}
-		setSession(w, secret, int(access.SessionLimit.Seconds()))
+		setCookie(w, sessionCookie, secret, int(access.SessionLimit.Seconds()))
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	// The Names of the Persons and Programs, by kind then id, for showing
-	// Origins: a Member's, an Admin's.
+	// The Names of the Persons, Kiosks and Programs, by kind then id, for
+	// showing Origins: a Member's, an Admin's.
 	mux.HandleFunc("GET /api/names", func(w http.ResponseWriter, r *http.Request) {
 		id, _ := identity(r)
 		names, err := acc.Names(id)
@@ -176,22 +183,23 @@ func handleAccess(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 			reply(w, err)
 			return
 		}
-		setSession(w, "", -1)
+		setCookie(w, sessionCookie, "", -1)
 		w.WriteHeader(http.StatusNoContent)
 	})
 }
 
-// setSession sets the Session cookie to secret for maxAge seconds; a
-// negative maxAge deletes it.
-func setSession(w http.ResponseWriter, secret string, maxAge int) {
+// setCookie sets cookie name, one of Oiko's secrets, to value for maxAge
+// seconds: 0 for as long as the browser runs, a negative maxAge deletes it.
+func setCookie(w http.ResponseWriter, name, value string, maxAge int) {
 	http.SetCookie(w, &http.Cookie{
-		Name: sessionCookie, Value: secret, Path: "/", MaxAge: maxAge,
+		Name: name, Value: value, Path: "/", MaxAge: maxAge,
 		Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode,
 	})
 }
 
 // atSignInOrigin serves next only to a page of the Public URL or of
-// http://localhost, the only origins where a browser signs in (ADR 0027).
+// http://localhost, the only origins where a browser signs in (ADR 0027),
+// and never to a Kiosk, on which no one signs in (ADR 0029).
 func atSignInOrigin(public *url.URL, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
@@ -203,6 +211,10 @@ func atSignInOrigin(public *url.URL, next http.HandlerFunc) http.HandlerFunc {
 				where = public.String()
 			}
 			http.Error(w, fmt.Sprintf("sign in at %s", where), http.StatusForbidden)
+			return
+		}
+		if id, _ := identity(r); id.Kind == access.KioskKind {
+			http.Error(w, fmt.Sprintf("%v: this screen is a Kiosk; an Admin signs it out first", access.ErrRefused), http.StatusForbidden)
 			return
 		}
 		next(w, r)

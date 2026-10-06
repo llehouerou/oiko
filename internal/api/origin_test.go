@@ -35,6 +35,7 @@ func TestACommandRecordsWhoIssuedIt(t *testing.T) {
 	t.Cleanup(srv.Close)
 	cookie, alice := signedIn(t, acc)
 	p, token := withProgram(t, acc, alice, "Node-RED", access.Member)
+	kiosk, screen := withKiosk(t, acc, alice, "Hall tablet", access.Guest)
 	do, bot := browser(t, srv, "https://oiko.example"), asProgram(t, srv, token)
 	flag, _ := h.CreateFlag("Away")
 	_, updates, cancel := h.Subscribe()
@@ -48,6 +49,7 @@ func TestACommandRecordsWhoIssuedIt(t *testing.T) {
 	}{
 		{"a Session", do("POST", "/api/commands", body, cookie), home.Origin{Person: alice.ID}},
 		{"a Token", bot("POST", "/api/commands", body), home.Origin{Program: p.ID}},
+		{"a Kiosk", do("POST", "/api/commands", body, screen), home.Origin{Kiosk: kiosk}},
 	} {
 		id := decodeAs[struct{ ID string }](t, c.resp, http.StatusAccepted).ID
 		if got := originOf(t, updates, id); got != c.want {
@@ -112,6 +114,7 @@ func TestNamesAreReadFromMemberUp(t *testing.T) {
 
 	want := map[string]map[string]string{
 		"person":  {alice.ID: "Alice"},
+		"kiosk":   {},
 		"program": {member.ID: "Node-RED", guest.ID: "Doorbell"},
 	}
 	for who, resp := range map[string]*http.Response{

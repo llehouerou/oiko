@@ -1,8 +1,9 @@
 // Package access keeps who may use Oiko (ADR 0022, 0032): the Persons, their
 // Passkeys, their pending Sign-in links and their Sessions, in persons.json
-// and sessions.json, the Programs and their Tokens, in programs.json, all
-// loaded at start and held in memory, and, in memory only, the Setup link
-// that claims a fresh Oiko (ADR 0026) and the WebAuthn ceremonies in
+// and sessions.json, the Kiosks, in kiosks.json, with their Sessions, the
+// Programs and their Tokens, in programs.json, all loaded at start and held
+// in memory, and, in memory only, the Setup link that claims a fresh Oiko
+// (ADR 0026), the WebAuthn ceremonies and the Kiosk pairing requests in
 // progress. Secrets are 128 random bits or more, kept only as their SHA-256
 // hash; Oiko alone decides when a Session ends (ADR 0025).
 package access
@@ -82,16 +83,18 @@ type Person struct {
 }
 
 // session is a Session as stored: its secret's hash, the id the API names it
-// by, whose it is, the browser it lives in, how and when it signed in, when
-// it last confirmed a Passkey, and when it was last used.
+// by, whose it is, a Person's or a Kiosk's, the browser it lives in, how and
+// when it signed in, when it last confirmed a Passkey, and when it was last
+// used.
 type session struct {
 	Hash      string    `json:"hash"`
 	ID        string    `json:"id"`
-	Person    string    `json:"person"`
+	Person    string    `json:"person,omitempty"`
+	Kiosk     string    `json:"kiosk,omitempty"`
 	Browser   string    `json:"browser"`
-	Method    string    `json:"method"`             // how it signed in: "setup", "passkey", "link", or "host": a link from Oiko's host
+	Method    string    `json:"method"`             // how it signed in: "setup", "passkey", "link", "host": a link from Oiko's host, or "pairing": a Kiosk's
 	Provider  string    `json:"provider,omitempty"` // the provider of the Passkey it signed in with, if known
-	By        string    `json:"by,omitempty"`       // the Person who created the link it signed in with, when not its own
+	By        string    `json:"by,omitempty"`       // the Person who created the link it signed in with, when not its own, or approved the Kiosk's pairing
 	SignedIn  time.Time `json:"signedIn"`
 	Confirmed time.Time `json:"confirmed,omitzero"`
 	LastUse   time.Time `json:"lastUse"`
@@ -117,14 +120,15 @@ type Kind string
 
 const (
 	PersonKind  Kind = "person"
+	KioskKind   Kind = "kiosk"
 	ProgramKind Kind = "program"
 	HostKind    Kind = "host"    // Oiko's host: oiko sign-in-link
 	OikoKind    Kind = "oiko"    // Oiko itself: an expiry
 	UnknownKind Kind = "unknown" // no identity found
 )
 
-// Identity is who a request is, as they are now: a Person by their Session,
-// or a Program by its Token.
+// Identity is who a request is, as they are now: a Person or a Kiosk by its
+// Session, or a Program by its Token.
 type Identity struct {
 	Kind    Kind
 	ID      string
@@ -143,21 +147,22 @@ func (id Identity) StepUp() error {
 	return nil
 }
 
-// Store holds the Persons and their Sessions, and the Programs, and writes
-// every refusal and change to access to the Audit log.
+// Store holds the Persons, the Kiosks and their Sessions, and the Programs,
+// and writes every refusal and change to access to the Audit log.
 type Store struct {
-	personsFile, sessionsFile, programsFile string
-	now                                     func() time.Time
-	audit                                   func(Entry)
-	mu                                      sync.Mutex
-	persons                                 []Person
-	sessions                                map[string]*session // by hash
-	programs                                []Program
-	ends                                    map[string]chan struct{} // closed when an access ends or changes: a Session's by its hash, a Program's by its id
-	setup                                   string                   // the Setup link's hash; "" when there is none
-	sessionUses                             pending
-	programUses                             pending
-	ceremonies                              ceremonies
+	personsFile, sessionsFile, kiosksFile, programsFile string
+	now                                                 func() time.Time
+	audit                                               func(Entry)
+	mu                                                  sync.Mutex
+	persons                                             []Person
+	sessions                                            map[string]*session // by hash
+	kiosks                                              []Kiosk
+	programs                                            []Program
+	ends                                                map[string]chan struct{} // closed when an access ends or changes: a Session's by its hash, a Program's by its id
+	setup                                               string                   // the Setup link's hash; "" when there is none
+	sessionUses, kioskUses, programUses                 pending
+	ceremonies                                          ceremonies
+	pairings                                            pairings
 }
 
 // pending tells when a document was last written, and whether last uses held
@@ -167,35 +172,43 @@ type pending struct {
 	unsaved bool
 }
 
-// Open loads the Persons, their Sessions and the Programs from dir, dropping
-// the Sessions and Sign-in links that ended, and the Sessions whose Person
-// is gone. now is the clock; audit writes an Entry to the Audit log, never
-// waiting.
+// Open loads the Persons, the Kiosks, their Sessions and the Programs from
+// dir, dropping the Sessions and Sign-in links that ended, and the Sessions
+// whose Person or Kiosk is gone. now is the clock; audit writes an Entry to
+// the Audit log, never waiting.
 func Open(dir string, now func() time.Time, audit func(Entry)) (*Store, error) {
 	s := &Store{
 		personsFile:  filepath.Join(dir, "persons.json"),
 		sessionsFile: filepath.Join(dir, "sessions.json"),
+		kiosksFile:   filepath.Join(dir, "kiosks.json"),
 		programsFile: filepath.Join(dir, "programs.json"),
 		now:          now,
 		audit:        audit,
 		sessions:     map[string]*session{},
 		ends:         map[string]chan struct{}{},
 		sessionUses:  pending{written: now()},
+		kioskUses:    pending{written: now()},
 		programUses:  pending{written: now()},
 		ceremonies:   ceremonies{by: map[string]*list.Element{}},
+		pairings:     pairings{byApproval: map[string]*list.Element{}, byClaim: map[string]*list.Element{}},
 	}
 	var sessions []*session
-	if err := store.Load(s.personsFile, PersonsFormat, &s.persons); err != nil {
-		return nil, err
-	}
-	if err := store.Load(s.sessionsFile, SessionsFormat, &sessions); err != nil {
-		return nil, err
-	}
-	if err := store.Load(s.programsFile, ProgramsFormat, &s.programs); err != nil {
-		return nil, err
+	for _, doc := range []struct {
+		file   string
+		format store.Format
+		v      any
+	}{
+		{s.personsFile, PersonsFormat, &s.persons},
+		{s.sessionsFile, SessionsFormat, &sessions},
+		{s.kiosksFile, KiosksFormat, &s.kiosks},
+		{s.programsFile, ProgramsFormat, &s.programs},
+	} {
+		if err := store.Load(doc.file, doc.format, doc.v); err != nil {
+			return nil, err
+		}
 	}
 	for _, x := range sessions {
-		if s.person(x.Person) >= 0 { // else recorded with its Person's removal
+		if s.holds(x) { // else recorded with its Person's or Kiosk's removal
 			s.sessions[x.Hash] = x
 		}
 	}
@@ -261,7 +274,7 @@ func (s *Store) Claim(secret, name, browser string) (string, error) {
 	}
 	s.setup = ""
 	s.record(Entry{Event: PersonCreated, Actor: personParty(p), Subject: personParty(p), Detail: map[string]any{"level": p.Level}})
-	s.recordSignIn(p, x)
+	s.recordSignIn(personParty(p), x)
 	return session, nil
 }
 
@@ -280,9 +293,9 @@ func (s *Store) signIn(x *session) (string, error) {
 	return secret, nil
 }
 
-// recordSignIn records that Person p signed in, opening Session x. Callers
-// hold s.mu.
-func (s *Store) recordSignIn(p Person, x session) {
+// recordSignIn records that who, a Person or a Kiosk, signed in, opening
+// Session x. Callers hold s.mu.
+func (s *Store) recordSignIn(who Party, x session) {
 	detail := map[string]any{"method": x.Method}
 	if x.By != "" {
 		detail["by"] = s.personParty(x.By)
@@ -290,7 +303,7 @@ func (s *Store) recordSignIn(p Person, x session) {
 	if x.Provider != "" {
 		detail["provider"] = x.Provider
 	}
-	s.record(Entry{Event: SignedIn, Actor: personParty(p), Subject: personParty(p), Browser: x.Browser, Detail: detail})
+	s.record(Entry{Event: SignedIn, Actor: who, Subject: who, Browser: x.Browser, Detail: detail})
 }
 
 // personParty is Person p as the Audit log names them.
@@ -305,18 +318,16 @@ func (s *Store) personParty(id string) Party {
 	return Party{Kind: PersonKind, ID: id}
 }
 
-// Resolve answers who holds the Session of secret, counting it as a use; false
-// if there is no such Session, or it has ended.
+// Resolve answers who holds the Session of secret, a Person or a Kiosk,
+// counting it as a use; false if there is no such Session, or it has ended.
 func (s *Store) Resolve(secret string) (Identity, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	x := s.sessions[hash(secret)]
-	if x == nil {
-		return Identity{}, false
-	}
-	i := s.person(x.Person)
 	switch {
-	case i < 0: // recorded with its Person's removal
+	case x == nil:
+		return Identity{}, false
+	case !s.holds(x): // recorded with its Person's or Kiosk's removal
 		s.end(x)
 		return Identity{}, false
 	case s.ended(x):
@@ -326,8 +337,36 @@ func (s *Store) Resolve(secret string) (Identity, bool) {
 	now := s.now()
 	x.LastUse = now
 	s.used(&s.sessionUses, s.saveSessions)
-	p := s.persons[i]
+	if x.Kiosk != "" {
+		i := s.kiosk(x.Kiosk)
+		s.kiosks[i].LastUse = now
+		s.used(&s.kioskUses, func() error { return s.saveKiosks(s.kiosks) })
+		k := s.kiosks[i]
+		return Identity{Kind: KioskKind, ID: k.ID, Name: k.Name, Level: k.Level, Session: x.ID, Ended: s.ending(x.Hash)}, true
+	}
+	p := s.persons[s.person(x.Person)]
 	return Identity{Kind: PersonKind, ID: p.ID, Name: p.Name, Level: p.Level, Session: x.ID, Fresh: x.fresh(now), Ended: s.ending(x.Hash)}, true
+}
+
+// holds reports whether the Person or the Kiosk of Session x still exists.
+// Callers hold s.mu.
+func (s *Store) holds(x *session) bool {
+	if x.Kiosk != "" {
+		return s.kiosk(x.Kiosk) >= 0
+	}
+	return s.person(x.Person) >= 0
+}
+
+// holder is whose Session x is, as the Audit log names them. Callers hold
+// s.mu.
+func (s *Store) holder(x *session) Party {
+	if x.Kiosk == "" {
+		return s.personParty(x.Person)
+	}
+	if i := s.kiosk(x.Kiosk); i >= 0 {
+		return kioskParty(s.kiosks[i])
+	}
+	return Party{Kind: KioskKind, ID: x.Kiosk}
 }
 
 // ending is what closes when the access of key ends or changes, made on
@@ -350,15 +389,20 @@ func (s *Store) finish(key string) {
 	}
 }
 
-// SignOut ends the Session of secret, if there is one.
+// SignOut ends the Session of secret, if there is one; a Kiosk's only an
+// Admin signs out (ADR 0029).
 func (s *Store) SignOut(secret string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if x := s.sessions[hash(secret)]; x != nil {
-		s.record(Entry{Event: SessionEnded, Actor: s.personParty(x.Person), Subject: s.personParty(x.Person), Browser: x.Browser, Detail: map[string]any{"reason": "signed out"}})
-		return s.end(x)
+	x := s.sessions[hash(secret)]
+	switch {
+	case x == nil:
+		return nil
+	case x.Kiosk != "":
+		return fmt.Errorf("%w: a Kiosk is signed out by an Admin", ErrRefused)
 	}
-	return nil
+	s.record(Entry{Event: SessionEnded, Actor: s.personParty(x.Person), Subject: s.personParty(x.Person), Browser: x.Browser, Detail: map[string]any{"reason": "signed out"}})
+	return s.end(x)
 }
 
 // Flush writes last uses not yet written, on shutdown.
@@ -368,6 +412,9 @@ func (s *Store) Flush() error {
 	var errs []error
 	if s.sessionUses.unsaved {
 		errs = append(errs, s.saveSessions())
+	}
+	if s.kioskUses.unsaved {
+		errs = append(errs, s.saveKiosks(s.kiosks))
 	}
 	if s.programUses.unsaved {
 		errs = append(errs, s.savePrograms(s.programs))
@@ -402,10 +449,11 @@ func (s *Store) ended(x *session) bool {
 	return s.now().After(s.endOf(x))
 }
 
-// endOf is when Session x ends unless used again.
+// endOf is when Session x ends unless used again: a Kiosk's has no limit
+// but idleness (ADR 0029).
 func (s *Store) endOf(x *session) time.Time {
 	idle, limit := x.LastUse.Add(idleLimit), x.SignedIn.Add(SessionLimit)
-	if idle.Before(limit) {
+	if idle.Before(limit) || x.Kiosk != "" {
 		return idle
 	}
 	return limit
@@ -414,7 +462,7 @@ func (s *Store) endOf(x *session) time.Time {
 // recordExpiry records that Session x ended by itself, dated when it did.
 // Callers hold s.mu.
 func (s *Store) recordExpiry(x *session) {
-	s.record(Entry{Time: s.endOf(x), Event: SessionEnded, Actor: oiko, Subject: s.personParty(x.Person), Browser: x.Browser, Detail: map[string]any{"reason": "expired"}})
+	s.record(Entry{Time: s.endOf(x), Event: SessionEnded, Actor: oiko, Subject: s.holder(x), Browser: x.Browser, Detail: map[string]any{"reason": "expired"}})
 }
 
 // person is the index of Person id; -1 if there is none.

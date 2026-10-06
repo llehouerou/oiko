@@ -50,7 +50,7 @@ func (s *Store) EndSession(by Identity, person, id string) error {
 	}
 	for _, x := range s.sessions {
 		if x.Person == person && x.ID == id {
-			s.revoke(by, x)
+			s.endSession(x, party(by), s.holder(x), "revoked")
 			return s.saveSessions()
 		}
 	}
@@ -67,16 +67,16 @@ func (s *Store) EndOtherSessions(by Identity) error {
 	}
 	for _, x := range s.sessions {
 		if x.Person == by.ID && x.ID != by.Session {
-			s.revoke(by, x)
+			s.endSession(x, party(by), s.holder(x), "revoked")
 		}
 	}
 	return s.saveSessions()
 }
 
-// revoke ends Session x as by revokes it, and records it. Callers hold s.mu,
-// and write the Sessions.
-func (s *Store) revoke(by Identity, x *session) {
+// endSession ends Session x, of subject, as actor ends it for reason, and
+// records it. Callers hold s.mu, and write the Sessions.
+func (s *Store) endSession(x *session, actor, subject Party, reason string) {
 	delete(s.sessions, x.Hash)
 	s.finish(x.Hash)
-	s.record(Entry{Event: SessionEnded, Actor: party(by), Subject: s.personParty(x.Person), Browser: x.Browser, Detail: map[string]any{"reason": "revoked"}})
+	s.record(Entry{Event: SessionEnded, Actor: actor, Subject: subject, Browser: x.Browser, Detail: map[string]any{"reason": reason}})
 }

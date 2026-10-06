@@ -2,7 +2,7 @@
 // (ADR 0034), in a headless Chromium, and fails on any violation or page
 // error. On the way, its first Admin adds a Passkey to Chromium's virtual
 // authenticator and signs in with it again, then invites a Person, who signs
-// in by their Sign-in link. Run after `npm run build`, from the dev shell,
+// in by their Sign-in link, and pairs a screen as a Kiosk. Run after `npm run build`, from the dev shell,
 // which sets CHROMIUM.
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -105,6 +105,22 @@ try {
   // Spent, it says so.
   await bob.goto(link)
   await bob.getByText('expired or was already used').waitFor()
+
+  // A wall tablet asks to be a Kiosk; Alice approves it from the page its QR code opens.
+  const wall = await watch(await (await browser.newContext()).newPage())
+  await wall.goto(base)
+  const request = wall.waitForResponse((r) => r.url().endsWith('/api/kiosk-pairing'))
+  await wall.getByRole('button', { name: 'Use this screen as a Kiosk' }).click()
+  await wall.getByRole('img', { name: 'QR code to pair this screen' }).waitFor()
+  const { secret } = await (await request).json()
+  await page.goto(`${base}/pair#${secret}`)
+  await page.getByText('shared screen').waitFor()
+  await page.getByLabel('Name').fill('Hall tablet')
+  await page.getByRole('button', { name: 'Approve' }).click()
+  await page.getByText('signs in as Hall tablet').waitFor()
+  await wall.locator('nav').waitFor() // the dashboard, as the Kiosk, a Guest
+  await page.goto(`${base}/#kiosks`)
+  await page.getByRole('button', { name: 'Sign out' }).waitFor()
 } finally {
   await browser?.close()
   oiko.kill()

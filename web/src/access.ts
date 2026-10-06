@@ -8,7 +8,7 @@ export type Level = 'guest' | 'member' | 'admin'
 export const levels: Record<Level, string> = { guest: 'Guest', member: 'Member', admin: 'Admin' }
 
 export type Me = {
-  identity: { person: string } | { program: string } | null // null: not signed in
+  identity: { person: string } | { kiosk: string } | { program: string } | null // null: not signed in
   name?: string
   level?: Level
   fresh: boolean // signed in lately enough for step-up
@@ -91,12 +91,39 @@ const post = (path: string, body: unknown) => fetch(path, { method: 'POST', head
 // its secret in the fragment, which the browser never sends (ADR 0030).
 export const signInLink = (me: Me, origin: string, secret: string) => `${me.publicUrl ?? origin}/sign-in#${secret}`
 
+// The address an Admin opens to approve the Kiosk pairing request of secret, from its QR code: on the
+// Public URL, or else origin's; its secret in the fragment, which the browser never sends (ADR 0029).
+export const pairLink = (me: Me, origin: string, secret: string) => `${me.publicUrl ?? origin}/pair#${secret}`
+
+// A new Kiosk pairing request from this screen: its approval secret, for the QR code, while its claim
+// secret stays in a cookie only this browser holds; null if refused.
+export async function requestPairing(): Promise<string | null> {
+  const res = await fetch('/api/kiosk-pairing', { method: 'POST' })
+  return res.ok ? (await res.json()).secret : null
+}
+
+// Whether an Admin approved this screen's pairing request: once one has, this browser is signed in as
+// the Kiosk, and remembers it was one; 'ended' once the request expired, for a new one.
+export async function claimPairing(): Promise<'waiting' | 'paired' | 'ended'> {
+  const res = await fetch('/api/kiosk-pairing/claim', { method: 'POST' }).catch(() => null)
+  if (!res || res.status === 202) return 'waiting'
+  if (!res.ok) return 'ended'
+  localStorage.setItem(kioskKey, 'yes')
+  await loadMe()
+  return 'paired'
+}
+
+// Whether this browser was a Kiosk: once its Session ends, it offers pairing again (ADR 0029).
+const kioskKey = 'oiko.kiosk'
+export const wasKiosk = () => localStorage.getItem(kioskKey) !== null
+export const forgetKiosk = () => localStorage.removeItem(kioskKey)
+
 export async function signOut() {
   await api('/api/sign-out', { method: 'POST' })
   await loadMe()
 }
 
-export type View = 'home' | 'history' | 'automations' | 'persons' | 'programs' | 'audit' | 'account'
+export type View = 'home' | 'history' | 'automations' | 'persons' | 'kiosks' | 'programs' | 'audit' | 'account'
 
 // What the page shows: nothing until it knows who is signed in, sign-in while nobody is, or else the
 // view hash names, if their Access level shows it, the dashboard otherwise. Sign-in leaves the hash
@@ -106,6 +133,7 @@ export function screen(me: Me | null, hash: string): View | 'sign-in' | null {
   if (!me.identity) return 'sign-in'
   const person = 'person' in me.identity
   if (hash.startsWith('#persons') && person && allows(me, 'admin')) return 'persons'
+  if (hash.startsWith('#kiosks') && person && allows(me, 'admin')) return 'kiosks'
   if (hash.startsWith('#programs') && person && allows(me, 'admin')) return 'programs'
   if (hash.startsWith('#audit') && person && allows(me, 'admin')) return 'audit'
   if (hash.startsWith('#account') && person) return 'account'
