@@ -49,7 +49,7 @@ _Avoid_: unavailable (as a state value)
 ### Functional
 
 **Function**:
-What a Device does in the home (light, switch, cover, thermostat, occupancy, temperature, contact, button…). The unit of display and control; belongs to exactly one Device, unless it is a Group, an Aggregate or a Flag. A sensor measuring several quantities provides one Function per quantity, so each can be named, placed and aggregated on its own. Identified within its Device by its kind and endpoint (e.g. `switch/l2`).
+What a Device does in the home (light, switch, cover, thermostat, occupancy, temperature, contact, button, camera…). The unit of display and control; belongs to exactly one Device, unless it is a Group, an Aggregate or a Flag. A sensor measuring several quantities provides one Function per quantity, so each can be named, placed and aggregated on its own. Identified within its Device by its kind and endpoint (e.g. `switch/l2`).
 _Avoid_: Entity, Endpoint, Service, Channel
 
 **Group**:
@@ -80,6 +80,14 @@ _Avoid_: State (in the Home Assistant sense)
 Momentary occurrence emitted by a stateless Capability, such as a button press. An Event has no Value; Oiko only remembers the last occurrence of each, to tell when it last happened.
 _Avoid_: action, click
 
+**Picture**:
+The latest still image a camera Function has, with when it was taken, read without waking the camera. Never a Value: it is fetched when shown and never recorded.
+_Avoid_: snapshot, still, thumbnail, last image
+
+**Live view**:
+A camera Function's video as it happens, opened on demand by a Person, a Kiosk or a Program and shared by everyone watching it at once. Recorded in the camera's History, with its Origin and how long it lasted; never recorded as video.
+_Avoid_: stream, live feed, live stream, video
+
 **Command**:
 Request to set one or more Capabilities of a single Function or Device, or of an Aggregate, optionally with a transition: the duration over which the device fades to the new values. Pending until a reported Value confirms it; otherwise failed or timed out. A newer Command on the same target supersedes a pending one. A binary Capability may be asked to toggle: the Command turns it off if the pending Command or, failing one, the current Value has it on, otherwise it turns it on with the other requested values. Values outside a Capability's bounds are refused, never clamped. A Command on an Aggregate is relayed as one Command per counted member, refused as a whole if any member would refuse it; it is confirmed once all of them are, and failed, timed out or superseded as soon as one of them is. Every Command records its Origin; a relayed Command inherits the Origin of the Aggregate Command that relayed it. Accepted Commands are kept with their outcome indefinitely, alongside the History.
 _Avoid_: Service call, action
@@ -97,7 +105,7 @@ Numbered record that something happened in Oiko: a new Value, an Event, an Avail
 _Avoid_: Event (reserved for button presses), Notification (reserved for an Automation's messages), message, change
 
 **History**:
-Recorded past of a Target: its Values, Events and Availability, kept indefinitely from the first thing Oiko records of it until the Target is deleted. Every Value is recorded whole on each change, never on a refresh, and holds until the next one is recorded; a Replayed Value only when it differs from the last one recorded. It never invents a Value: what Oiko did not record is a Gap, and a Device offline or unknown shows in its Availability. Replace carries the new hardware's History over to the kept Device; a Capability that disappears keeps its History, which no longer grows. A Trace tells what one Run did; a History tells what a Target went through.
+Recorded past of a Target: its Values, Events and Availability, and a camera's Live views, kept indefinitely from the first thing Oiko records of it until the Target is deleted. Every Value is recorded whole on each change, never on a refresh, and holds until the next one is recorded; a Replayed Value only when it differs from the last one recorded. It never invents a Value: what Oiko did not record is a Gap, and a Device offline or unknown shows in its Availability. Replace carries the new hardware's History over to the kept Device; a Capability that disappears keeps its History, which no longer grows. A Trace tells what one Run did; a History tells what a Target went through.
 _Avoid_: Recorder, Log, Series
 
 **Gap**:
@@ -144,7 +152,7 @@ Aggregate Oiko derives for an Area and an aggregated kind (lights, occupancy, do
 _Avoid_: Room, Zone
 
 **Tile**:
-A Device's, Aggregate's, Flag's or Automation's box on the dashboard; an Automation's holds a button for each of its Manual triggers. A Target's Tile shows at most one control, its main control; every other settable Capability is a setting, behind its ⋯. Its shape (control bar, state, readings or event) follows from its Capabilities' Roles, never from the hardware model. Battery and tamper show on it only when something is wrong.
+A Device's, Aggregate's, Flag's or Automation's box on the dashboard; an Automation's holds a button for each of its Manual triggers. A Target's Tile shows at most one control, its main control; every other settable Capability is a setting, behind its ⋯. Its shape (control bar, state, readings or event) follows from its Capabilities' Roles, never from the hardware model; a camera's shows its Picture. Battery and tamper show on it only when something is wrong.
 _Avoid_: card, widget, entity row
 
 **Layout**:

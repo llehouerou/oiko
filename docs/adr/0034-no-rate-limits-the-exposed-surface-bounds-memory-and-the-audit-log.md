@@ -1,5 +1,7 @@
 # No rate limits: the exposed surface bounds memory and the Audit log
 
+_Amended by [ADR 0037](0037-a-live-view-is-fragmented-mp4-in-the-answer-to-a-post.md): the Content Security Policy also allows `media-src 'self' blob:`._
+
 Oiko is exposed to the internet behind a reverse proxy that may add nothing but TLS, so every client arrives from the proxy's address and no forwarded header is trusted (ADR 0027). A limit keyed on the client's address is then one bucket for the whole internet, which a scanner fills to lock the household out. It would also protect nothing: every secret Oiko accepts (a Sign-in link, a Setup link, a Token, a Kiosk pairing, a Session) carries at least 128 random bits and there is no password (ADR 0024), so guessing is hopeless however many attempts are made. Oiko therefore limits no request rate. It bounds instead what an anonymous request can make it hold, in memory and in the Audit log (ADR 0033), and leaves volumetric floods to the reverse proxy, which the documentation says.
 
 ## Considered Options

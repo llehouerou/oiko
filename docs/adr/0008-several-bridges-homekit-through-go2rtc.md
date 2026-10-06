@@ -1,5 +1,7 @@
 # Several Bridges; HomeKit through go2rtc's HAP client
 
+_Amended by [ADR 0036](0036-cameras-a-picture-and-a-live-view-relayed-by-oiko.md): the camera relay also uses go2rtc's `pkg/rtsp` and `pkg/mp4`, so its unstable API reaches one more package of Oiko's._
+
 Oiko talks to more than one Bridge: zigbee2mqtt, and a HomeKit controller of its own for Wi-Fi accessories that speak only HomeKit locally (the Aqara FP2 presence sensor). Each Device records the Bridge it comes from, by name (`zigbee2mqtt`, `homekit`), and its Native Address is unique within that Bridge only. Home keeps one online state per Bridge: a Bridge going offline makes only its own Devices' Availability unknown, and refuses Commands to them only. Each Bridge feeds Home through a port bound to its name, so a Bridge's full list of Devices detaches only its own missing ones. A Detached Device may be replaced by hardware from another Bridge.
 
 The HomeKit Bridge is Oiko acting as a HomeKit controller over the local network (HAP over IP): no Apple hardware, no cloud. It uses the HAP client of go2rtc (`github.com/AlexxIT/go2rtc/pkg/hap`) for pairing, the encrypted session, reading `/accessories` and subscribing to characteristic events. Pairing is done once from the command line with the accessory's setup code; Oiko's controller keys and each paired accessory's public key are kept in the data directory. The Bridge itself is always online; each accessory's Availability is whether its session is up.
