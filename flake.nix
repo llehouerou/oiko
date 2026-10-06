@@ -56,6 +56,8 @@
             pkgs.mosquitto
             pkgs.gnumake
           ];
+          # The browser test drives it (web/e2e).
+          CHROMIUM = pkgs.lib.getExe pkgs.chromium;
         };
       });
     };

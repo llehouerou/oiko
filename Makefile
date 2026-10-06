@@ -15,7 +15,7 @@ build: web/node_modules
 
 test: web/node_modules
 	go test -race ./...
-	cd web && npm test
+	cd web && npm test && npm run build && npm run test:browser
 
 web/node_modules: web/package-lock.json
 	cd web && npm ci

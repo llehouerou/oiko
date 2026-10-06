@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build && touch dist/.gitkeep",
     "test": "vitest run",
-    "format": "prettier --write src"
+    "test:browser": "node e2e/csp.js",
+    "format": "prettier --write src e2e"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -24,6 +25,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "babel-plugin-react-compiler": "^1.0.0",
+    "playwright-core": "^1.63.0",
     "prettier": "3.9.9",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",

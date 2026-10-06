@@ -6,4 +6,6 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react(), babel({ presets: [reactCompilerPreset()] }), tailwindcss()],
   server: { port: 5180, strictPort: true, proxy: { '/api': 'http://localhost:8080' } },
+  // The CSP allows no data: URL (ADR 0034).
+  build: { assetsInlineLimit: 0 },
 })

@@ -20,9 +20,16 @@ import (
 	"github.com/llehouerou/oiko/internal/release"
 )
 
-// server is Oiko's API over a Home without Devices, with its engine and
-// history running.
-func server(t *testing.T) (*home.Home, func(method, path, body string) *http.Response) {
+// static is a built web client.
+var static = fstest.MapFS{
+	"index.html":          {Data: []byte(`<!doctype html><script type="module" src="/assets/index-abc.js"></script>`)},
+	"favicon.svg":         {Data: []byte("<svg></svg>")},
+	"assets/index-abc.js": {Data: []byte("console.log(1)")},
+}
+
+// handler is Oiko's API over a Home without Devices, with its engine and
+// history running, serving static.
+func handler(t *testing.T) (*home.Home, http.Handler) {
 	t.Helper()
 	store, err := history.Open(filepath.Join(t.TempDir(), "history.db"))
 	if err != nil {
@@ -36,7 +43,14 @@ func server(t *testing.T) (*home.Home, func(method, path, body string) *http.Res
 	t.Cleanup(cancel)
 	go e.Run(ctx)
 	go store.Run(ctx)
-	srv := httptest.NewServer(Handler(h, e, store, build.Build{}, "binary", release.New(build.Build{}), nil, nil, fstest.MapFS{}))
+	return h, Handler(h, e, store, build.Build{}, "binary", release.New(build.Build{}), nil, nil, static)
+}
+
+// server serves handler(t), and does requests on it.
+func server(t *testing.T) (*home.Home, func(method, path, body string) *http.Response) {
+	t.Helper()
+	h, hdl := handler(t)
+	srv := httptest.NewServer(hdl)
 	t.Cleanup(srv.Close)
 	return h, func(method, path, body string) *http.Response {
 		t.Helper()

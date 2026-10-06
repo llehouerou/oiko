@@ -5,6 +5,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +14,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/llehouerou/oiko/internal/automation"
@@ -136,8 +139,99 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	mux.HandleFunc("GET /api/lost-entries", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]uint64{"lost": hist.Lost()})
 	})
-	mux.Handle("GET /", http.FileServerFS(static))
-	return http.NewCrossOriginProtection().Handler(mux)
+	mux.Handle("GET /", files(static))
+	return secure(http.NewCrossOriginProtection().Handler(mux))
+}
+
+// Bounds on the HTTP server and the event stream (ADR 0034); variables so
+// tests can shorten them.
+var (
+	readTimeout      = 30 * time.Second
+	streamWriteLimit = 30 * time.Second // each write to the event stream
+	keepaliveEvery   = 15 * time.Second
+)
+
+// Server serves handler on addr within the bounds of ADR 0034. It has no
+// WriteTimeout: the event stream bounds each of its writes instead.
+func Server(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       readTimeout,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    64 << 10,
+	}
+}
+
+// headers are the ones every response carries (ADR 0034).
+var headers = map[string]string{
+	"Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; " +
+		"connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+	"X-Content-Type-Options":       "nosniff",
+	"Referrer-Policy":              "no-referrer",
+	"Cross-Origin-Opener-Policy":   "same-origin",
+	"Cross-Origin-Resource-Policy": "same-origin",
+	// Every feature denied but sharing and copying a Sign-in link (ADR 0030).
+	// Passkeys keep their default, Oiko itself: sign-in needs them.
+	"Permissions-Policy": "accelerometer=(), autoplay=(), camera=(), clipboard-read=(), display-capture=(), " +
+		"encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), magnetometer=(), " +
+		"microphone=(), midi=(), payment=(), picture-in-picture=(), screen-wake-lock=(), serial=(), usb=(), " +
+		"xr-spatial-tracking=(), web-share=(self), clipboard-write=(self)",
+	"Strict-Transport-Security": "max-age=31536000",
+}
+
+// secure adds headers to every response, and keeps every API response out of
+// caches.
+func secure(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for k, v := range headers {
+			w.Header().Set(k, v)
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			w.Header().Set("Cache-Control", "no-store")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// files serves the web client in static. What is under assets/ is named by
+// its content hash and cached for good; anything else is revalidated against
+// an ETag of its content, computed here since embedded files have no
+// modification time.
+func files(static fs.FS) http.Handler {
+	etags := map[string]string{}
+	err := fs.WalkDir(static, ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		data, err := fs.ReadFile(static, name)
+		if err != nil {
+			return err
+		}
+		sum := sha256.Sum256(data)
+		etags[name] = `"` + hex.EncodeToString(sum[:16]) + `"`
+		return nil
+	})
+	if err != nil {
+		panic(err) // embedded: a broken build
+	}
+	serve := http.FileServerFS(static)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimPrefix(r.URL.Path, "/")
+		if strings.HasPrefix(name, "assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			if name == "" || strings.HasSuffix(name, "/") {
+				name += "index.html"
+			}
+			w.Header().Set("Cache-Control", "no-cache")
+			if etag, ok := etags[name]; ok {
+				w.Header().Set("ETag", etag)
+			}
+		}
+		serve.ServeHTTP(w, r)
+	})
 }
 
 // respond answers v in JSON, or the status matching err.
@@ -152,43 +246,51 @@ func respond(w http.ResponseWriter, v any, err error) {
 // updates streams a snapshot, then every Update, as Server-Sent Events; the
 // Status of each module's Releases comes with the snapshot, and again, as a
 // "releases" message, each time it changes. Updates available at once are
-// written together and flushed once.
+// written together and flushed once. A client that stops reading ends the
+// stream, at the first write that does not go through within
+// streamWriteLimit.
 func updates(h *home.Home, releases *release.Checker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		snap, ch, cancel := h.Subscribe()
 		defer cancel()
 		statuses, changed := releases.Statuses()
 		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
 		rc := http.NewResponseController(w)
+		defer rc.SetWriteDeadline(time.Time{}) // the connection may serve other requests
+		send := func(write func() bool) bool {
+			return rc.SetWriteDeadline(time.Now().Add(streamWriteLimit)) == nil && write() && rc.Flush() == nil
+		}
+		event := func(v any) func() bool {
+			return func() bool { return writeEvent(w, v) == nil }
+		}
 
-		if writeEvent(w, struct {
+		if !send(event(struct {
 			Kind string `json:"kind"`
 			home.Snapshot
 			Releases []release.Status `json:"releases"`
-		}{"snapshot", snap, statuses}) != nil || rc.Flush() != nil {
+		}{"snapshot", snap, statuses})) {
 			return
 		}
-		keepalive := time.NewTicker(15 * time.Second)
+		keepalive := time.NewTicker(keepaliveEvery)
 		defer keepalive.Stop()
 		for {
 			select {
 			case u, ok := <-ch:
 				// Closed: this observer fell too far behind. Ending the stream makes the
 				// browser reconnect and start over from a fresh snapshot.
-				if !ok || !writeBatch(w, u, ch) || rc.Flush() != nil {
+				if !ok || !send(func() bool { return writeBatch(w, u, ch) }) {
 					return
 				}
 			case <-changed:
 				statuses, changed = releases.Statuses()
-				if writeEvent(w, struct {
+				if !send(event(struct {
 					Kind     string           `json:"kind"`
 					Releases []release.Status `json:"releases"`
-				}{"releases", statuses}) != nil || rc.Flush() != nil {
+				}{"releases", statuses})) {
 					return
 				}
 			case <-keepalive.C:
-				if _, err := w.Write([]byte(": keepalive\n\n")); err != nil || rc.Flush() != nil {
+				if !send(func() bool { _, err := w.Write([]byte(": keepalive\n\n")); return err == nil }) {
 					return
 				}
 			case <-r.Context().Done():
