@@ -226,7 +226,8 @@ test('markers follow the Commands and the Runs the Targets triggered', async () 
   await v.load([lamp], 0, 1000, 10, true, true)
   const [, init] = fetch.mock.calls[0] as unknown as [string, RequestInit]
   expect(JSON.parse(String(init.body))).toMatchObject({ markers: true })
-  const command = (id: string, target: string, status: CommandStatus) => v.receive({ seq: 1, kind: 'command', command: { id, target, status, origin: 'api' } })
+  const command = (id: string, target: string, status: CommandStatus) =>
+    v.receive({ seq: 1, kind: 'command', command: { id, target, status, origin: 'unknown' } })
   command('c1', lamp.target, 'pending')
   command('c1', lamp.target, 'timed_out')
   command('c2', 'device:other/light', 'pending')

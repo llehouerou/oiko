@@ -56,7 +56,7 @@ test('a tile several rows tall leaves the cells beside it to others', () => {
   expect(short(move([tall, at('a', 1, 0)], 'a', 0, 2, 2))).toEqual(['t101', 'a021'])
 })
 
-test("only the heights the occupant set are stored; a tile's own follows its readings", () => {
+test("only the heights an Admin set are stored; a tile's own follows its readings", () => {
   const rowsOf = (t: { key: string }) => (t.key === 'station' ? 3 : 1)
   const tiles = ['station', 'lamp'].map((key) => ({ key }))
   const arranged = placements(arrange(tiles, 2, [], rowsOf))

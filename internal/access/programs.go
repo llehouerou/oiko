@@ -194,6 +194,24 @@ func (s *Store) PersonName(id string) string {
 	return ""
 }
 
+// Names answers the Name of every Person and Program, by kind then id, to a
+// Member or an Admin: who reads Origins (ADR 0031).
+func (s *Store) Names(by Identity) (map[Kind]map[string]string, error) {
+	if by.Level != Member && by.Level != Admin {
+		return nil, fmt.Errorf("%w: only a Member or an Admin reads who did what", ErrRefused)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	names := map[Kind]map[string]string{PersonKind: {}, ProgramKind: {}}
+	for _, p := range s.persons {
+		names[PersonKind][p.ID] = p.Name
+	}
+	for _, p := range s.programs {
+		names[ProgramKind][p.ID] = p.Name
+	}
+	return names, nil
+}
+
 // savePrograms writes ps, last uses included. Callers hold s.mu.
 func (s *Store) savePrograms(ps []Program) error {
 	if err := store.Save(s.programsFile, ProgramsFormat, ps); err != nil {

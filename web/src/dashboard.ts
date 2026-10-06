@@ -38,7 +38,7 @@ export interface DashboardSection {
 
 export const climateKinds = ['temperature', 'humidity', 'co2']
 
-// The rows a tile takes in a Layout unless the occupant sets its height: a tile of readings, one
+// The rows a tile takes in a Layout unless an Admin sets its height: a tile of readings, one
 // per line of its cells (two to a line, three once two columns wide); any other, one.
 function naturalRows(t: DashboardTile, width: number) {
   if (t.kind !== 'target' || t.shape.kind !== 'readings') return 1

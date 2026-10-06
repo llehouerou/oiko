@@ -1,7 +1,7 @@
 import type { StepKind } from '.'
 import { field, Hint, Row } from './fields'
 
-// Sends the occupant a Notification, then goes on.
+// Sends a Notification to the home's Telegram chat, then goes on.
 export const notify: StepKind = {
   label: 'Notify',
   group: 'Action',

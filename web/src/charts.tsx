@@ -568,7 +568,8 @@ export function CursorLine({ from, to, read }: { from: number; to: number; read?
 
 // How each kind of marker shows.
 export const markerStyle: Record<MarkerKind, { glyph: string; color: string; label: string }> = {
-  app: { glyph: '▲', color: '#38bdf8', label: 'Command from the app' },
+  hand: { glyph: '▲', color: '#38bdf8', label: 'Command by hand' },
+  program: { glyph: '▲', color: '#fbbf24', label: 'by a Program' },
   automation: { glyph: '▲', color: '#a78bfa', label: 'by an Automation' },
   lost: { glyph: '▲', color: '#f87171', label: 'no response' },
   run: { glyph: '◆', color: '#e879f9', label: 'Run' },

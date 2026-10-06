@@ -80,6 +80,32 @@ CREATE TABLE alive (
 	id   INTEGER PRIMARY KEY CHECK (id = 0),
 	time INTEGER NOT NULL -- Unix ns, Oiko last known running
 );
+` + auditSchema
+
+// auditSchema creates the Audit log (ADR 0033): append-only, each entry kept
+// a year. Its actor and subject are each a kind (person, kiosk, program,
+// host, oiko or unknown), an id and the Name they had then.
+const auditSchema = `
+CREATE TABLE audit (
+	id           INTEGER PRIMARY KEY,
+	time         INTEGER NOT NULL, -- Unix ns, when it happened
+	event        TEXT NOT NULL,
+	actor_kind   TEXT NOT NULL,
+	actor_id     TEXT NOT NULL DEFAULT '',
+	actor_name   TEXT NOT NULL DEFAULT '',
+	subject_kind TEXT NOT NULL,
+	subject_id   TEXT NOT NULL DEFAULT '',
+	subject_name TEXT NOT NULL DEFAULT '',
+	browser      TEXT NOT NULL DEFAULT '', -- its label, where a browser is involved
+	detail       TEXT                      -- JSON: what else the event tells, if anything
+);
+CREATE INDEX audit_by_time ON audit (time);
+CREATE INDEX audit_by_actor ON audit (actor_kind, actor_id, time);
+CREATE INDEX audit_by_subject ON audit (subject_kind, subject_id, time);
+CREATE TRIGGER audit_append_only BEFORE UPDATE ON audit
+BEGIN
+	SELECT RAISE(ABORT, 'the Audit log is append-only');
+END;
 `
 
 // The format of history.db (ADR 0019), kept in its user_version: the oldest
@@ -88,8 +114,19 @@ CREATE TABLE alive (
 var (
 	oldest     = 1
 	through    = ""
-	migrations []func(*sql.Tx) error
+	migrations = []func(*sql.Tx) error{toFormat2}
 )
+
+// toFormat2 reads the Commands from the API, before sign-in, as of unknown
+// Origin (ADR 0031), and creates the Audit log (ADR 0033).
+func toFormat2(tx *sql.Tx) error {
+	if _, err := tx.Exec(`UPDATE commands SET command = json_set(command, '$.origin', 'unknown')
+		WHERE json_extract(command, '$.origin') = 'api'`); err != nil {
+		return err
+	}
+	_, err := tx.Exec(auditSchema)
+	return err
+}
 
 // Store keeps the History, Commands and Traces.
 type Store struct {

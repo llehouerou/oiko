@@ -65,13 +65,13 @@ export function runSummary(r: RunEnd, targets: Catalogue, stepName: (id: string)
 }
 
 // evidence is what Step r shows for Run t, one line per fact: what happened
-// and when, on its trigger; what each Command asked and how it went. own is
-// what its kind adds.
-export function evidence(r: Reached, t: Trace, targets: Catalogue, own: string[] = []): string[] {
+// and when, on its trigger, and who started it (by, for a Manual trigger);
+// what each Command asked and how it went. own is what its kind adds.
+export function evidence(r: Reached, t: Trace, targets: Catalogue, own: string[] = [], by?: string): string[] {
   const ref = new Date(t.time)
   const lines: string[] = []
   if (r.step === t.trigger.step)
-    lines.push(`${clock(t.trigger.time, ref, true)} ${happened(t.trigger, targets) ?? 'fired'}${t.trigger.catchUp ? ', caught up' : ''}`)
+    lines.push(`${clock(t.trigger.time, ref, true)} ${happened(t.trigger, targets) ?? 'fired'}${by ? ` ${by}` : ''}${t.trigger.catchUp ? ', caught up' : ''}`)
   if (r.unknown) lines.push('read unknown')
   else if (r.read !== undefined)
     lines.push(r.at ? `read ${show(r.read)}, ${duration(Math.max(0, Math.round((ms(t.time) - ms(r.at)) / 1000)))} old` : `read ${show(r.read)}`)

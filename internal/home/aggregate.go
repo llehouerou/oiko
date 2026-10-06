@@ -198,7 +198,7 @@ func (h *Home) DeleteAggregate(id AggregateID) error {
 	return h.aggregatesChanged()
 }
 
-// handMade refuses Aggregate id unless it exists and is the occupant's own,
+// handMade refuses Aggregate id unless it exists and is an Admin's own,
 // not an Area Aggregate. Callers hold h.mu.
 func (h *Home) handMade(id AggregateID) error {
 	a, ok := h.aggregates[id]

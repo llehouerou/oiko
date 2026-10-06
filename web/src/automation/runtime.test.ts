@@ -82,6 +82,11 @@ describe('a picked Run', () => {
     expect(line).toMatch(/ Motion veranda: Occupancy on$/)
   })
 
+  test('shows on a Manual trigger who started it', () => {
+    const manual: Trace = { ...stoppedAtLux, trigger: { ...stoppedAtLux.trigger, target: '', capability: '', by: { person: 'alice' } } }
+    expect(evidence(manual.steps[0]!, manual, options, [], 'by Alice')[0]).toMatch(/ fired by Alice$/)
+  })
+
   test('a Step that fired nothing, as JSON has it, is reached', () => {
     const t: Trace = { ...stoppedAtLux, steps: [{ step: 'long', fired: null, action: 'cancel' }] }
     expect(pathOf(t)).toEqual({ reached: new Set(['long']), fired: new Set() })
@@ -161,13 +166,13 @@ test('live Runs join the fetched ones, the latest first, once each', () => {
 })
 
 describe('Command history', () => {
-  const kept: CommandRecord[] = [{ id: 'c1', target: 'device:d/f', status: 'pending', origin: 'api', time: '2026-09-28T19:00:00Z' }]
+  const kept: CommandRecord[] = [{ id: 'c1', target: 'device:d/f', status: 'pending', origin: 'unknown', time: '2026-09-28T19:00:00Z' }]
   test('the live status of a kept Command wins', () => {
-    const live: CommandState = { id: 'c1', target: 'device:d/f', status: 'confirmed', origin: 'api' }
+    const live: CommandState = { id: 'c1', target: 'device:d/f', status: 'confirmed', origin: { person: 'alice' } }
     expect(mergeCommands(kept, live).map((c) => c.status)).toEqual(['confirmed'])
   })
   test('a live Command not kept yet comes first', () => {
-    const live: CommandState = { id: 'c2', target: 'device:d/f', status: 'pending', origin: 'api' }
+    const live: CommandState = { id: 'c2', target: 'device:d/f', status: 'pending', origin: { program: 'nr' } }
     expect(mergeCommands(kept, live).map((c) => c.id)).toEqual(['c2', 'c1'])
   })
   test('a refusal from this browser is no Command', () => {

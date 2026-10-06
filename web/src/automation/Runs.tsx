@@ -10,6 +10,7 @@ import type { StepKind } from './kinds'
 import type { Params } from './model'
 import { clock, evidence, mergeCommands, mergeRuns, runSummary, type Path } from './runtime'
 import { titleIfTruncated } from '../truncated'
+import { issuer, useNames } from '../origin'
 
 export interface Inspection {
   trace?: Trace // of the picked Run
@@ -36,6 +37,7 @@ export function RunsDrawer({
 }) {
   const live = useLiveRuns(automation)
   const targets = useCatalogue()
+  const names = useNames()
   const now = useNow() // Commands lose entries too: the counter follows the clock, not only Runs
   const [fetched, setFetched] = useState<RunEnd[]>([])
   const [lost, setLost] = useState(0)
@@ -151,6 +153,7 @@ export function RunsDrawer({
                 <span className="min-w-14 shrink-0 whitespace-nowrap text-neutral-400 tabular-nums">{clock(r.time, new Date(now), true)}</span>
                 <span className="truncate" onMouseEnter={titleIfTruncated}>
                   {trigger}
+                  {r.trigger.by && ` ${issuer(r.trigger.by, names, (id) => id)}`}
                 </span>
                 {r.trigger.catchUp && <span className="shrink-0 rounded bg-sky-900 px-1 text-sky-200">catch-up</span>}
                 <span className={`shrink-0 ${outcomeColor[r.outcome]}`}>→ {result}</span>
@@ -204,9 +207,11 @@ export function StateBadge({ id, params, badge }: { id: string; params: Params; 
 
 // The evidence of the picked Run on Step id, if it reached it.
 export function Evidence({ id, own }: { id: string; own: StepKind['evidence'] }) {
-  const { trace } = useContext(Inspect)
+  const { trace, automationName } = useContext(Inspect)
   const targets = useCatalogue()
-  const lines = trace?.steps.filter((r) => r.step === id).flatMap((r) => evidence(r, trace, targets, own?.(r))) ?? []
+  const names = useNames()
+  const by = trace?.trigger.by && issuer(trace.trigger.by, names, automationName)
+  const lines = trace?.steps.filter((r) => r.step === id).flatMap((r) => evidence(r, trace, targets, own?.(r), by)) ?? []
   if (!lines.length) return null
   return (
     <ul className="space-y-0.5 border-t border-amber-900 bg-amber-950/40 px-3 py-1.5 font-mono text-[10px] break-all whitespace-pre-wrap text-amber-100">
@@ -229,6 +234,7 @@ const statusColor = {
 // origin; a Run origin opens that Run.
 export function CommandHistory({ target }: { target: Target }) {
   const { openRun, automationName } = useContext(Inspect)
+  const names = useNames()
   const live = useCommand(target)
   const [kept, setKept] = useState<CommandRecord[]>([])
   useEffect(() => {
@@ -254,8 +260,10 @@ export function CommandHistory({ target }: { target: Target }) {
           <li key={id} className="flex gap-2">
             <span className="w-24 shrink-0 text-neutral-500">{time ? clock(time) : 'now'}</span>
             <span className={`w-16 shrink-0 ${statusColor[status]}`}>{status}</span>
-            {!o || o === 'api' ? (
-              <span className="text-neutral-400">api</span>
+            {!o || o === 'unknown' || !('automation' in o) ? (
+              <span onMouseEnter={titleIfTruncated} className="truncate text-neutral-400">
+                {issuer(o, names, automationName)}
+              </span>
             ) : (
               <button onClick={() => openRun(o.automation, o.run)} onMouseEnter={titleIfTruncated} className="truncate text-amber-400 hover:text-amber-300">
                 {automationName(o.automation)} ›

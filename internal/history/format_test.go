@@ -2,10 +2,16 @@ package history
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+	"uuid"
+
+	"github.com/llehouerou/oiko/internal/home"
 )
 
 // withFormat makes history.db's format, for t, the one migrated from o with
@@ -124,11 +130,75 @@ func TestOpenRefusesANewerFormat(t *testing.T) {
 
 func TestOpenRefusesAFormatOlderThanItsMigrations(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "history.db")
+	withFormat(t, 1, "")
 	create(t, path)
 	withFormat(t, 2, "v1.9.0")
 
 	_, err := Open(path)
 	if err == nil || !strings.Contains(err.Error(), "v1.9.0") {
 		t.Fatalf("got %v; want a refusal naming v1.9.0", err)
+	}
+}
+
+func TestFormat2ReadsTheAPIOriginAsUnknownAndAddsTheAuditLog(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.db")
+	create(t, path)
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Back to format 1: no audit table, and Commands from the API.
+	if _, err := db.Exec(`DROP TABLE audit; PRAGMA user_version = 1`); err != nil {
+		t.Fatal(err)
+	}
+	target := home.TargetFlag("away")
+	run := home.Origin{Automation: "auto", Step: "step", Run: uuid.NewV7()}
+	for i, origin := range []any{"api", run} {
+		data, _ := json.Marshal(map[string]any{"id": fmt.Sprint(i), "target": target, "status": "confirmed", "origin": origin, "time": time.Unix(int64(i), 0)})
+		if _, err := db.Exec(`INSERT INTO commands (id, target, time, status, command) VALUES (?, ?, ?, ?, ?)`,
+			fmt.Sprint(i), target.Key(), time.Unix(int64(i), 0).UnixNano(), "confirmed", string(data)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	cs, err := s.Commands(target)
+	if err != nil || len(cs) != 2 || cs[0].Origin != run || cs[1].Origin != (home.Origin{}) {
+		t.Fatalf("commands = %+v, %v; want the Run's, then of unknown origin", cs, err)
+	}
+	var entries int
+	if err := s.db.QueryRow(`SELECT count(*) FROM audit`).Scan(&entries); err != nil || entries != 0 {
+		t.Fatalf("audit: %d entries, %v; want an empty table", entries, err)
+	}
+	if v := userVersion(t, path); v != 2 {
+		t.Fatalf("user_version %d, want 2", v)
+	}
+	copied, err := sql.Open("sqlite", "file:"+path+".v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer copied.Close()
+	var api int
+	if err := copied.QueryRow(`SELECT count(*) FROM commands WHERE command LIKE '%"origin":"api"%'`).Scan(&api); err != nil || api != 1 {
+		t.Fatalf("history.db.v1 holds %d Commands from the API, %v; want the database as it was", api, err)
+	}
+}
+
+func TestTheAuditLogIsNeverEdited(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "history.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if _, err := s.db.Exec(`INSERT INTO audit (time, event, actor_kind, subject_kind) VALUES (1, 'test', 'unknown', 'unknown')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`UPDATE audit SET event = 'edited'`); err == nil {
+		t.Fatal("an audit entry was edited")
 	}
 }

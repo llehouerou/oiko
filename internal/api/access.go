@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/llehouerou/oiko/internal/access"
+	"github.com/llehouerou/oiko/internal/home"
 )
 
 // sessionCookie holds a Session's secret; Oiko, not its expiry, decides when
@@ -38,6 +39,19 @@ func identify(acc *access.Store, next http.Handler) http.Handler {
 func identity(r *http.Request) (access.Identity, bool) {
 	id, ok := r.Context().Value(identityKey{}).(access.Identity)
 	return id, ok
+}
+
+// origin is what a Command or a Manual trigger r asks for records as its
+// issuer (ADR 0031): r's identity, or unknown when it is anonymous.
+func origin(r *http.Request) home.Origin {
+	id, _ := identity(r)
+	switch id.Kind {
+	case access.PersonKind:
+		return home.Origin{Person: id.ID}
+	case access.ProgramKind:
+		return home.Origin{Program: id.ID}
+	}
+	return home.Origin{}
 }
 
 // resolve answers who holds r's Token or else its Session, counting it as a
@@ -107,6 +121,13 @@ func handleAccess(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 		setSession(w, secret, int(access.SessionLimit.Seconds()))
 		w.WriteHeader(http.StatusNoContent)
 	}))
+	// The Names of the Persons and Programs, by kind then id, for showing
+	// Origins: a Member's, an Admin's.
+	mux.HandleFunc("GET /api/names", func(w http.ResponseWriter, r *http.Request) {
+		id, _ := identity(r)
+		names, err := acc.Names(id)
+		respond(w, names, err)
+	})
 	mux.HandleFunc("POST /api/sign-out", func(w http.ResponseWriter, r *http.Request) {
 		if c, err := r.Cookie(sessionCookie); err == nil {
 			if err := acc.SignOut(c.Value); err != nil {

@@ -123,6 +123,7 @@ type Trigger struct {
 	Time       time.Time `json:"time"`              // when it happened, or was scheduled
 	CatchUp    bool      `json:"catchUp,omitempty"` // it came due while Oiko was down, and the Run's time is when Oiko was back
 	Skipped    int       `json:"skipped,omitempty"` // a presence simulation's earlier switches due at once, skipped for this latest one
+	By         *Origin   `json:"by,omitempty"`      // who started it, for a Manual trigger; never shown to Code Steps
 }
 
 // AutomationState is what an Automation is doing, as its engine reports it.
@@ -164,13 +165,19 @@ type CommandState struct {
 	AggregateCommand string `json:"aggregateCommand,omitempty"`
 }
 
-// Origin is what issued a Command: a Step of an Automation, in one of its
-// Runs, or the API (the zero Origin), which the UI and external programs
-// share. It reads "api" in JSON.
+// Origin is what issued a Command (ADR 0031): a Person, a Kiosk or a
+// Program, by id, or a Step of an Automation in one of its Runs; at most one
+// of them. The zero Origin is unknown: a Command recorded before sign-in, or
+// sent without credentials. It reads "unknown" in JSON, else
+// {"person": id}, {"kiosk": id}, {"program": id} or
+// {"automation", "step", "run"}.
 type Origin struct {
-	Automation string    `json:"automation"`
-	Step       string    `json:"step"`
-	Run        uuid.UUID `json:"run"`
+	Person     string    `json:"person,omitempty"`
+	Kiosk      string    `json:"kiosk,omitempty"`
+	Program    string    `json:"program,omitempty"`
+	Automation string    `json:"automation,omitempty"`
+	Step       string    `json:"step,omitempty"`
+	Run        uuid.UUID `json:"run,omitzero"`
 }
 
 // plainOrigin is Origin without its JSON methods.
@@ -178,14 +185,14 @@ type plainOrigin Origin
 
 func (o Origin) MarshalJSON() ([]byte, error) {
 	if o == (Origin{}) {
-		return []byte(`"api"`), nil
+		return []byte(`"unknown"`), nil
 	}
 	return json.Marshal(plainOrigin(o))
 }
 
 func (o *Origin) UnmarshalJSON(data []byte) error {
-	if string(data) == `"api"` {
-		*o = Origin{}
+	*o = Origin{}
+	if string(data) == `"unknown"` {
 		return nil
 	}
 	return json.Unmarshal(data, (*plainOrigin)(o))
@@ -215,7 +222,7 @@ type Snapshot struct {
 	Devices    []Device        `json:"devices"`
 	Aggregates []Aggregate     `json:"aggregates"`
 	Flags      []Flag          `json:"flags"`
-	Areas      []Area          `json:"areas"` // in the occupant's order
+	Areas      []Area          `json:"areas"` // in the order an Admin set
 	// Availability is that of every Device, Aggregate and Flag; a Function's
 	// is its Device's.
 	Availability map[Target]Availability `json:"availability"`
@@ -249,7 +256,7 @@ type Home struct {
 	values       map[Ref]Value // every Target's; an Aggregate's are derived, never saved
 	aggregates   map[AggregateID]*Aggregate
 	flags        map[FlagID]Flag // with no Kind or Capabilities: they are flagFunction's
-	areas        []Area          // in the occupant's order
+	areas        []Area          // in the order an Admin set
 	// derived, as last announced; absent means unknown
 	aggregateAvailability map[AggregateID]Availability
 	lastEvents            map[Ref]Value

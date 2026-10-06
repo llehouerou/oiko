@@ -96,7 +96,7 @@ export const emitsEvents = (c: Capability) => !!c.stateless
 export const hasValue = (c: Capability) => c.access.observable && !c.stateless && c.type !== 'composite' && c.type !== 'list'
 
 // The Capability to start from among caps: the only one, or else the only
-// primary one; none if the occupant has to choose.
+// primary one; none if the editor has to choose.
 export function soleCapability(caps: Capability[]): Capability | undefined {
   if (caps.length === 1) return caps[0]
   const primary = caps.filter((c) => c.category === 'primary')

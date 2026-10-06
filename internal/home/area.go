@@ -72,8 +72,8 @@ func (h *Home) syncAreaAggregates() {
 	}
 }
 
-// Area is a room or zone of the home. Areas are flat, in the occupant's
-// order. A Device, one of its Functions, a Flag or an Aggregate is assigned
+// Area is a room or zone of the home. Areas are flat, in the order an
+// Admin set. A Device, one of its Functions, a Flag or an Aggregate is assigned
 // one by its own Area field; a Function without one is in its Device's.
 type Area struct {
 	ID   AreaID `json:"id"`

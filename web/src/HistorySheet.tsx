@@ -29,11 +29,11 @@ import {
   type Line,
 } from './charts'
 import { format } from './controls'
+import { commandKind, issuer, useNames } from './origin'
 import {
   DAY,
   HistoryView,
   cluster,
-  commandKind,
   compareCandidates,
   curve,
   joined,
@@ -392,6 +392,7 @@ function useDescribe() {
       )
   }, [])
   const automation = (id: string) => names?.[id] ?? (names ? 'a deleted Automation' : 'an Automation')
+  const identities = useNames()
   const ended = { pending: 'pending', confirmed: '', failed: 'failed', timed_out: 'no response', superseded: 'superseded' }
   return {
     command: (c: CommandRecord) =>
@@ -399,7 +400,7 @@ function useDescribe() {
         Object.entries(c.values ?? {})
           .map(([k, v]) => setting(targets, c.target, k, v))
           .join(', ') || 'Command',
-        !c.origin || c.origin === 'api' ? 'from the app' : `by ${automation(c.origin.automation)}`,
+        issuer(c.origin, identities, automation),
         ended[c.status],
       ]
         .filter(Boolean)
@@ -424,7 +425,7 @@ function markers(loaded: Loaded, series: { ref: Ref; cap: Capability }[], descri
         n: 1,
         kind: commandKind(c),
         text: describe.command(c),
-        link: c.origin && c.origin !== 'api' ? trace(c.origin.automation, c.origin.run) : undefined,
+        link: c.origin && c.origin !== 'unknown' && 'automation' in c.origin ? trace(c.origin.automation, c.origin.run) : undefined,
       })),
     ...loaded.runs
       .filter((r) => ofSeries(r.trigger.target))

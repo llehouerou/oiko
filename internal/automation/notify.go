@@ -7,7 +7,8 @@ import (
 	"github.com/llehouerou/oiko/internal/home"
 )
 
-// Notification is a message an Automation sends the occupant.
+// Notification is a message an Automation sends the home's Telegram chat,
+// never a Person.
 type Notification struct {
 	Title   string `json:"title"`
 	Message string `json:"message"`

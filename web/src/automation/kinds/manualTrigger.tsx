@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react'
 import type { StepKind } from '.'
 import { Hint, type FormProps } from './fields'
 
-// Starts a Run when the occupant asks for it: a button on the dashboard,
+// Starts a Run when a Person, a Kiosk or a Program asks for it: a button on the dashboard,
 // named after the Step, or Run here.
 export const manualTrigger: StepKind = {
   label: 'Manual',

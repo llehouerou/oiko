@@ -2,7 +2,7 @@
 
 import type { Placement } from './types'
 
-// A tile's Placement as arranged: its height always known, and auto while the occupant has not set
+// A tile's Placement as arranged: its height always known, and auto while an Admin has not set
 // it, so that it stays the tile's own and is never stored.
 export type Arranged = Placement & { auto?: boolean }
 // Where a tile sits in its Area's Layout.
@@ -20,7 +20,7 @@ const cellsOf = (p: Place, columns: number) =>
 
 // tiles with their place in a Layout of columns, in reading order. A tile layout places keeps its
 // place, any other takes the next free cells after the last one placed, one column wide. A tile
-// whose height the occupant never set is rowsOf it, at its width; one that no longer fits where it
+// whose height an Admin never set is rowsOf it, at its width; one that no longer fits where it
 // was, under a tile grown taller, moves on to the next free cells.
 export function arrange<T extends { key: string }>(
   tiles: T[],
@@ -51,7 +51,7 @@ export function arrange<T extends { key: string }>(
 // The Layout of tiles as arranged, each in its place.
 export const placements = (tiles: { key: string; place?: Place }[]): Arranged[] => tiles.flatMap((t) => (t.place ? [{ tile: t.key, ...t.place }] : []))
 
-// The Layout to store: the heights the occupant set, never a tile's own.
+// The Layout to store: the heights an Admin set, never a tile's own.
 export const stored = (layout: Arranged[]): Placement[] => layout.map(({ auto, height, ...p }) => (auto ? p : { ...p, height }))
 
 const byReading = (a: Place, b: Place) => a.row - b.row || a.col - b.col
@@ -90,7 +90,7 @@ export function move(layout: Arranged[], tile: string, col: number, row: number,
 }
 
 // layout with tile resized, in columns and rows; a tile in its way moves on to the next free cells.
-// The height the occupant sets is theirs from then on.
+// The height an Admin sets is kept from then on.
 export function resize(layout: Arranged[], tile: string, size: { width?: number; height?: number }, columns: number) {
   const p = layout.find((p) => p.tile === tile)
   if (!p) return layout

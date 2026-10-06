@@ -3,7 +3,6 @@ package home
 import (
 	"encoding/json"
 	"slices"
-	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -25,8 +24,9 @@ func TestCommandsCarryTheirOriginAndAreKept(t *testing.T) {
 		_, updates, cancel := h.Subscribe()
 		defer cancel()
 		run := Origin{Automation: "auto", Step: "step", Run: uuid.NewV7()}
+		alice := Origin{Person: "alice"}
 
-		api, err := h.Command(TargetDevice(idOf(t, h, "0xl1"), "light"), Request{Values: map[string]any{"state": true}, Transition: time.Second})
+		byHand, err := h.Command(TargetDevice(idOf(t, h, "0xl1"), "light"), Request{Values: map[string]any{"state": true}, Transition: time.Second, Origin: alice})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -52,8 +52,8 @@ func TestCommandsCarryTheirOriginAndAreKept(t *testing.T) {
 		}
 		name := func(c CommandState) string {
 			switch {
-			case c.ID == api:
-				return "api"
+			case c.ID == byHand:
+				return "alice"
 			case c.ID == relay:
 				return "aggregate"
 			case c.AggregateCommand == relay && c.Origin == run:
@@ -68,32 +68,45 @@ func TestCommandsCarryTheirOriginAndAreKept(t *testing.T) {
 			}
 			got = append(got, name(c)+" "+string(c.Status))
 		}
-		want := []string{"api pending", "aggregate pending", "member pending", "api superseded", "member pending",
+		want := []string{"alice pending", "aggregate pending", "member pending", "alice superseded", "member pending",
 			"member confirmed", "member confirmed", "aggregate confirmed"}
 		if !slices.Equal(got, want) {
 			t.Errorf("commands = %q, want %q", got, want)
 		}
-		if a := announced[0]; a.Origin != (Origin{}) {
-			t.Errorf("api command origin = %+v", a.Origin)
+		if a := announced[0]; a.Origin != alice {
+			t.Errorf("Alice's command origin = %+v", a.Origin)
 		}
 		if a := announced[1]; a.Origin != run || a.AggregateCommand != "" {
 			t.Errorf("aggregate command = %+v", a)
 		}
 		if r := kept[0]; !r.Time.Equal(time.Now()) || r.Transition != 1 || r.Values["state"] != true {
-			t.Errorf("api record = %+v", r)
+			t.Errorf("Alice's record = %+v", r)
 		}
 		if r := kept[1]; r.Values["state"] != true { // the toggle, resolved
 			t.Errorf("aggregate record = %+v", r)
 		}
-
-		data, _ := json.Marshal(announced[0])
-		if !strings.Contains(string(data), `"origin":"api"`) {
-			t.Errorf("api command JSON = %s", data)
-		}
-		data, _ = json.Marshal(announced[1])
-		var back CommandState
-		if err := json.Unmarshal(data, &back); err != nil || back != announced[1] {
-			t.Errorf("round trip of %s = %+v, %v", data, back, err)
-		}
 	})
+}
+
+func TestOriginJSON(t *testing.T) {
+	run := uuid.NewV7()
+	for _, c := range []struct {
+		o    Origin
+		json string
+	}{
+		{Origin{}, `"unknown"`},
+		{Origin{Person: "alice"}, `{"person":"alice"}`},
+		{Origin{Kiosk: "hall"}, `{"kiosk":"hall"}`},
+		{Origin{Program: "nodered"}, `{"program":"nodered"}`},
+		{Origin{Automation: "auto", Step: "step", Run: run}, `{"automation":"auto","step":"step","run":"` + run.String() + `"}`},
+	} {
+		data, err := json.Marshal(c.o)
+		if err != nil || string(data) != c.json {
+			t.Errorf("%+v = %s, %v; want %s", c.o, data, err, c.json)
+		}
+		back := Origin{Program: "left over"}
+		if err := json.Unmarshal([]byte(c.json), &back); err != nil || back != c.o {
+			t.Errorf("%s read back as %+v, %v", c.json, back, err)
+		}
+	}
 }

@@ -174,7 +174,7 @@ func TestTraceAndCommandHistoryEndpoints(t *testing.T) {
 		}
 	}
 	if c := eventually(t, "commands on X", commands(x)); c[0].Origin != (home.Origin{}) || c[0].Values["on"] != true {
-		t.Errorf("command on X = %+v, want from the api", c[0])
+		t.Errorf("command on X = %+v, want of unknown origin", c[0])
 	}
 
 	runs := eventually(t, "runs", func() ([]home.RunEnd, bool) {
@@ -259,8 +259,8 @@ func TestHistoryEndpoint(t *testing.T) {
 		json.NewDecoder(resp.Body).Decode(&marked)
 		return marked, len(marked.Commands) == 1 && marked.Commands[0].Status == "confirmed"
 	})
-	if marked.Commands[0].Origin != "api" {
-		t.Errorf("commands = %+v, want the API's", marked.Commands)
+	if marked.Commands[0].Origin != "unknown" {
+		t.Errorf("commands = %+v, want of unknown origin", marked.Commands)
 	}
 
 	for _, c := range []struct {

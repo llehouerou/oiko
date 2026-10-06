@@ -155,7 +155,7 @@ function Home() {
     localStorage.setItem('oiko.collapsed', JSON.stringify(next))
     setCollapsed(next)
   }
-  // Whether the occupant is arranging the dashboard: the Areas' order and their Layouts.
+  // Whether an Admin is arranging the dashboard: the Areas' order and their Layouts.
   const [arranging, setArranging] = useState(false)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
   const report = (err: string | null) => err && setToast({ text: err, error: true })

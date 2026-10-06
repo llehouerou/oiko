@@ -7,8 +7,8 @@ import (
 	"github.com/llehouerou/oiko/internal/home"
 )
 
-// manualTriggerStep starts a Run when the occupant asks for it, from the
-// dashboard or the API, through Engine.Trigger. Params: {}. Handles: → out.
+// manualTriggerStep starts a Run when a Person, a Kiosk or a Program asks
+// for it, from the dashboard or the API, through Engine.Trigger. Params: {}. Handles: → out.
 type manualTriggerStep struct{}
 
 func parseManualTrigger(s *step, _ struct{}, _ *Place) error {
@@ -17,9 +17,9 @@ func parseManualTrigger(s *step, _ struct{}, _ *Place) error {
 }
 
 // Trigger starts a Run of Automation id from its Manual trigger step, at
-// once, and returns how it ended. Only an enabled Automation, neither broken
-// nor runaway, runs.
-func (e *Engine) Trigger(id, step string) (home.RunEnd, error) {
+// once, on behalf of by, and returns how it ended. Only an enabled
+// Automation, neither broken nor runaway, runs.
+func (e *Engine) Trigger(id, step string, by home.Origin) (home.RunEnd, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	i := e.find(id)
@@ -37,7 +37,7 @@ func (e *Engine) Trigger(id, step string) (home.RunEnd, error) {
 	if s := a.status(); s.Status != home.AutomationEnabled {
 		return home.RunEnd{}, fmt.Errorf("%w: it is %s", home.ErrNotRunning, s.Status)
 	}
-	end, ok := e.run(a, j, 0, home.Trigger{Time: e.now()})
+	end, ok := e.run(a, j, 0, home.Trigger{Time: e.now(), By: &by})
 	if !ok {
 		return home.RunEnd{}, fmt.Errorf("%w: it is %s", home.ErrNotRunning, home.AutomationRunaway)
 	}

@@ -14,9 +14,9 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 import { AppBar } from './AppBar'
 import { CursorLine, SelectBox, Ticks, cursor, hatchGap, hatchOffline, markerStyle, useCursor, useTimeGestures, useWidth, MIN } from './charts'
 import { format } from './controls'
+import { commandKind } from './origin'
 import {
   HistoryView,
-  commandKind,
   curve,
   listed,
   held,
@@ -243,7 +243,7 @@ export function Timeline() {
           {lanes.length === 0 && <p className="text-sm text-neutral-500">Nothing to draw yet.</p>}
         </div>
         <p className="mt-2 flex flex-wrap gap-3 text-[11px] text-neutral-500">
-          {(['app', 'automation', 'lost'] as const).map((k) => (
+          {(['hand', 'program', 'automation', 'lost'] as const).map((k) => (
             <span key={k}>
               <span className="inline-block h-2 w-[3px] align-middle" style={{ background: markerStyle[k].color }} /> {markerStyle[k].label}
             </span>

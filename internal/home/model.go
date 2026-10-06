@@ -43,7 +43,7 @@ const (
 	Diagnostic = bridge.Diagnostic
 )
 
-// Function is what a Device does for the occupant. Key is kind + endpoint,
+// Function is what a Device does for the household. Key is kind + endpoint,
 // e.g. "light" or "switch/l2", unique within its Device.
 type Function struct {
 	Key          string       `json:"key"`

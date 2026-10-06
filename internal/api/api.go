@@ -106,7 +106,7 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	})
 	// Runs an Automation from its Manual trigger step, at once: how the Run ended.
 	mux.HandleFunc("POST /api/automations/{id}/steps/{step}/run", func(w http.ResponseWriter, r *http.Request) {
-		end, err := automations.Trigger(r.PathValue("id"), r.PathValue("step"))
+		end, err := automations.Trigger(r.PathValue("id"), r.PathValue("step"), origin(r))
 		respond(w, end, err)
 	})
 	mux.HandleFunc("GET /api/automations/{id}/runs", func(w http.ResponseWriter, r *http.Request) {
@@ -361,7 +361,7 @@ func command(h *home.Home) http.HandlerFunc {
 		if !decode(w, r, &req) {
 			return
 		}
-		id, err := h.Command(req.Target, home.Request{Values: req.Values, Transition: time.Duration(req.Transition * float64(time.Second))})
+		id, err := h.Command(req.Target, home.Request{Values: req.Values, Transition: time.Duration(req.Transition * float64(time.Second)), Origin: origin(r)})
 		if err != nil {
 			reply(w, err)
 			return

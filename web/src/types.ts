@@ -25,14 +25,14 @@ export interface Fn {
   capabilities: Capability[]
 }
 
-// A room or zone of the home; Areas come in the occupant's order.
+// A room or zone of the home; Areas come in the order an Admin set.
 export interface Area {
   id: string
   name: string
   hidden?: Target[] // tiles the dashboard folds away
   hiddenAggregates?: string[] // kinds whose Area Aggregate its header leaves out
   columns?: number // of its Layout; the dashboard's default when absent
-  layout?: Placement[] // the tiles the occupant placed
+  layout?: Placement[] // the tiles an Admin placed
 }
 
 // Where a tile sits in its Area's Layout: its first cell, from 0, and how many columns and rows it spans.
@@ -104,8 +104,10 @@ export interface CommandState {
   error?: string
 }
 
-// What issued a Command: a Step of an Automation in one of its Runs, or the API.
-export type Origin = 'api' | { automation: string; step: string; run: string }
+// Mirrors home.Origin: what issued a Command, by identity (ADR 0031): a
+// Person, a Kiosk, a Program, a Step of an Automation in one of its Runs, or
+// unknown (recorded before sign-in, or sent without credentials).
+export type Origin = 'unknown' | { person: string } | { kiosk: string } | { program: string } | { automation: string; step: string; run: string }
 
 // Mirrors home.CommandRecord: a Command as the Command history keeps it.
 export interface CommandRecord extends CommandState {
@@ -134,6 +136,7 @@ export interface RunTrigger {
   time: string // when it happened, or was scheduled
   catchUp?: boolean
   skipped?: number
+  by?: Origin // who started it, for a Manual trigger
 }
 
 // Mirrors automation.Trace: a Run's trigger, then each Step it reached, in order.

@@ -10,6 +10,7 @@ import { useSyncExternalStore } from 'react'
 import { presses, roles, turns } from './roles'
 import { current, follow } from './store'
 import { owner, targetKind, type Catalogue, type Entry } from './targets'
+import type { CommandKind } from './origin'
 import type { Capability, CommandRecord, CommandState, Ref, RunEnd, Snapshot, Target, Update } from './types'
 
 export const DAY = 24 * 60 * 60 * 1000
@@ -377,7 +378,7 @@ export const targetBlanks = (loaded: Loaded, target: Target, from: number, to: n
   )
 
 // A marker on the time axis: n Commands, Runs or Events at t, the same kind.
-export type MarkerKind = 'app' | 'automation' | 'lost' | 'run' | 'event'
+export type MarkerKind = CommandKind | 'run' | 'event'
 export interface Marker {
   t: number
   n: number
@@ -385,11 +386,6 @@ export interface Marker {
   text: string
   link?: string // to the Trace of the Run it names
 }
-
-// commandKind is how a Command shows: with no response when it failed or
-// timed out, else by what issued it, the app (the API) or an Automation.
-export const commandKind = (c: CommandState): MarkerKind =>
-  c.status === 'failed' || c.status === 'timed_out' ? 'lost' : !c.origin || c.origin === 'api' ? 'app' : 'automation'
 
 // cluster gathers the markers within [from, to], px wide, the earliest
 // first, each cluster spanning less than gap pixels.
