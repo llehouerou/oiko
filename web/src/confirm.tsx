@@ -1,19 +1,25 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
+
+// Shows what render draws, outside the page, until it calls done with what the promise resolves to.
+export function modal<T>(render: (done: (v: T) => void) => ReactNode): Promise<T> {
+  const host = document.body.appendChild(document.createElement('div'))
+  const root = createRoot(host)
+  return new Promise((resolve) => {
+    root.render(
+      render((v) => {
+        root.unmount()
+        host.remove()
+        resolve(v)
+      }),
+    )
+  })
+}
 
 // The app's window.confirm: a modal that resolves true on the action button, and false
 // on Cancel, Escape or a click on the backdrop. Cancel takes the focus, so Enter is harmless.
 export function confirm(message: string, action: string): Promise<boolean> {
-  const host = document.body.appendChild(document.createElement('div'))
-  const root = createRoot(host)
-  return new Promise((resolve) => {
-    const done = (ok: boolean) => {
-      root.unmount()
-      host.remove()
-      resolve(ok)
-    }
-    root.render(<Confirm message={message} action={action} onDone={done} />)
-  })
+  return modal((done) => <Confirm message={message} action={action} onDone={done} />)
 }
 
 function Confirm({ message, action, onDone }: { message: string; action: string; onDone: (ok: boolean) => void }) {

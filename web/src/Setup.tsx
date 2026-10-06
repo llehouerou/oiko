@@ -1,19 +1,21 @@
 // The page a Setup link opens (/setup#<secret>): whoever opens it names themselves and becomes the
-// first Admin of a fresh Oiko, signed in.
+// first Admin of a fresh Oiko, signed in, then is offered a Passkey.
 
 import { useState, type FormEvent } from 'react'
 import { mdiHomeAutomation } from '@mdi/js'
 import { Svg } from './icons'
 import { claim, useMe } from './access'
+import { PasskeyOffer } from './passkeys'
 
 export function Setup({ onDone }: { onDone: () => void }) {
   const me = useMe()
   const [error, setError] = useState<string | null>(null)
+  const [offer, setOffer] = useState(false)
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const err = await claim(location.hash.slice(1), String(new FormData(e.currentTarget).get('name')))
     if (err) setError(err)
-    else onDone()
+    else setOffer(true)
   }
   return (
     <main className="grid min-h-dvh place-items-center p-4 text-neutral-100">
@@ -24,7 +26,9 @@ export function Setup({ onDone }: { onDone: () => void }) {
           </span>
           <h1 className="text-lg font-semibold">Set up Oiko</h1>
         </header>
-        {me?.claimed && !me.identity ? (
+        {offer ? (
+          <PasskeyOffer onDone={onDone} />
+        ) : me?.claimed && !me.identity ? (
           <>
             <p>This Oiko already has an Admin: its Setup link no longer works.</p>
             <button onClick={onDone} className="rounded bg-amber-400 px-3 py-1 font-medium text-neutral-900 hover:bg-amber-300">

@@ -71,7 +71,7 @@ export async function signOut() {
   await loadMe()
 }
 
-export type View = 'home' | 'history' | 'automations' | 'programs'
+export type View = 'home' | 'history' | 'automations' | 'programs' | 'account'
 
 // What the page shows: nothing until it knows who is signed in, sign-in while nobody is, or else the
 // view hash names. Sign-in leaves the hash alone, so signing in again returns to the same view.
@@ -79,6 +79,7 @@ export function screen(me: Me | null, hash: string): View | 'sign-in' | null {
   if (!me) return null
   if (!me.identity) return 'sign-in'
   if (hash.startsWith('#programs')) return 'programs'
+  if (hash.startsWith('#account')) return 'account'
   if (hash.startsWith('#automations')) return 'automations'
   if (hash.startsWith('#history')) return 'history'
   return 'home'

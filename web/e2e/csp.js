@@ -1,6 +1,8 @@
 // Loads the built client, served by Oiko under its Content Security Policy
 // (ADR 0034), in a headless Chromium, and fails on any violation or page
-// error. Run after `npm run build`, from the dev shell, which sets CHROMIUM.
+// error. On the way, its first Admin adds a Passkey to Chromium's virtual
+// authenticator and signs in with it again. Run after `npm run build`, from
+// the dev shell, which sets CHROMIUM.
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { createServer } from 'node:net'
@@ -53,17 +55,28 @@ try {
     )
   })
   page.on('pageerror', (e) => problems.push(`page error: ${e.message}`))
-  // Sign-in, then the Setup page, which signs in its first Admin.
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('WebAuthn.enable')
+  await cdp.send('WebAuthn.addVirtualAuthenticator', {
+    options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true },
+  })
+  // Sign-in, then the Setup page, which signs in its first Admin and offers a Passkey.
   await page.goto(base)
   await page.getByText('no Admin yet').waitFor()
   await page.goto(await setupLink)
   await page.getByLabel('Your name').fill('Alice')
   await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByRole('button', { name: 'Add a Passkey' }).click()
+  await page.locator('nav a[href="#automations"]').waitFor()
+  // Signed out, then in again with that Passkey.
+  await page.evaluate(() => fetch('/api/sign-out', { method: 'POST' }))
+  await page.goto(base)
+  await page.getByRole('button', { name: 'Sign in with a Passkey' }).click()
   await page.locator('nav a[href="#automations"]').waitFor()
   // An Automation, for its editor.
   const id = await page.evaluate(async () => (await (await fetch('/api/automations', { method: 'POST', body: '{"name": "Night"}' })).json()).id)
 
-  for (const hash of ['', '#history', '#automations', `#automations/${id}`]) {
+  for (const hash of ['', '#history', '#automations', `#automations/${id}`, '#programs', '#account']) {
     await page.goto(`${base}/${hash}`)
     await page.locator('#root > *').first().waitFor()
     await page.waitForTimeout(1000) // ponytail: a fixed settle; wait on each page's content if it proves flaky

@@ -1,12 +1,15 @@
 // The page a browser that is not signed in gets, in place of the view it asked for: signing in
 // returns to it (ADR 0027).
 
+import { useState } from 'react'
 import { mdiHomeAutomation } from '@mdi/js'
 import { Svg } from './icons'
 import { signInPage, type Me } from './access'
+import { signInWithPasskey } from './passkeys'
 
 export function SignIn({ me }: { me: Me }) {
   const page = signInPage(me, location.origin)
+  const [error, setError] = useState<string | null>(null)
   return (
     <main className="grid min-h-dvh place-items-center p-4 text-neutral-100">
       <div className="w-full max-w-sm space-y-5 rounded-xl bg-neutral-900 p-6 text-sm">
@@ -32,7 +35,19 @@ export function SignIn({ me }: { me: Me }) {
             .
           </p>
         )}
-        {page === 'here' && <p>You are not signed in on this browser.</p>}
+        {page === 'here' && (
+          <>
+            <p>You are not signed in on this browser.</p>
+            {error && <p className="text-red-400">{error}</p>}
+            <button
+              onClick={async () => setError(await signInWithPasskey())}
+              className="w-full rounded bg-amber-400 px-3 py-2 font-medium text-neutral-900 hover:bg-amber-300"
+            >
+              Sign in with a Passkey
+            </button>
+            <p className="text-neutral-400">No Passkey on this device? Your browser can use your phone's. Otherwise, ask an Admin for a sign-in link.</p>
+          </>
+        )}
       </div>
     </main>
   )

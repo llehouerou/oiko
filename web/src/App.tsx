@@ -69,6 +69,7 @@ import { ReleaseBanner } from './About'
 import { Setup } from './Setup'
 import { SignIn } from './SignIn'
 import { Programs } from './Programs'
+import { Account } from './Account'
 import { api, screen, useMe } from './access'
 import {
   DndContext,
@@ -105,6 +106,8 @@ export function App() {
       return <SignIn me={me!} />
     case 'programs':
       return <Programs />
+    case 'account':
+      return <Account />
     case 'automations':
       return <Automations />
     case 'history':

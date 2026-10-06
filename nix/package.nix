@@ -10,7 +10,7 @@
   # A build with other Bridges vendors other modules: `nix build` prints the
   # hash to set.
   vendorHash ?
-    if bridges == { } then "sha256-73C9wnDB+vUN+n0Xz/xiDAfiLkMQMtBSGXZFqKHTd+I=" else lib.fakeHash,
+    if bridges == { } then "sha256-kSU8vaj/m1F8IMe2tX9yzcCEK2q1z5SWxcUJWQ1UxYk=" else lib.fakeHash,
 }:
 let
   fs = lib.fileset;

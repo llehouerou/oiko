@@ -1,11 +1,12 @@
 // The Admin page of Programs (#programs): external software calling Oiko under its own identity,
-// each with at most one Token, shown once when generated.
+// each with at most one Token, shown once when generated. Every change asks for step-up first.
 
 import { useEffect, useState, type FormEvent } from 'react'
 import { AppBar } from './AppBar'
 import { confirm } from './confirm'
 import { edit } from './store'
 import { api, levels, type Level } from './access'
+import { stepUp } from './passkeys'
 
 type Program = {
   id: string
@@ -16,7 +17,7 @@ type Program = {
   token: { generated: string; lastUse?: string } | null
 }
 
-const date = (t: string) => new Date(t).toLocaleString([], { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+export const date = (t: string) => new Date(t).toLocaleString([], { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 export function Programs() {
   const [programs, setPrograms] = useState<Program[] | null>(null)
@@ -30,16 +31,20 @@ export function Programs() {
   useEffect(() => void load(), [])
   // After a change: shows why it was refused, if it was, and the Programs as they now are.
   const change = async (err: string | null) => (setError(err), load())
+  // A change, once step-up allows it.
+  const fresh = async (method: 'PUT' | 'DELETE' | 'POST', path: string, body?: unknown) => (await stepUp()) && change(await edit(method, path, body))
   const create = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const form = e.currentTarget
     const data = new FormData(form)
+    if (!(await stepUp())) return
     const err = await edit('POST', 'programs', { name: data.get('name'), level: data.get('level') })
     if (!err) form.reset()
     change(err)
   }
   const generate = async (p: Program) => {
     if (p.token && !(await confirm(`A new Token for ${p.name} stops the current one at once.`, 'Generate'))) return
+    if (!(await stepUp())) return
     const res = await api(`/api/programs/${p.id}/token`, { method: 'POST' })
     if (res.ok) setShown({ program: p.id, token: (await res.json()).token })
     change(res.ok ? null : (await res.text()).trim())
@@ -70,7 +75,7 @@ export function Programs() {
             <li key={p.id} className="space-y-3 rounded-xl bg-neutral-900 p-4">
               <div className="flex flex-wrap items-center gap-3">
                 <p className="min-w-0 flex-1 truncate text-base font-medium">{p.name}</p>
-                <LevelSelect value={p.level} onChange={async (level) => change(await edit('PUT', `programs/${p.id}`, { name: p.name, level }))} />
+                <LevelSelect value={p.level} onChange={(level) => fresh('PUT', `programs/${p.id}`, { name: p.name, level })} />
               </div>
               <p className="text-neutral-400">
                 Created by {p.creator.name ?? 'a removed Person'} on {date(p.created)}
@@ -85,7 +90,7 @@ export function Programs() {
                 {p.token && (
                   <button
                     onClick={async () =>
-                      (await confirm(`Revoke ${p.name}'s Token? It stops working at once.`, 'Revoke')) && change(await edit('DELETE', `programs/${p.id}/token`))
+                      (await confirm(`Revoke ${p.name}'s Token? It stops working at once.`, 'Revoke')) && fresh('DELETE', `programs/${p.id}/token`)
                     }
                     className={button}
                   >
@@ -93,9 +98,7 @@ export function Programs() {
                   </button>
                 )}
                 <button
-                  onClick={async () =>
-                    (await confirm(`Remove ${p.name}? Its Token stops working at once.`, 'Remove')) && change(await edit('DELETE', `programs/${p.id}`))
-                  }
+                  onClick={async () => (await confirm(`Remove ${p.name}? Its Token stops working at once.`, 'Remove')) && fresh('DELETE', `programs/${p.id}`)}
                   className={`${button} ml-auto text-red-400`}
                 >
                   Remove

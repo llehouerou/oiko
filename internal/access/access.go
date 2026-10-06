@@ -1,12 +1,14 @@
-// Package access keeps who may use Oiko (ADR 0022, 0032): the Persons and
-// their Sessions, in persons.json and sessions.json, the Programs and their
-// Tokens, in programs.json, all loaded at start and held in memory, and the
-// Setup link that claims a fresh Oiko (ADR 0026). Secrets are 128 random bits
+// Package access keeps who may use Oiko (ADR 0022, 0032): the Persons, their
+// Passkeys and their Sessions, in persons.json and sessions.json, the
+// Programs and their Tokens, in programs.json, all loaded at start and held
+// in memory, and, in memory only, the Setup link that claims a fresh Oiko
+// (ADR 0026) and the WebAuthn ceremonies in progress. Secrets are 128 random bits
 // or more, kept only as their SHA-256 hash; Oiko alone decides when a Session
 // ends (ADR 0025).
 package access
 
 import (
+	"container/list"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -60,20 +62,29 @@ func (l Level) valid() bool { return l == Guest || l == Member || l == Admin }
 
 // Person is a human known to Oiko.
 type Person struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Level Level  `json:"level"`
+	ID       string    `json:"id"`
+	Name     string    `json:"name"`
+	Level    Level     `json:"level"`
+	Passkeys []Passkey `json:"passkeys,omitempty"`
 }
 
 // session is a Session as stored: its secret's hash, whose it is, the
-// browser it lives in, how and when it signed in, and when it was last used.
+// browser it lives in, how and when it signed in, when it last confirmed a
+// Passkey, and when it was last used.
 type session struct {
-	Hash     string    `json:"hash"`
-	Person   string    `json:"person"`
-	Browser  string    `json:"browser"`
-	Method   string    `json:"method"` // how it signed in: "setup"
-	SignedIn time.Time `json:"signedIn"`
-	LastUse  time.Time `json:"lastUse"`
+	Hash      string    `json:"hash"`
+	Person    string    `json:"person"`
+	Browser   string    `json:"browser"`
+	Method    string    `json:"method"` // how it signed in: "setup" or "passkey"
+	SignedIn  time.Time `json:"signedIn"`
+	Confirmed time.Time `json:"confirmed,omitzero"`
+	LastUse   time.Time `json:"lastUse"`
+}
+
+// fresh reports whether Session x signed in, or confirmed a Passkey, lately
+// enough for step-up at now (ADR 0025).
+func (x *session) fresh(now time.Time) bool {
+	return now.Sub(x.SignedIn) < freshFor || now.Sub(x.Confirmed) < freshFor
 }
 
 // Kind is what an identity is.
@@ -116,6 +127,7 @@ type Store struct {
 	setup       string                   // the Setup link's hash; "" when there is none
 	sessionUses pending
 	programUses pending
+	ceremonies  ceremonies
 }
 
 // pending tells when a document was last written, and whether last uses held
@@ -137,6 +149,7 @@ func Open(dir string, now func() time.Time) (*Store, error) {
 		ends:         map[string]chan struct{}{},
 		sessionUses:  pending{written: now()},
 		programUses:  pending{written: now()},
+		ceremonies:   ceremonies{by: map[string]*list.Element{}},
 	}
 	var sessions []*session
 	if err := store.Load(s.personsFile, PersonsFormat, &s.persons); err != nil {
@@ -243,7 +256,7 @@ func (s *Store) Resolve(secret string) (Identity, bool) {
 	x.LastUse = now
 	s.used(&s.sessionUses, s.saveSessions)
 	p := s.persons[i]
-	return Identity{Kind: PersonKind, ID: p.ID, Name: p.Name, Level: p.Level, Fresh: now.Sub(x.SignedIn) < freshFor, Ended: s.ending(x.Hash)}, true
+	return Identity{Kind: PersonKind, ID: p.ID, Name: p.Name, Level: p.Level, Fresh: x.fresh(now), Ended: s.ending(x.Hash)}, true
 }
 
 // ending is what closes when the access of key ends or changes, made on

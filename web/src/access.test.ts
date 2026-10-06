@@ -40,8 +40,8 @@ test('nothing shows until Oiko tells who is signed in', async () => {
 })
 
 test('each view has its hash; any other is the dashboard', () => {
-  const views = ['', '#', '#history', '#automations', '#automations/a1', '#programs', '#nonsense'].map((h) => screen(alice, h))
-  expect(views).toEqual(['home', 'home', 'history', 'automations', 'automations', 'programs', 'home'])
+  const views = ['', '#', '#history', '#automations', '#automations/a1', '#programs', '#account', '#nonsense'].map((h) => screen(alice, h))
+  expect(views).toEqual(['home', 'home', 'history', 'automations', 'automations', 'programs', 'account', 'home'])
 })
 
 test('sign-in is offered on the Public URL and http://localhost only', () => {

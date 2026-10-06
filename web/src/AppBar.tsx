@@ -13,6 +13,7 @@ import {
   mdiGroup,
   mdiHomeAutomation,
   mdiHomePlusOutline,
+  mdiKeyVariant,
   mdiLogout,
   mdiPlus,
   mdiRobotOutline,
@@ -93,7 +94,7 @@ function ConnectionBadge() {
   )
 }
 
-// Who is signed in, with a menu to sign out, and an Admin's pages.
+// Who is signed in, with a menu to their own page, an Admin's pages, and signing out.
 function Account() {
   const me = useMe()
   if (!me?.identity) return null
@@ -114,6 +115,16 @@ function Account() {
       >
         <p className="truncate px-2.5 pt-2 font-medium">{me.name}</p>
         <p className="px-2.5 pb-2 text-xs text-neutral-400">{me.level && levels[me.level]}</p>
+        {'person' in me.identity && (
+          <a
+            href="#account"
+            onClick={() => document.getElementById('account')?.hidePopover()}
+            className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-neutral-800"
+          >
+            <Svg path={mdiKeyVariant} className="size-5 text-neutral-400" />
+            Your account
+          </a>
+        )}
         {me.level === 'admin' && 'person' in me.identity && (
           <a
             href="#programs"

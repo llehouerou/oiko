@@ -34,6 +34,7 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/updates", updates(h, acc, releases))
 	handleAccess(mux, acc, public)
+	handlePasskeys(mux, acc, public)
 	handlePrograms(mux, acc)
 	mux.HandleFunc("GET /api/build", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, struct {
