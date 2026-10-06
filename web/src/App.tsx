@@ -369,6 +369,7 @@ function BarTile({
   const brightness = typeof picked === 'number' ? picked : undefined
   const [sheet, setSheet] = useState(false)
   const gesture = useRef<{ x: number; y: number; from: number; width: number; moving: boolean } | null>(null)
+  const tapped = useRef(false) // the gesture that just ended neither dimmed nor scrolled
   const lit = on || picking
   const group = members !== undefined
   const litCount = useOnCount((members ?? []).map((m) => ({ target: m, capability: 'state' })))
@@ -401,8 +402,11 @@ function BarTile({
     const g = gesture.current
     gesture.current = null
     hold(false)
-    if (g && !g.moving) toggle()
+    tapped.current = !!g && !g.moving
   }
+  // The toggle waits for the click, not the pointerup: a mobile browser sends no
+  // click for a touch that scrolled or stopped a fling, so scrolling never switches a light.
+  const click = () => tapped.current && ((tapped.current = false), toggle())
 
   const status = (
     <>
@@ -431,7 +435,8 @@ function BarTile({
           onPointerDown={down}
           onPointerMove={move}
           onPointerUp={up}
-          onPointerCancel={() => ((gesture.current = null), hold(false))}
+          onPointerCancel={() => ((gesture.current = null), (tapped.current = false), hold(false))}
+          onClick={click}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') toggle()
             else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') dim(level + (e.key === 'ArrowRight' ? 0.1 : -0.1))
