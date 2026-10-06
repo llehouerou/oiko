@@ -51,10 +51,8 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	// Runs an Automation from its Manual trigger step, at once: how the Run ended.
 	handle(guest, "POST /api/automations/{id}/steps/{step}/run", func(w http.ResponseWriter, r *http.Request) {
 		end, err := automations.Trigger(r.PathValue("id"), r.PathValue("step"), origin(r))
-		if id, _ := identity(r); !id.Level.Allows(access.Member) {
-			end.Trigger.By = nil // ADR 0031
-		}
-		respond(w, end, err)
+		by, _ := identity(r)
+		respond(w, runEndFor(by.Level, end), err)
 	})
 
 	// A Member also reads the home's past and how its Automations are built.
@@ -305,15 +303,8 @@ func respond(w http.ResponseWriter, v any, err error) {
 func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := identity(r)
-		guest := !id.Level.Allows(access.Member)
-		see := func(u home.Update) (any, bool) { return u, true }
-		if guest {
-			see = forGuest
-		}
 		snap, ch, cancel := h.Subscribe()
-		if guest {
-			snap.Automations = pressable(snap.Automations)
-		}
+		snap = snapshotFor(id.Level, snap)
 		defer cancel()
 		statuses, changed := []release.Status{}, (<-chan struct{})(nil) // nil: never
 		if id.Level.Allows(access.Admin) {
@@ -343,7 +334,7 @@ func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.Ha
 			case u, ok := <-ch:
 				// Closed: this observer fell too far behind. Ending the stream makes the
 				// browser reconnect and start over from a fresh snapshot.
-				if !ok || !send(func() bool { return writeBatch(w, u, ch, see) }) {
+				if !ok || !send(func() bool { return writeBatch(w, u, ch, id.Level) }) {
 					return
 				}
 			case <-changed:
@@ -370,11 +361,11 @@ func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.Ha
 	}
 }
 
-// writeBatch writes u and every Update already queued behind it, each as see
-// shows it, if it shows it; it reports false if the stream must end.
-func writeBatch(w http.ResponseWriter, u home.Update, ch <-chan home.Update, see func(home.Update) (any, bool)) bool {
+// writeBatch writes u and every Update already queued behind it, each as
+// level l sees it, if it does; it reports false if the stream must end.
+func writeBatch(w http.ResponseWriter, u home.Update, ch <-chan home.Update, l access.Level) bool {
 	for {
-		if v, ok := see(u); ok && writeEvent(w, v) != nil {
+		if v, ok := updateFor(l, u); ok && writeEvent(w, v) != nil {
 			return false
 		}
 		select {
@@ -387,41 +378,6 @@ func writeBatch(w http.ResponseWriter, u home.Update, ch <-chan home.Update, see
 			return true
 		}
 	}
-}
-
-// forGuest is u as a Guest sees it, false if not at all (ADR 0031): of the
-// Automations, only those with a Manual trigger, without why one is broken or
-// since when it is runaway; no Run; a Command without its Origin.
-func forGuest(u home.Update) (any, bool) {
-	switch {
-	case u.Kind == home.RunEnded:
-		return nil, false
-	case u.Kind == home.AutomationsChanged:
-		u.Automations = pressable(u.Automations)
-		return u, true
-	case u.Command == nil:
-		return u, true
-	}
-	type command struct {
-		home.CommandState
-		Origin *struct{} `json:"origin,omitempty"` // hides the Origin: never set
-	}
-	return struct {
-		home.Update
-		Command command `json:"command"`
-	}{u, command{CommandState: *u.Command}}, true
-}
-
-// pressable is what a Guest sees of the Automations: their Tiles, those with
-// a Manual trigger only, and their state without its cause.
-func pressable(list []home.AutomationStatus) []home.AutomationStatus {
-	tiles := []home.AutomationStatus{}
-	for _, s := range list {
-		if len(s.ManualTriggers) > 0 {
-			tiles = append(tiles, home.AutomationStatus{ID: s.ID, Name: s.Name, Status: s.Status, ManualTriggers: s.ManualTriggers})
-		}
-	}
-	return tiles
 }
 
 func writeEvent(w http.ResponseWriter, v any) error {
