@@ -1,5 +1,12 @@
 import { expect, test } from 'vitest'
-import { qrPath } from './manage'
+import { endsAfter, lastDay, qrPath } from './manage'
+
+test("a Guest's last day ends as the next one begins, and reads back as that day", () => {
+  const ends = endsAfter('2026-03-31')!
+  expect(new Date(ends).getTime()).toBe(new Date(2026, 3, 1).getTime())
+  expect(lastDay(ends)).toBe('2026-03-31')
+  expect(endsAfter('')).toBeNull()
+})
 
 test("a link's QR code is drawn as a path of its dark modules", () => {
   const { size, d } = qrPath('https://oiko.example/sign-in#ABCDEFGHIJKLMNOPQRSTUVWXYZ234567')

@@ -2,6 +2,7 @@
 // they were named then, with their current Name beside when it changed.
 
 import { levels, type Level } from './access'
+import { day } from './manage'
 
 export type Party = { kind: 'person' | 'kiosk' | 'program' | 'host' | 'oiko' | 'unknown'; id?: string; name?: string; current?: string }
 
@@ -43,14 +44,25 @@ const sentences: Record<string, (e: Entry, a: string, s: string) => string> = {
     }
     return `${s} signed in ${how[String(e.detail?.method)] ?? ''}`.trim()
   },
-  'session-ended': (e, a, s) =>
-    ({ 'signed out': `${s} signed out`, expired: `A Session of ${s} expired`, removed: `A Session of ${s} ended with their removal` })[
-      String(e.detail?.reason)
-    ] ?? `${a} ended a Session of ${s}`,
+  'session-ended': (e, a, s) => {
+    const reasons: Record<string, string> = {
+      'signed out': `${s} signed out`,
+      expired: `A Session of ${s} expired`,
+      'access ended': `A Session of ${s} ended with their access`,
+      removed: `A Session of ${s} ended with their removal`,
+    }
+    return reasons[String(e.detail?.reason)] ?? `${a} ended a Session of ${s}`
+  },
   'person-created': (e, a, s) => `${a} created ${s}, ${level(e.detail?.level)}`,
   'person-renamed': (e, a, s) => (e.actor.id === e.subject.id ? `${e.detail?.from} renamed themself ${s}` : `${a} renamed ${e.detail?.from} to ${s}`),
   'person-removed': (_, a, s) => `${a} removed ${s}`,
   'level-changed': (e, a, s) => `${a} changed ${s} from ${level(e.detail?.from)} to ${level(e.detail?.to)}`,
+  'end-date-changed': (e, a, s) => {
+    const { from, to } = (e.detail ?? {}) as { from?: string; to?: string }
+    if (!to) return `${a} removed the end date of ${s}`
+    return `${a} ${from ? 'moved' : 'set'} the last day of ${s} to ${day(to)}`
+  },
+  'end-date-reached': (_, __, s) => `The access of ${s} ended`,
   'link-created': (e, a, s) => (e.actor.id === e.subject.id ? `${a} created a Sign-in link for themself` : `${a} created a Sign-in link for ${s}`),
   'link-revoked': (_, a, s) => `${a} revoked the Sign-in link of ${s}`,
   'link-expired': (_, __, s) => `The Sign-in link of ${s} expired unused`,

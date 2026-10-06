@@ -26,12 +26,15 @@ func handlePersons(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 		ID    string       `json:"id"`
 		Name  string       `json:"name"`
 		Level access.Level `json:"level"`
-		Link  *link        `json:"link"` // their pending Sign-in link; null if none
+		Ends  time.Time    `json:"ends,omitzero"` // a Guest's end date, if any
+		Link  *link        `json:"link"`          // their pending Sign-in link; null if none
 	}
-	// What a Person is to be: their Name and Access level.
+	// What a Person is to be: their Name, Access level and, a Guest's only,
+	// end date: null or absent for none.
 	type definition struct {
 		Name  string       `json:"name"`
 		Level access.Level `json:"level"`
+		Ends  time.Time    `json:"ends"`
 	}
 	type secret struct {
 		Secret string `json:"secret"`
@@ -49,7 +52,7 @@ func handlePersons(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 		}
 		list := make([]person, len(ps))
 		for i, p := range ps {
-			list[i] = person{p.ID, p.Name, p.Level, nil}
+			list[i] = person{p.ID, p.Name, p.Level, p.Ends, nil}
 			if l := p.Link; l != nil {
 				list[i].Link = &link{named{l.Creator, acc.PersonName(l.Creator)}, l.Created, l.Expires}
 			}
@@ -61,7 +64,7 @@ func handlePersons(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 		if !decode(w, r, &req) {
 			return
 		}
-		p, err := acc.CreatePerson(by(r), req.Name, req.Level)
+		p, err := acc.CreatePerson(by(r), req.Name, req.Level, req.Ends)
 		if err != nil {
 			reply(w, err)
 			return
@@ -71,7 +74,7 @@ func handlePersons(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 	mux.HandleFunc("PUT /api/persons/{id}", func(w http.ResponseWriter, r *http.Request) {
 		var req definition
 		if decode(w, r, &req) {
-			reply(w, acc.EditPerson(by(r), r.PathValue("id"), req.Name, req.Level))
+			reply(w, acc.EditPerson(by(r), r.PathValue("id"), req.Name, req.Level, req.Ends))
 		}
 	})
 	mux.HandleFunc("DELETE /api/persons/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -104,12 +107,16 @@ func handlePersons(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 		}
 	})
 
-	// Whom a Sign-in link signs in, for its welcome page, before it is spent.
+	// Whom a Sign-in link signs in, for its welcome page, before it is spent:
+	// their Name, and a Guest's end date, if any.
 	mux.HandleFunc("POST /api/sign-in/link/person", atSignInOrigin(public, func(w http.ResponseWriter, r *http.Request) {
 		var req secret
 		if decode(w, r, &req) {
-			name, err := acc.LinkedName(req.Secret, access.Browser(r.UserAgent()))
-			respond(w, map[string]string{"name": name}, err)
+			p, err := acc.LinkedPerson(req.Secret, access.Browser(r.UserAgent()))
+			respond(w, struct {
+				Name string    `json:"name"`
+				Ends time.Time `json:"ends,omitzero"`
+			}{p.Name, p.Ends}, err)
 		}
 	}))
 	mux.HandleFunc("POST /api/sign-in/link", atSignInOrigin(public, func(w http.ResponseWriter, r *http.Request) {

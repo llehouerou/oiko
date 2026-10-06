@@ -15,7 +15,7 @@ import (
 // claimed.
 func person(t *testing.T, s *Store, alice Identity, name string, level Level) Person {
 	t.Helper()
-	p, err := s.CreatePerson(alice, name, level)
+	p, err := s.CreatePerson(alice, name, level, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,8 +63,8 @@ func TestAnInvitedPersonSignsInWithTheirLink(t *testing.T) {
 	if len(secret) < 22 || !expires.Equal(c.t.Add(24*time.Hour)) { // 128 bits in base32
 		t.Errorf("CreateLink = %q, %v; want 128 bits, for 24 hours", secret, expires)
 	}
-	if name, err := s.LinkedName(secret, ""); err != nil || name != "Bob" {
-		t.Errorf("LinkedName = %q, %v; want Bob", name, err)
+	if p, err := s.LinkedPerson(secret, ""); err != nil || p.Name != "Bob" {
+		t.Errorf("LinkedPerson = %+v, %v; want Bob", p, err)
 	}
 	bobs, err := s.SignInWithLink(secret, "Safari on iPhone")
 	if err != nil {
@@ -81,7 +81,7 @@ func TestAnInvitedPersonSignsInWithTheirLink(t *testing.T) {
 	if _, err := s.SignInWithLink(secret, ""); !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "ask whoever sent it") {
 		t.Errorf("used again: %v, want refused, telling to ask whoever sent it", err)
 	}
-	if _, err := s.LinkedName(secret, ""); !errors.Is(err, ErrRefused) {
+	if _, err := s.LinkedPerson(secret, ""); !errors.Is(err, ErrRefused) {
 		t.Error("a used link still names its Person")
 	}
 	if l := linkOf(t, s, alice, bob.ID); l != nil {
@@ -118,11 +118,11 @@ func TestALinkLasts24HoursFromAnAdminAnd15MinutesForOneself(t *testing.T) {
 				t.Errorf("expires %v after creation, want %v", expires.Sub(clk.t), c.life)
 			}
 			clk.advance(c.life)
-			if _, err := s.LinkedName(secret, ""); err != nil {
+			if _, err := s.LinkedPerson(secret, ""); err != nil {
 				t.Error("refused at its last instant")
 			}
 			clk.advance(time.Nanosecond)
-			if _, err := s.LinkedName(secret, ""); err == nil {
+			if _, err := s.LinkedPerson(secret, ""); err == nil {
 				t.Error("named its Person once expired")
 			}
 			if _, err := s.SignInWithLink(secret, ""); !errors.Is(err, ErrRefused) {
@@ -155,13 +155,13 @@ func TestAPersonHasOnePendingLinkWhichAnAdminRevokes(t *testing.T) {
 	first := link(t, s, alice, bob.ID)
 	c.advance(time.Minute)
 	bobID := signedInAs(t, s, alice, bob.ID) // Bob, signed in by a second link
-	if _, err := s.LinkedName(first, ""); err == nil {
+	if _, err := s.LinkedPerson(first, ""); err == nil {
 		t.Error("a second link left the first one pending")
 	}
 	// Bob's own link replaces Alice's, whoever created it.
 	byAlice := link(t, s, alice, bob.ID)
 	byBob := link(t, s, bobID, bob.ID)
-	if _, err := s.LinkedName(byAlice, ""); err == nil {
+	if _, err := s.LinkedPerson(byAlice, ""); err == nil {
 		t.Error("Bob's link left Alice's pending")
 	}
 	l := linkOf(t, s, alice, bob.ID)
@@ -191,8 +191,8 @@ func TestOnlyAFreshAdminPersonManagesPersonsAndOthersLinks(t *testing.T) {
 	bobID := signedInAs(t, s, alice, bob.ID)
 	for name, by := range map[string]Identity{"an Admin Program": bot, "a stale Admin": stale, "a Member": bobID, "anonymous": {}} {
 		for action, err := range map[string]error{
-			"create":      func() error { _, err := s.CreatePerson(by, "Carol", Guest); return err }(),
-			"edit":        s.EditPerson(by, alice.ID, "Alice", Guest),
+			"create":      func() error { _, err := s.CreatePerson(by, "Carol", Guest, time.Time{}); return err }(),
+			"edit":        s.EditPerson(by, alice.ID, "Alice", Guest, time.Time{}),
 			"remove":      s.RemovePerson(by, alice.ID),
 			"link":        func() error { _, _, err := s.CreateLink(by, alice.ID); return err }(),
 			"revoke link": s.RevokeLink(by, bob.ID),
@@ -215,10 +215,10 @@ func TestOnlyAFreshAdminPersonManagesPersonsAndOthersLinks(t *testing.T) {
 	if _, _, err := s.CreateLink(bobID, bob.ID); !errors.Is(err, ErrStale) {
 		t.Errorf("a stale Session's own link: %v, want ErrStale", err)
 	}
-	if _, err := s.CreatePerson(alice, " ", Guest); !errors.Is(err, home.ErrInvalid) {
+	if _, err := s.CreatePerson(alice, " ", Guest, time.Time{}); !errors.Is(err, home.ErrInvalid) {
 		t.Errorf("an empty Name: %v, want ErrInvalid", err)
 	}
-	if _, err := s.CreatePerson(alice, "Carol", "owner"); !errors.Is(err, home.ErrInvalid) {
+	if _, err := s.CreatePerson(alice, "Carol", "owner", time.Time{}); !errors.Is(err, home.ErrInvalid) {
 		t.Errorf("an unknown level: %v, want ErrInvalid", err)
 	}
 	if _, _, err := s.CreateLink(alice, "unknown"); !errors.Is(err, home.ErrNotFound) {
@@ -246,7 +246,7 @@ func TestTheLastAdminPersonIsNeitherDemotedNorRemoved(t *testing.T) {
 	alice := admin(t, s, session)
 	_, token := program(t, s, alice, "Node-RED", Admin) // an Admin, but no Person
 	for action, err := range map[string]error{
-		"demoting": s.EditPerson(alice, alice.ID, "Alice", Member),
+		"demoting": s.EditPerson(alice, alice.ID, "Alice", Member, time.Time{}),
 		"removing": s.RemovePerson(alice, alice.ID),
 	} {
 		if !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "last Admin") {
@@ -258,13 +258,13 @@ func TestTheLastAdminPersonIsNeitherDemotedNorRemoved(t *testing.T) {
 	}
 	// With a second Admin, either may go.
 	bob := person(t, s, alice, "Bob", Admin)
-	if err := s.EditPerson(alice, bob.ID, "Bob", Member); err != nil {
+	if err := s.EditPerson(alice, bob.ID, "Bob", Member, time.Time{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.EditPerson(alice, alice.ID, "Alice", Member); !errors.Is(err, ErrRefused) {
+	if err := s.EditPerson(alice, alice.ID, "Alice", Member, time.Time{}); !errors.Is(err, ErrRefused) {
 		t.Errorf("demoting the last Admin again: %v, want ErrRefused", err)
 	}
-	if err := s.EditPerson(alice, bob.ID, "Bob", Admin); err != nil {
+	if err := s.EditPerson(alice, bob.ID, "Bob", Admin, time.Time{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.RemovePerson(alice, bob.ID); err != nil {
@@ -281,13 +281,13 @@ func TestChangingAPersonsLevelEndsTheirStreamsNotTheirSessions(t *testing.T) {
 	alice := admin(t, s, session)
 	bob := person(t, s, alice, "Bob", Member)
 	phone, laptop := signedInAs(t, s, alice, bob.ID), signedInAs(t, s, alice, bob.ID)
-	if err := s.EditPerson(alice, bob.ID, "Robert", Member); err != nil {
+	if err := s.EditPerson(alice, bob.ID, "Robert", Member, time.Time{}); err != nil {
 		t.Fatal(err)
 	}
 	if closed(phone.Ended) || closed(laptop.Ended) {
 		t.Error("a rename closed the streams")
 	}
-	if err := s.EditPerson(alice, bob.ID, "Robert", Guest); err != nil {
+	if err := s.EditPerson(alice, bob.ID, "Robert", Guest, time.Time{}); err != nil {
 		t.Fatal(err)
 	}
 	if !closed(phone.Ended) || !closed(laptop.Ended) {
@@ -361,7 +361,7 @@ func TestAPersonRenamesThemselfButNeverChangesTheirLevel(t *testing.T) {
 	person(t, s, alice, "Carol", Admin)
 	alice = admin(t, s, session)
 	alice.Fresh = true
-	if err := s.EditPerson(alice, alice.ID, "Alice", Member); !errors.Is(err, ErrRefused) {
+	if err := s.EditPerson(alice, alice.ID, "Alice", Member, time.Time{}); !errors.Is(err, ErrRefused) {
 		t.Errorf("an Admin demoting themself: %v, want ErrRefused", err)
 	}
 }
@@ -379,8 +379,8 @@ func TestLinksSurviveARestartAndPersonsJSONHoldsNoSecret(t *testing.T) {
 	if strings.Contains(string(data), secret) {
 		t.Error("persons.json holds the link's secret")
 	}
-	if name, err := open(t, dir, c).LinkedName(secret, ""); err != nil || name != "Bob" {
-		t.Errorf("after a restart: %q, %v", name, err)
+	if p, err := open(t, dir, c).LinkedPerson(secret, ""); err != nil || p.Name != "Bob" {
+		t.Errorf("after a restart: %+v, %v", p, err)
 	}
 	// An expired link is dropped from the document.
 	c.advance(25 * time.Hour)

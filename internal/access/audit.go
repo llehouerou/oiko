@@ -41,22 +41,24 @@ const (
 
 // Changes to access.
 const (
-	SignedIn       Event = "signed-in"       // a Session started; "method" tells how: setup, passkey or link (its "by" if not their own)
-	SessionEnded   Event = "session-ended"   // "reason": signed out, expired, or removed with its Person
-	PersonCreated  Event = "person-created"  // "level"
-	PersonRenamed  Event = "person-renamed"  // "from" the previous Name
-	PersonRemoved  Event = "person-removed"  //
-	LevelChanged   Event = "level-changed"   // a Person's or a Program's, "from" and "to"
-	LinkCreated    Event = "link-created"    // "expires"
-	LinkRevoked    Event = "link-revoked"    //
-	LinkExpired    Event = "link-expired"    // unused, dated when it expired
-	PasskeyAdded   Event = "passkey-added"   // "provider", if known
-	PasskeyRemoved Event = "passkey-removed" // "provider", if known
-	ProgramCreated Event = "program-created" // "level"
-	ProgramRenamed Event = "program-renamed" // "from" the previous Name
-	ProgramRemoved Event = "program-removed" //
-	TokenGenerated Event = "token-generated" //
-	TokenRevoked   Event = "token-revoked"   //
+	SignedIn       Event = "signed-in"        // a Session started; "method" tells how: setup, passkey or link (its "by" if not their own)
+	SessionEnded   Event = "session-ended"    // "reason": signed out, expired, access ended, or removed with its Person
+	PersonCreated  Event = "person-created"   // "level"
+	PersonRenamed  Event = "person-renamed"   // "from" the previous Name
+	PersonRemoved  Event = "person-removed"   //
+	LevelChanged   Event = "level-changed"    // a Person's or a Program's, "from" and "to"
+	EndDateChanged Event = "end-date-changed" // a Guest's, set, changed or removed: "from" and "to", null for none
+	EndDateReached Event = "end-date-reached" // dated when it came: the Guest's Sessions ended
+	LinkCreated    Event = "link-created"     // "expires"
+	LinkRevoked    Event = "link-revoked"     //
+	LinkExpired    Event = "link-expired"     // unused, dated when it expired
+	PasskeyAdded   Event = "passkey-added"    // "provider", if known
+	PasskeyRemoved Event = "passkey-removed"  // "provider", if known
+	ProgramCreated Event = "program-created"  // "level"
+	ProgramRenamed Event = "program-renamed"  // "from" the previous Name
+	ProgramRemoved Event = "program-removed"  //
+	TokenGenerated Event = "token-generated"  //
+	TokenRevoked   Event = "token-revoked"    //
 )
 
 // Parties that are no identity.

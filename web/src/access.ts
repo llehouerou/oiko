@@ -71,8 +71,8 @@ export async function claim(secret: string, name: string) {
   return null
 }
 
-// Whom the Sign-in link of secret signs in: their Name, or why it no longer works.
-export async function linkPerson(secret: string): Promise<{ name: string } | { error: string }> {
+// Whom the Sign-in link of secret signs in: their Name and a Guest's end date, or why it no longer works.
+export async function linkPerson(secret: string): Promise<{ name: string; ends?: string } | { error: string }> {
   const res = await post('/api/sign-in/link/person', { secret })
   return res.ok ? res.json() : { error: (await res.text()).trim() }
 }

@@ -203,6 +203,8 @@ func (s *Store) FinishSignIn(origin string, response []byte, browser string) (st
 		err = fmt.Errorf("%w: this Passkey belongs to no one in this Oiko; ask an Admin for a Sign-in link", ErrRefused)
 	case err != nil:
 		err = passkeyRefused(err)
+	case over(s.persons[who], s.now()):
+		err = errAccessEnded
 	default:
 		err = s.signedWith(who, credential)
 	}

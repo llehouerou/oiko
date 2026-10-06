@@ -11,6 +11,20 @@ const secondary = 'rounded bg-neutral-800 px-3 py-1 hover:bg-neutral-700'
 
 export const date = (t: string) => new Date(t).toLocaleString([], { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
+// A Guest's end date is picked as the last day of their access, in this browser's time zone: it ends
+// as the next one begins. endsAfter is that instant for a date input's value, null for none; lastDay
+// is the date input's value for an end date.
+export function endsAfter(day: string): string | null {
+  if (!day) return null
+  const [y, m, d] = day.split('-').map(Number)
+  return new Date(y!, m! - 1, d! + 1).toISOString()
+}
+export function lastDay(ends: string): string {
+  const t = new Date(new Date(ends).getTime() - 1)
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
+}
+export const day = (ends: string) => new Date(new Date(ends).getTime() - 1).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })
+
 export function LevelSelect(props: { name?: string; defaultValue?: Level; value?: Level; onChange?: (l: Level) => void }) {
   const { onChange, ...rest } = props
   return (

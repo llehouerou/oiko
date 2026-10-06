@@ -69,11 +69,14 @@ func (l Level) Allows(need Level) bool {
 	return l.valid() && need.valid() && slices.Index(levels, l) >= slices.Index(levels, need)
 }
 
-// Person is a human known to Oiko.
+// Person is a human known to Oiko. A Guest may have an end date, when their
+// access ends while they stay (ADR 0030).
 type Person struct {
 	ID       string    `json:"id"`
 	Name     string    `json:"name"`
 	Level    Level     `json:"level"`
+	Ends     time.Time `json:"ends,omitzero"`
+	Ended    bool      `json:"ended,omitempty"` // Oiko noticed their end date came: their Sessions ended
 	Passkeys []Passkey `json:"passkeys,omitempty"`
 	Link     *Link     `json:"link,omitempty"` // their unused Sign-in link, if any
 }
@@ -179,18 +182,13 @@ func Open(dir string, now func() time.Time, audit func(Entry)) (*Store, error) {
 		return nil, err
 	}
 	for _, x := range sessions {
-		switch {
-		case s.person(x.Person) < 0: // recorded with its Person's removal
-		case s.ended(x):
-			s.recordExpiry(x)
-		default:
+		if s.person(x.Person) >= 0 { // else recorded with its Person's removal
 			s.sessions[x.Hash] = x
 		}
 	}
-	if len(s.sessions) < len(sessions) {
-		if err := s.saveSessions(); err != nil {
-			return nil, err
-		}
+	// Notices, and records, what ended while Oiko was stopped.
+	if err := s.saveSessions(); err != nil {
+		return nil, err
 	}
 	if slices.ContainsFunc(s.persons, func(p Person) bool { return p.Link != nil && !live(p.Link, now()) }) {
 		if err := s.savePersons(slices.Clone(s.persons)); err != nil {
@@ -377,8 +375,14 @@ func (s *Store) end(x *session) error {
 	return s.saveSessions()
 }
 
-// ended reports whether Session x is past a lifetime.
-func (s *Store) ended(x *session) bool { return s.now().After(s.endOf(x)) }
+// ended reports whether Session x is past a lifetime, or its Person's access
+// has ended.
+func (s *Store) ended(x *session) bool {
+	if i := s.person(x.Person); i >= 0 && over(s.persons[i], s.now()) {
+		return true
+	}
+	return s.now().After(s.endOf(x))
+}
 
 // endOf is when Session x ends unless used again.
 func (s *Store) endOf(x *session) time.Time {
@@ -401,8 +405,10 @@ func (s *Store) person(id string) int {
 }
 
 // saveSessions writes every Session, deleting, and recording, those that
-// ended unnoticed. Callers hold s.mu.
+// ended unnoticed, a Guest's whose end date came among them. Callers hold
+// s.mu.
 func (s *Store) saveSessions() error {
+	s.notice()
 	all := make([]*session, 0, len(s.sessions))
 	for h, x := range s.sessions {
 		if s.ended(x) {

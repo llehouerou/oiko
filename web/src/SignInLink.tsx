@@ -1,16 +1,17 @@
 // The page a Sign-in link opens (/sign-in#<secret>): it tells whom the link signs in ("You've been
-// invited to Oiko as Bob"), and Continue signs them in, then offers a Passkey (ADR 0030). A link
-// that no longer works says so, naming no one.
+// invited to Oiko as Bob", and a Guest's end date), and Continue signs them in, then offers a Passkey
+// (ADR 0030). A link that no longer works says so, naming no one; a Guest whose access ended is told so.
 
 import { useEffect, useState } from 'react'
 import { mdiHomeAutomation } from '@mdi/js'
 import { Svg } from './icons'
 import { linkPerson, signInWithLink } from './access'
 import { PasskeyOffer } from './passkeys'
+import { day } from './manage'
 
 export function SignInLink({ onDone }: { onDone: () => void }) {
   const [secret] = useState(() => location.hash.slice(1))
-  const [person, setPerson] = useState<{ name: string } | { error: string } | null>(null)
+  const [person, setPerson] = useState<{ name: string; ends?: string } | { error: string } | null>(null)
   const [offer, setOffer] = useState(false)
   useEffect(() => void linkPerson(secret).then(setPerson), [secret])
   const proceed = async () => {
@@ -41,7 +42,8 @@ export function SignInLink({ onDone }: { onDone: () => void }) {
         ) : person ? (
           <>
             <p>
-              You've been invited to Oiko as <strong>{person.name}</strong>.
+              You've been invited to Oiko as <strong>{person.name}</strong>
+              {person.ends ? `, until the end of ${day(person.ends)}` : ''}.
             </p>
             <button onClick={proceed} className={primary}>
               Continue

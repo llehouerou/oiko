@@ -33,8 +33,60 @@ type Link struct {
 // (ADR 0030).
 var errLinkEnded = fmt.Errorf("%w: this Sign-in link has expired or was already used; ask whoever sent it for a new one", ErrRefused)
 
+// errAccessEnded refuses a Guest past their end date (ADR 0030).
+var errAccessEnded = fmt.Errorf("%w: your access to Oiko has ended; ask an Admin if it should go on", ErrRefused)
+
 // live reports whether l is a link that still signs in at now.
 func live(l *Link, now time.Time) bool { return l != nil && !now.After(l.Expires) }
+
+// over reports whether p is a Guest whose end date has come at now.
+func over(p Person, now time.Time) bool { return !p.Ends.IsZero() && !now.Before(p.Ends) }
+
+// validEnds checks the end date of a Person at level, zero for none: only a
+// Guest has one (ADR 0030).
+func validEnds(level Level, ends time.Time) error {
+	if !ends.IsZero() && level != Guest {
+		return fmt.Errorf("%w: only a Guest has an end date", home.ErrInvalid)
+	}
+	return nil
+}
+
+// endsDetail is how the Audit log tells end date t: null for none.
+func endsDetail(t time.Time) any {
+	if t.IsZero() {
+		return nil
+	}
+	return t
+}
+
+// notice ends the access of each Guest whose end date came unnoticed: their
+// Sessions end, recorded as of their end date. Callers hold s.mu, and write
+// the Sessions.
+func (s *Store) notice() {
+	var ps []Person
+	for i, p := range s.persons {
+		if p.Ended || !over(p, s.now()) {
+			continue
+		}
+		if ps == nil {
+			ps = slices.Clone(s.persons)
+		}
+		ps[i].Ended = true
+		s.record(Entry{Time: p.Ends, Event: EndDateReached, Actor: oiko, Subject: personParty(p)})
+		for h, x := range s.sessions {
+			if x.Person == p.ID {
+				delete(s.sessions, h)
+				s.finish(h)
+				s.record(Entry{Time: p.Ends, Event: SessionEnded, Actor: oiko, Subject: personParty(p), Browser: x.Browser, Detail: map[string]any{"reason": "access ended"}})
+			}
+		}
+	}
+	if ps != nil {
+		if err := s.savePersons(ps); err != nil {
+			slog.Error("access: writing that a Guest's access ended", "err", err)
+		}
+	}
+}
 
 // Persons answers every Person, oldest first, each with their pending
 // Sign-in link if any, to an Admin Person.
@@ -54,33 +106,43 @@ func (s *Store) Persons(by Identity) ([]Person, error) {
 }
 
 // CreatePerson creates a Person, who has not signed in yet, for a fresh
-// Admin Person (ADR 0030).
-func (s *Store) CreatePerson(by Identity, name string, level Level) (Person, error) {
+// Admin Person (ADR 0030); a Guest may have an end date, zero for none.
+func (s *Store) CreatePerson(by Identity, name string, level Level, ends time.Time) (Person, error) {
 	if err := mayManage(by, true); err != nil {
 		return Person{}, err
 	}
 	name, err := validDefinition(name, level)
+	if err == nil {
+		err = validEnds(level, ends)
+	}
 	if err != nil {
 		return Person{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p := Person{ID: uuid.NewV7().String(), Name: name, Level: level}
+	p := Person{ID: uuid.NewV7().String(), Name: name, Level: level, Ends: ends}
 	if err := s.savePersons(append(slices.Clone(s.persons), p)); err != nil {
 		return Person{}, err
 	}
 	s.record(Entry{Event: PersonCreated, Actor: party(by), Subject: personParty(p), Detail: map[string]any{"level": level}})
+	if !ends.IsZero() {
+		s.record(Entry{Event: EndDateChanged, Actor: party(by), Subject: personParty(p), Detail: map[string]any{"from": nil, "to": ends}})
+	}
 	return p, nil
 }
 
-// EditPerson renames Person id and sets their Access level, for a fresh
-// Admin Person, never their own level; a new level ends their open event
-// streams, not their Sessions.
-func (s *Store) EditPerson(by Identity, id, name string, level Level) error {
+// EditPerson renames Person id and sets their Access level and end date,
+// for a fresh Admin Person, never their own level. A new level ends their
+// open event streams, not their Sessions; an end date that has come ends
+// their Sessions.
+func (s *Store) EditPerson(by Identity, id, name string, level Level, ends time.Time) error {
 	if err := mayManage(by, true); err != nil { // refused before told what is invalid
 		return err
 	}
 	name, err := validDefinition(name, level)
+	if err == nil {
+		err = validEnds(level, ends)
+	}
 	if err != nil {
 		return err
 	}
@@ -102,6 +164,9 @@ func (s *Store) EditPerson(by Identity, id, name string, level Level) error {
 	was := s.persons[i]
 	ps := slices.Clone(s.persons)
 	ps[i].Name, ps[i].Level = name, level
+	if !ends.Equal(was.Ends) {
+		ps[i].Ends, ps[i].Ended = ends, false
+	}
 	if err := s.savePersons(ps); err != nil {
 		return err
 	}
@@ -114,6 +179,12 @@ func (s *Store) EditPerson(by Identity, id, name string, level Level) error {
 			if x.Person == id {
 				s.finish(h)
 			}
+		}
+	}
+	if !ends.Equal(was.Ends) {
+		s.record(Entry{Event: EndDateChanged, Actor: party(by), Subject: personParty(ps[i]), Detail: map[string]any{"from": endsDetail(was.Ends), "to": endsDetail(ends)}})
+		if err := s.saveSessions(); err != nil { // notices an end date already come
+			return err
 		}
 	}
 	return nil
@@ -196,6 +267,9 @@ func (s *Store) CreateLink(by Identity, id string) (string, time.Time, error) {
 	if err != nil {
 		return "", time.Time{}, err
 	}
+	if over(s.persons[i], s.now()) {
+		return "", time.Time{}, fmt.Errorf("%w: the access of %s has ended; give them a new end date first", ErrRefused, s.persons[i].Name)
+	}
 	secret, now := rand.Text(), s.now()
 	ps := slices.Clone(s.persons)
 	ps[i].Link = &Link{Hash: hash(secret), Creator: by.ID, Created: now, Expires: now.Add(life)}
@@ -230,16 +304,16 @@ func (s *Store) RevokeLink(by Identity, id string) error {
 	return nil
 }
 
-// LinkedName answers the Name of the Person the Sign-in link of secret signs
-// in, for its welcome page in browser, without spending it.
-func (s *Store) LinkedName(secret, browser string) (string, error) {
+// LinkedPerson answers the Person the Sign-in link of secret signs in, for
+// its welcome page in browser, without spending it.
+func (s *Store) LinkedPerson(secret, browser string) (Person, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	i, err := s.linked(secret, browser)
 	if err != nil {
-		return "", err
+		return Person{}, err
 	}
-	return s.persons[i].Name, nil
+	return s.persons[i], nil
 }
 
 // SignInWithLink spends the Sign-in link of secret: it answers the secret of
@@ -271,13 +345,18 @@ func (s *Store) SignInWithLink(secret, browser string) (string, error) {
 }
 
 // linked is the index of the Person whom the Sign-in link of secret signs
-// in now; refused, and recorded, if none. Callers hold s.mu.
+// in now; refused, and recorded, if none, or their access has ended. Callers
+// hold s.mu.
 func (s *Store) linked(secret, browser string) (int, error) {
 	h := hash(secret)
 	i := slices.IndexFunc(s.persons, func(p Person) bool { return live(p.Link, s.now()) && p.Link.Hash == h })
-	if i < 0 {
+	switch {
+	case i < 0:
 		s.record(Entry{Event: LinkRefused, Actor: nobody, Subject: nobody, Browser: browser})
 		return 0, errLinkEnded
+	case over(s.persons[i], s.now()):
+		s.record(Entry{Event: LinkRefused, Actor: nobody, Subject: personParty(s.persons[i]), Browser: browser, Detail: map[string]any{"reason": "access ended"}})
+		return 0, errAccessEnded
 	}
 	return i, nil
 }

@@ -143,6 +143,57 @@ func TestChangingAPersonsLevelClosesTheirStreams(t *testing.T) {
 	next(t, stream(t, func(method, path, body string) *http.Response { return do(method, path, body, cookie) }), "snapshot")
 }
 
+func TestAGuestsEndDate(t *testing.T) {
+	_, acc, hdl := handlerAt(t, nil)
+	srv := httptest.NewServer(hdl)
+	t.Cleanup(srv.Close)
+	alice, _ := signedIn(t, acc)
+	do := browser(t, srv, "http://localhost:8080")
+	ends := time.Now().Add(24 * time.Hour).Truncate(time.Second).UTC()
+	if resp := do("POST", "/api/persons", `{"name":"Carol","level":"member","ends":"`+ends.Format(time.RFC3339)+`"}`, alice); resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("a Member with an end date: %d, want 400", resp.StatusCode)
+	}
+	bob := decodeAs[struct{ ID string }](t, do("POST", "/api/persons", `{"name":"Bob","level":"guest","ends":"`+ends.Format(time.RFC3339)+`"}`, alice), http.StatusCreated).ID
+	secret := decodeAs[struct{ Secret string }](t, do("POST", "/api/persons/"+bob+"/sign-in-link", "", alice), http.StatusCreated).Secret
+
+	// His welcome page tells his end date.
+	welcome := decodeAs[struct {
+		Name string
+		Ends time.Time
+	}](t, do("POST", "/api/sign-in/link/person", `{"secret":"`+secret+`"}`, nil), http.StatusOK)
+	if welcome.Name != "Bob" || !welcome.Ends.Equal(ends) {
+		t.Errorf("his welcome: %+v, want Bob until %v", welcome, ends)
+	}
+	cookie := session(t, do("POST", "/api/sign-in/link", `{"secret":"`+secret+`"}`, nil))
+	persons := decodeAs[[]struct{ Ends *time.Time }](t, do("GET", "/api/persons", "", alice), http.StatusOK)
+	if persons[0].Ends != nil || persons[1].Ends == nil || !persons[1].Ends.Equal(ends) {
+		t.Errorf("end dates listed: Alice's %v, Bob's %v", persons[0].Ends, persons[1].Ends)
+	}
+
+	// An end date already come ends his Session and closes his stream at once.
+	msgs := stream(t, func(method, path, body string) *http.Response { return do(method, path, body, cookie) })
+	next(t, msgs, "snapshot")
+	past := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
+	read(t, do("PUT", "/api/persons/"+bob, `{"name":"Bob","level":"guest","ends":"`+past+`"}`, alice), http.StatusNoContent)
+	timeout := time.After(5 * time.Second)
+	for open := true; open; {
+		select {
+		case _, open = <-msgs:
+		case <-timeout:
+			t.Fatal("his stream outlived his end date")
+		}
+	}
+	if resp := do("GET", "/api/updates", "", cookie); resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("his Session after his end date: %d, want 401", resp.StatusCode)
+	}
+	if b := read(t, do("POST", "/api/persons/"+bob+"/sign-in-link", "", alice), http.StatusForbidden); !strings.Contains(string(b), "has ended") {
+		t.Errorf("a link for him: %s", b)
+	}
+	// Promoted, he has no end date, and is back.
+	read(t, do("PUT", "/api/persons/"+bob, `{"name":"Bob","level":"member","ends":null}`, alice), http.StatusNoContent)
+	read(t, do("POST", "/api/persons/"+bob+"/sign-in-link", "", alice), http.StatusCreated)
+}
+
 func TestOnlyAnAdminPersonManagesPersons(t *testing.T) {
 	_, acc, hdl := handlerAt(t, nil)
 	srv := httptest.NewServer(hdl)

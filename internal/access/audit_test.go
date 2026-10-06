@@ -103,7 +103,7 @@ func TestChangesToPersonsAndLinksAreRecorded(t *testing.T) {
 	bobs := personParty(bob)
 	recorded(t, c.take(), Entry{Event: PersonCreated, Actor: me, Subject: bobs, Detail: map[string]any{"level": Member}})
 
-	if err := s.EditPerson(alice, bob.ID, "Robert", Guest); err != nil {
+	if err := s.EditPerson(alice, bob.ID, "Robert", Guest, time.Time{}); err != nil {
 		t.Fatal(err)
 	}
 	robert := Party{PersonKind, bob.ID, "Robert"}
@@ -247,7 +247,7 @@ func TestARefusedLinkIsRecordedAnonymously(t *testing.T) {
 	c := newClock()
 	s, _ := claimed(t, t.TempDir(), c)
 	c.take()
-	s.LinkedName("bogus", "Chrome on Android")
+	s.LinkedPerson("bogus", "Chrome on Android")
 	s.SignInWithLink("bogus", "Chrome on Android")
 	refused := Entry{Event: LinkRefused, Actor: nobody, Subject: nobody, Browser: "Chrome on Android"}
 	recorded(t, c.take(), refused, refused)

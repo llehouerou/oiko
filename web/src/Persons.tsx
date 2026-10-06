@@ -1,7 +1,7 @@
-// The Admin page of Persons (#persons): who is known to Oiko, at which Access level, and their
-// pending Sign-in link, if any (ADR 0030). An Admin creates a Person, then a Sign-in link to invite
-// them, or to let them back in once they lost every Passkey. Every change asks for step-up first;
-// Oiko keeps its last Admin Person.
+// The Admin page of Persons (#persons): who is known to Oiko, at which Access level, a Guest's end
+// date, and their pending Sign-in link, if any (ADR 0030). An Admin creates a Person, then a Sign-in
+// link to invite them, or to let them back in once they lost every Passkey. Every change asks for
+// step-up first; Oiko keeps its last Admin Person.
 
 import { useEffect, useState, type FormEvent } from 'react'
 import { AppBar } from './AppBar'
@@ -9,12 +9,13 @@ import { confirm } from './confirm'
 import { edit } from './store'
 import { api, levels, loadMe, signInLink, useMe, type Level } from './access'
 import { stepUp } from './passkeys'
-import { date, LevelSelect, ShareLink } from './manage'
+import { date, day, endsAfter, lastDay, LevelSelect, ShareLink } from './manage'
 
 type Person = {
   id: string
   name: string
   level: Level
+  ends?: string // a Guest's end date
   link: { creator: { id: string; name?: string }; created: string; expires: string } | null // pending
 }
 
@@ -34,16 +35,22 @@ export function Persons() {
   const change = async (err: string | null) => (setError(err), load(), loadMe())
   // A change, once step-up allows it.
   const fresh = async (method: 'PUT' | 'DELETE' | 'POST', path: string, body?: unknown) => (await stepUp()) && change(await edit(method, path, body))
+  const [level, setLevel] = useState<Level>('member') // of the Person to create
   const create = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const form = e.currentTarget
     const data = new FormData(form)
     if (!(await stepUp())) return
-    const err = await edit('POST', 'persons', { name: data.get('name'), level: data.get('level') })
+    const err = await edit('POST', 'persons', { name: data.get('name'), level, ends: endsAfter(String(data.get('ends') ?? '')) })
     if (!err) form.reset()
     change(err)
   }
-  const rename = (p: Person, name: string) => name.trim() !== p.name && fresh('PUT', `persons/${p.id}`, { name, level: p.level })
+  // What p is to be, changed: a Guest keeps their end date unless given another; no one else has one.
+  const define = (p: Person, edits: { name?: string; level?: Level; ends?: string | null }) => {
+    const d = { name: p.name, level: p.level, ends: p.ends ?? null, ...edits }
+    return fresh('PUT', `persons/${p.id}`, { ...d, ends: d.level === 'guest' ? d.ends : null })
+  }
+  const rename = (p: Person, name: string) => name.trim() !== p.name && define(p, { name })
   const invite = async (p: Person) => {
     if (p.link && !(await confirm(`A new Sign-in link for ${p.name} stops the pending one.`, 'Create'))) return
     if (!(await stepUp())) return
@@ -69,7 +76,13 @@ export function Persons() {
         {error && <p className="text-red-400">{error}</p>}
         <form onSubmit={create} className="flex flex-wrap gap-2">
           <input name="name" required placeholder="Name" aria-label="Name" className="min-w-40 flex-1 rounded bg-neutral-800 px-2 py-1" />
-          <LevelSelect name="level" defaultValue="member" />
+          <LevelSelect value={level} onChange={setLevel} />
+          {level === 'guest' && (
+            <label className="flex items-center gap-2 text-neutral-400">
+              until
+              <input name="ends" type="date" aria-label="Last day of access" className="rounded bg-neutral-800 px-2 py-1 text-neutral-100" />
+            </label>
+          )}
           <button type="submit" className="rounded bg-amber-400 px-3 py-1 font-medium text-neutral-900 hover:bg-amber-300">
             Create
           </button>
@@ -90,9 +103,23 @@ export function Persons() {
                 {p.id === self ? (
                   <span className="text-neutral-400">{levels[p.level]} · you</span>
                 ) : (
-                  <LevelSelect value={p.level} onChange={(level) => fresh('PUT', `persons/${p.id}`, { name: p.name, level })} />
+                  <LevelSelect value={p.level} onChange={(level) => define(p, { level })} />
                 )}
               </div>
+              {p.level === 'guest' && (
+                <label className="flex flex-wrap items-center gap-2 text-neutral-400">
+                  {p.ends && new Date(p.ends) <= new Date() ? `Access ended on ${day(p.ends)}; a later day lets them back in:` : 'Access until the end of'}
+                  <input
+                    key={p.ends}
+                    type="date"
+                    defaultValue={p.ends ? lastDay(p.ends) : ''}
+                    aria-label="Last day of access"
+                    onChange={(e) => define(p, { ends: endsAfter(e.target.value) })}
+                    className="rounded bg-neutral-800 px-2 py-1 text-neutral-100"
+                  />
+                  {!p.ends && <span>(no end date)</span>}
+                </label>
+              )}
               {p.link && (
                 <p className="text-neutral-400">
                   Sign-in link created by {p.link.creator.name ?? 'a removed Person'} on {date(p.link.created)}, valid until {date(p.link.expires)}
