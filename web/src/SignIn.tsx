@@ -3,8 +3,7 @@
 // once on a screen that was one, whose Session ended (ADR 0029).
 
 import { useState } from 'react'
-import { mdiHomeAutomation } from '@mdi/js'
-import { Svg } from './icons'
+import { Mark } from './Logo'
 import { forgetKiosk, signInPage, wasKiosk, type Me } from './access'
 import { signInWithPasskey } from './passkeys'
 import { KioskOffer } from './Pairing'
@@ -17,9 +16,7 @@ export function SignIn({ me }: { me: Me }) {
     <main className="grid min-h-dvh place-items-center p-4 text-neutral-100">
       <div className="w-full max-w-sm space-y-5 rounded-xl bg-neutral-900 p-6 text-sm">
         <header className="flex items-center gap-3">
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-linear-to-br from-amber-300 to-orange-500 text-neutral-950">
-            <Svg path={mdiHomeAutomation} className="size-[62%]" />
-          </span>
+          <Mark />
           <h1 className="text-lg font-semibold">Sign in to Oiko</h1>
         </header>
         {page === 'unclaimed' && <p>This Oiko has no Admin yet. Open the Setup link Oiko's log shows at each start to claim it.</p>}

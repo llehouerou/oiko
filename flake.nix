@@ -55,6 +55,7 @@
             pkgs.nodejs_24
             pkgs.mosquitto
             pkgs.gnumake
+            pkgs.imagemagick # make icons
           ];
           # The browser test drives it (web/e2e).
           CHROMIUM = pkgs.lib.getExe pkgs.chromium;

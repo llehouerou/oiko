@@ -13,7 +13,6 @@ import {
   mdiCogOutline,
   mdiFlagPlusOutline,
   mdiGroup,
-  mdiHomeAutomation,
   mdiHomePlusOutline,
   mdiKeyVariant,
   mdiLogout,
@@ -28,6 +27,7 @@ import { Switch } from './controls'
 import { Svg } from './icons'
 import { useConnection } from './store'
 import { About } from './About'
+import { Logo } from './Logo'
 import { allows, levels, signOut, useMe } from './access'
 
 const pages = [
@@ -50,10 +50,7 @@ export function AppBar({ page, onLeave, settings }: { page?: Page; onLeave?: () 
       <div className="mx-auto flex h-16 max-w-[120rem] items-center gap-4 px-4 lg:px-8">
         <div className="flex flex-1 items-center">
           <button onClick={() => setAbout(true)} disabled={!admin} title={admin ? 'About Oiko' : undefined} className="flex items-center gap-3 rounded-xl">
-            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-linear-to-br from-amber-300 to-orange-500 text-neutral-950 shadow-lg shadow-amber-500/20">
-              <Svg path={mdiHomeAutomation} className="size-[62%]" />
-            </span>
-            <span className="hidden text-lg font-semibold sm:inline">Oiko</span>
+            <Logo />
           </button>
           {about && <About onClose={() => setAbout(false)} />}
         </div>

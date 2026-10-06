@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { mdiUpdate } from '@mdi/js'
 import { Svg } from './icons'
+import { Mark } from './Logo'
 import { useBridges, useReleases } from './store'
 import { api } from './access'
 import type { Build, ReleaseStatus } from './types'
@@ -44,8 +45,9 @@ export function About({ onClose }: { onClose: () => void }) {
       className="m-auto w-full max-w-lg rounded-xl bg-neutral-900 p-0 text-neutral-100 backdrop:bg-black/60"
     >
       <div className="space-y-5 p-5 text-sm">
-        <header className="flex items-start justify-between gap-3">
-          <div>
+        <header className="flex items-start gap-3">
+          <Mark />
+          <div className="flex-1">
             <h2 className="text-lg font-semibold">
               Oiko <span className="font-normal text-neutral-400">{build && (build.version ?? 'development build')}</span>
             </h2>

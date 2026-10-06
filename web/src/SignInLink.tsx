@@ -3,8 +3,7 @@
 // (ADR 0030). A link that no longer works says so, naming no one; a Guest whose access ended is told so.
 
 import { useEffect, useState } from 'react'
-import { mdiHomeAutomation } from '@mdi/js'
-import { Svg } from './icons'
+import { Mark } from './Logo'
 import { linkPerson, signInWithLink } from './access'
 import { PasskeyOffer } from './passkeys'
 import { day } from './manage'
@@ -25,9 +24,7 @@ export function SignInLink({ onDone }: { onDone: () => void }) {
     <main className="grid min-h-dvh place-items-center p-4 text-neutral-100">
       <div className="w-full max-w-sm space-y-5 rounded-xl bg-neutral-900 p-6 text-sm">
         <header className="flex items-center gap-3">
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-linear-to-br from-amber-300 to-orange-500 text-neutral-950">
-            <Svg path={mdiHomeAutomation} className="size-[62%]" />
-          </span>
+          <Mark />
           <h1 className="text-lg font-semibold">Oiko</h1>
         </header>
         {offer ? (
