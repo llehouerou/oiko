@@ -74,11 +74,9 @@ func (s *Store) notice() {
 		}
 		ps[i].Ended = true
 		s.record(Entry{Time: p.Ends, Event: EndDateReached, Actor: oiko, Subject: personParty(p)})
-		for h, x := range s.sessions {
+		for _, x := range s.sessions {
 			if x.Person == p.ID {
-				delete(s.sessions, h)
-				s.finish(h)
-				s.record(Entry{Time: p.Ends, Event: SessionEnded, Actor: oiko, Subject: personParty(p), Browser: x.Browser, Detail: map[string]any{"reason": "access ended"}})
+				s.endSession(x, oiko, personParty(p), "access ended", p.Ends)
 			}
 		}
 	}
@@ -211,11 +209,9 @@ func (s *Store) RemovePerson(by Identity, id string) error {
 		return err
 	}
 	s.record(Entry{Event: PersonRemoved, Actor: party(by), Subject: personParty(p)})
-	for h, x := range s.sessions {
+	for _, x := range s.sessions {
 		if x.Person == id {
-			delete(s.sessions, h)
-			s.finish(h)
-			s.record(Entry{Event: SessionEnded, Actor: party(by), Subject: personParty(p), Browser: x.Browser, Detail: map[string]any{"reason": "removed"}})
+			s.endSession(x, party(by), personParty(p), "removed", time.Time{})
 		}
 	}
 	// The Person is gone: Sessions left on disk without them are dropped on load.

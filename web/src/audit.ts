@@ -35,7 +35,10 @@ const sentences: Record<string, (e: Entry, a: string, s: string) => string> = {
   'passkey-refused': (e, _, s) => (e.subject.kind === 'unknown' ? 'An unknown Passkey was refused' : `A Passkey for ${s} was refused`),
   'token-refused': () => 'A Token was refused',
   'step-up-refused': (_, a) => `${a} did not confirm a Passkey`,
-  'pairing-refused': (e, a) => (e.actor.kind === 'unknown' ? 'A Kiosk pairing request was refused' : `${a} used a Kiosk pairing code that had expired`),
+  'pairing-refused': (e, a) => {
+    if (e.detail?.reason === 'refused') return `${a} refused to pair a screen as a Kiosk`
+    return e.actor.kind === 'unknown' ? 'A Kiosk pairing request was refused' : `${a} used a Kiosk pairing code that had expired`
+  },
   'signed-in': (e, _, s) => {
     const by = e.detail?.by as Party | undefined
     const how: Record<string, string> = {

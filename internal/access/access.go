@@ -331,7 +331,9 @@ func (s *Store) Resolve(secret string) (Identity, bool) {
 		s.end(x)
 		return Identity{}, false
 	case s.ended(x):
-		s.saveSessions() // records it ended
+		if err := s.saveSessions(); err != nil { // records it ended
+			slog.Error("access: writing an ended Session", "err", err)
+		}
 		return Identity{}, false
 	}
 	now := s.now()

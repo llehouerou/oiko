@@ -71,6 +71,12 @@ func handleKiosks(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 			Browser string    `json:"browser"`
 		}{p.Created, p.Browser}, err)
 	})
+	mux.HandleFunc("POST /api/kiosk-pairing/refuse", func(w http.ResponseWriter, r *http.Request) {
+		var req approval
+		if decode(w, r, &req) {
+			reply(w, acc.RefusePairing(by(r), req.Secret))
+		}
+	})
 	mux.HandleFunc("POST /api/kiosk-pairing/approve", func(w http.ResponseWriter, r *http.Request) {
 		var req approval
 		if !decode(w, r, &req) {

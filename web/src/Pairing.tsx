@@ -1,7 +1,7 @@
 // Kiosk pairing (ADR 0029). On the screen to pair, KioskOffer shows a QR code and waits: only this
 // browser, which holds the request's claim secret, receives the Kiosk's Session. On an Admin's phone,
-// the QR code opens /pair#<approval secret>, where ApprovePairing enrols the screen as a new Kiosk or
-// pairs an existing one again, after step-up.
+// the QR code opens /pair#<approval secret>, where ApprovePairing pairs the screen as a new Kiosk or
+// an existing one again, after step-up, or refuses it on the record.
 
 import { useEffect, useState, type FormEvent } from 'react'
 import { api, claimPairing, levels, pairLink, requestPairing, type Me } from './access'
@@ -76,6 +76,13 @@ export function ApprovePairing({ onDone }: { onDone: () => void }) {
     history.replaceState(null, '', '/pair') // spent: out of the address and the browser's history
     setApproved(kiosk ? (kiosks.find((k) => k.id === kiosk)?.name ?? '') : String(data.get('name')))
   }
+  // Not a screen the Admin is looking at: refused, and written to the Audit log.
+  const refuse = async () => {
+    const err = await edit('POST', 'kiosk-pairing/refuse', { secret })
+    if (err) return setError(err)
+    history.replaceState(null, '', '/pair')
+    setRequest({ error: 'Refused: that screen is not paired.' })
+  }
   const minutes = request && 'created' in request ? Math.round((Date.now() - new Date(request.created).getTime()) / 60000) : 0
   return (
     <main className="grid min-h-dvh place-items-center p-4 text-neutral-100">
@@ -88,8 +95,8 @@ export function ApprovePairing({ onDone }: { onDone: () => void }) {
         ) : request ? (
           <form onSubmit={approve} className="space-y-4">
             <p>
-              This enrols a <strong>shared screen</strong>: anyone standing at it uses Oiko as the Kiosk, without signing in. Approve only a screen you are
-              looking at.
+              This makes a <strong>shared screen</strong> a Kiosk: anyone standing at it uses Oiko as the Kiosk, without signing in. Approve only a screen you
+              are looking at.
             </p>
             <p className="text-neutral-400">
               Asked {minutes < 1 ? 'less than a minute' : `${minutes} minute${minutes === 1 ? '' : 's'}`} ago from {request.browser}.
@@ -117,9 +124,14 @@ export function ApprovePairing({ onDone }: { onDone: () => void }) {
               </div>
             )}
             {error && <p className="text-red-400">{error}</p>}
-            <button type="submit" className={primary}>
-              Approve
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="submit" className={primary}>
+                Approve
+              </button>
+              <button type="button" onClick={refuse} className={`${secondary} text-red-400`}>
+                Refuse
+              </button>
+            </div>
           </form>
         ) : null}
         <button onClick={onDone} className={secondary}>

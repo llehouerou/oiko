@@ -88,7 +88,7 @@ func (q *pairings) find(index map[string]*list.Element, secret string, now time.
 
 // errPairingEnded refuses a pairing request that expired, was already
 // approved or claimed, or never existed.
-var errPairingEnded = fmt.Errorf("%w: this pairing request expired or was already used; the screen shows a new code", ErrRefused)
+var errPairingEnded = fmt.Errorf("%w: this Kiosk pairing request expired, was refused or was already used; the screen shows a new code", ErrRefused)
 
 // validKiosk checks a Kiosk's Name and Access level, never Admin (ADR
 // 0023), answering the Name trimmed.
@@ -126,12 +126,30 @@ func (s *Store) PairingRequest(by Identity, approval string) (Pairing, error) {
 	return e.Value.(*pairing).Pairing, nil
 }
 
+// RefusePairing refuses the pairing request of approval, for an Admin
+// Person: the screen that made it is refused, and shows a new code.
+func (s *Store) RefusePairing(by Identity, approval string) error {
+	if err := mayManage(by, false); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, err := s.approvable(by, approval)
+	if err != nil {
+		return err
+	}
+	p := e.Value.(*pairing)
+	s.pairings.remove(e)
+	s.record(Entry{Event: PairingRefused, Actor: party(by), Subject: nobody, Browser: p.Browser, Detail: map[string]any{"reason": "refused"}})
+	return nil
+}
+
 // approvable is the pairing request of approval, not yet approved; refused,
 // and recorded, if none lasts. Callers hold s.mu.
 func (s *Store) approvable(by Identity, approval string) (*list.Element, error) {
 	e := s.pairings.find(s.pairings.byApproval, approval, s.now())
 	if e == nil {
-		s.record(Entry{Event: PairingRefused, Actor: party(by), Subject: nobody})
+		s.record(Entry{Event: PairingRefused, Actor: party(by), Subject: nobody, Detail: map[string]any{"reason": "expired"}})
 		return nil, errPairingEnded
 	}
 	return e, nil
@@ -188,7 +206,7 @@ func (s *Store) ClaimPairing(claim string) (string, error) {
 	defer s.mu.Unlock()
 	e := s.pairings.find(s.pairings.byClaim, claim, s.now())
 	if e == nil {
-		s.record(Entry{Event: PairingRefused, Actor: nobody, Subject: nobody})
+		s.record(Entry{Event: PairingRefused, Actor: nobody, Subject: nobody, Detail: map[string]any{"reason": "expired"}})
 		return "", errPairingEnded
 	}
 	p := e.Value.(*pairing)
@@ -293,7 +311,7 @@ func (s *Store) RemoveKiosk(by Identity, id string) error {
 	}
 	s.record(Entry{Event: KioskRemoved, Actor: party(by), Subject: kioskParty(k)})
 	if x := s.kioskSession(id); x != nil {
-		s.endSession(x, party(by), kioskParty(k), "removed")
+		s.endSession(x, party(by), kioskParty(k), "removed", time.Time{})
 	}
 	// The Kiosk is gone: a Session left on disk without it is dropped on load.
 	return s.saveSessions()
@@ -306,7 +324,7 @@ func (s *Store) endKioskSession(id string, actor Party, reason string) error {
 	if x == nil {
 		return nil
 	}
-	s.endSession(x, actor, s.holder(x), reason)
+	s.endSession(x, actor, s.holder(x), reason, time.Time{})
 	return s.saveSessions()
 }
 

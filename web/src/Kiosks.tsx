@@ -69,7 +69,7 @@ export function Kiosks() {
                 {k.signedIn && (
                   <button
                     onClick={async () =>
-                      (await confirm(`Sign ${k.name} out? Its screen shows the pairing code again.`, 'Sign out')) &&
+                      (await confirm(`Sign ${k.name} out? Its screen shows the Kiosk pairing code again.`, 'Sign out')) &&
                       change(await edit('DELETE', `kiosks/${k.id}/session`))
                     }
                     className={button}

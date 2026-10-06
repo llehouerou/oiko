@@ -69,15 +69,12 @@ func listenHost(dataDir string) (net.Listener, error) {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
-	l, err := net.Listen("unix", path)
-	if err != nil {
-		return nil, err
-	}
-	if err := os.Chmod(path, 0o600); err != nil {
-		l.Close()
-		return nil, err
-	}
-	return l, nil
+	// Created 0600 from the start, never open to others a moment: it hands out
+	// Sign-in links, an Admin's too. The umask is the process's: files made
+	// meanwhile are at most stricter.
+	old := syscall.Umask(0o177)
+	defer syscall.Umask(old)
+	return net.Listen("unix", path)
 }
 
 // serveHost answers each connection to l, until ctx is done, with the

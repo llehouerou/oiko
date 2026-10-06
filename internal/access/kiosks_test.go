@@ -314,8 +314,20 @@ func TestKioskPairingsAreRecorded(t *testing.T) {
 	s.ClaimPairing("unknown")
 	s.PairingRequest(alice, "unknown")
 	recorded(t, c.take(),
-		Entry{Event: PairingRefused, Actor: nobody, Subject: nobody},
-		Entry{Event: PairingRefused, Actor: a, Subject: nobody},
+		Entry{Event: PairingRefused, Actor: nobody, Subject: nobody, Detail: map[string]any{"reason": "expired"}},
+		Entry{Event: PairingRefused, Actor: a, Subject: nobody, Detail: map[string]any{"reason": "expired"}},
+	)
+	// An Admin refuses a screen: it is told so, and asks again.
+	approval, claim := s.RequestPairing("Firefox on Android")
+	if err := s.RefusePairing(alice, approval); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ClaimPairing(claim); !errors.Is(err, ErrRefused) {
+		t.Errorf("claimed a refused pairing: %v", err)
+	}
+	recorded(t, c.take(),
+		Entry{Event: PairingRefused, Actor: a, Subject: nobody, Browser: "Firefox on Android", Detail: map[string]any{"reason": "refused"}},
+		Entry{Event: PairingRefused, Actor: nobody, Subject: nobody, Detail: map[string]any{"reason": "expired"}},
 	)
 	s.EditKiosk(alice, id, "Hall", Member)
 	k2 := Party{KioskKind, id, "Hall"}

@@ -24,7 +24,7 @@ type Party struct {
 
 // Anonymous reports whether e is a refusal where no identity was found: the
 // Audit log writes only so many of those (ADR 0034).
-func (e Entry) Anonymous() bool { return e.Subject.Kind == UnknownKind }
+func (e Entry) Anonymous() bool { return e.Actor.Kind == UnknownKind && e.Subject.Kind == UnknownKind }
 
 // Event is what an Entry records.
 type Event string
@@ -37,7 +37,7 @@ const (
 	PasskeyRefused Event = "passkey-refused" // an unknown Passkey, a counter that went backwards, an answer that does not verify
 	TokenRefused   Event = "token-refused"   // a Token that is not, or no longer, valid
 	StepUpRefused  Event = "step-up-refused" // a Passkey that did not confirm a step-up
-	PairingRefused Event = "pairing-refused" // a Kiosk pairing request that expired, was already used or never existed, viewed or approved by an Admin, or claimed by a screen
+	PairingRefused Event = "pairing-refused" // a Kiosk pairing request an Admin refused ("reason": refused), or one that expired, was already used or never existed ("reason": expired), viewed or approved by an Admin, or claimed by a screen
 )
 
 // Changes to access.

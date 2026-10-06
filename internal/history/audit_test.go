@@ -59,6 +59,7 @@ func TestPast100AnHourAnonymousRefusalsAreCounted(t *testing.T) {
 	}
 	// Tied to an identity, a refusal is written whatever the budget.
 	s.Audit(access.Entry{Time: hour.Add(time.Minute), Event: access.PasskeyRefused, Actor: unknown, Subject: alice})
+	s.Audit(access.Entry{Time: hour.Add(2 * time.Minute), Event: access.PairingRefused, Actor: alice, Subject: unknown}) // past the budget
 	s.Audit(access.Entry{Time: hour.Add(time.Minute), Event: access.LinkRefused, Actor: unknown, Subject: unknown})
 	// The next hour, the budget starts again, after the counts of the last.
 	s.Audit(access.Entry{Time: hour.Add(time.Hour), Event: access.TokenRefused, Actor: unknown, Subject: unknown})
@@ -74,10 +75,10 @@ func TestPast100AnHourAnonymousRefusalsAreCounted(t *testing.T) {
 			}
 		}
 	}
-	// 100 anonymous refusals, Alice's, the counts of the 101st and the link's,
-	// and the next hour's first.
-	if len(es) != 104 || counts[access.TokenRefused] != float64(1) || counts[access.LinkRefused] != float64(1) {
-		t.Errorf("%d entries, counts %v; want 104, one Token and one link counted", len(es), counts)
+	// 100 anonymous refusals, Alice's two, the counts of the 101st and the
+	// link's, and the next hour's first.
+	if len(es) != 105 || counts[access.TokenRefused] != float64(1) || counts[access.LinkRefused] != float64(1) || counts[access.PairingRefused] != nil {
+		t.Errorf("%d entries, counts %v; want 105, one Token and one link counted", len(es), counts)
 	}
 }
 

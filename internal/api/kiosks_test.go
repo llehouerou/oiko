@@ -98,6 +98,12 @@ func TestPairingAKioskEndToEnd(t *testing.T) {
 	if len(ks) != 1 || ks[0].ID != id || ks[0].PairedBy.Name != "Alice" || !ks[0].SignedIn || ks[0].LastUse.IsZero() {
 		t.Errorf("Kiosks %+v", ks)
 	}
+	// A screen an Admin refuses is told so.
+	resp = do("POST", "/api/kiosk-pairing", "", nil)
+	other := decodeAs[struct{ Secret string }](t, resp, http.StatusCreated).Secret
+	read(t, do("POST", "/api/kiosk-pairing/refuse", `{"secret":"`+other+`"}`, alice), http.StatusNoContent)
+	read(t, do("POST", "/api/kiosk-pairing/claim", "", cookie(resp, pairingCookie)), http.StatusForbidden)
+
 	read(t, do("DELETE", "/api/kiosks/"+id+"/session", "", alice), http.StatusNoContent)
 	if m := whoAmI(t, do("GET", "/api/me", "", kiosk)); m.Identity != nil {
 		t.Errorf("signed out, the Kiosk is still %+v", m)

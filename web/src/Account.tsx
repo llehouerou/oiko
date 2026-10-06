@@ -85,7 +85,7 @@ export function Account() {
           </button>
         </section>
         <section className="space-y-3">
-          <h2 className="text-base font-medium">Signed-in devices</h2>
+          <h2 className="text-base font-medium">Sessions</h2>
           <p className="text-neutral-400">Each browser signed in as you, until you sign it out, or after 30 days without use.</p>
           <SessionList sessions={sessions} onEnd={end} />
           {sessions.filter((s) => !s.current).length > 1 && (

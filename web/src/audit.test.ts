@@ -30,6 +30,7 @@ test('a Kiosk pairing reads as who approved it, for which screen', () => {
   )
   expect(tell(entry({ event: 'pairing-refused', actor: alice }))).toBe('Alice used a Kiosk pairing code that had expired')
   expect(tell(entry({ event: 'pairing-refused' }))).toBe('A Kiosk pairing request was refused')
+  expect(tell(entry({ event: 'pairing-refused', actor: alice, detail: { reason: 'refused' } }))).toBe('Alice refused to pair a screen as a Kiosk')
 })
 
 test('anonymous refusals past the budget read as a count for the hour', () => {

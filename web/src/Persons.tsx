@@ -180,7 +180,7 @@ function Credentials({ person, onError }: { person: Person; onError: (err: strin
     )
   return (
     <div className="space-y-3 border-t border-neutral-800 pt-3">
-      <h3 className="font-medium">Signed-in devices</h3>
+      <h3 className="font-medium">Sessions</h3>
       {lists.sessions.length === 0 && <p className="text-neutral-500">None.</p>}
       <SessionList sessions={lists.sessions} onEnd={(s) => change(`persons/${person.id}/sessions/${s.id}`)} />
       <h3 className="font-medium">Passkeys</h3>
