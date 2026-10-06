@@ -66,6 +66,7 @@ import { maxColumns, maxRows, move, placements, reflow, resize, rows, stored, ty
 import { AppBar, ArrangeSetting, ChartsSetting, CreateButton } from './AppBar'
 import { ReleaseBanner } from './About'
 import { Setup } from './Setup'
+import { Programs } from './Programs'
 import {
   DndContext,
   PointerSensor,
@@ -91,6 +92,7 @@ export function App() {
     const done = () => (history.replaceState(null, '', '/'), setPage(''), setSetup(false))
     return <Setup onDone={done} />
   }
+  if (page.startsWith('#programs')) return <Programs />
   return page.startsWith('#automations') ? <Automations /> : page.startsWith('#history') ? <Timeline /> : <Home />
 }
 

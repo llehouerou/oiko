@@ -5,6 +5,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import {
   mdiAccountCircleOutline,
+  mdiApi,
   mdiChartLine,
   mdiClose,
   mdiCogOutline,
@@ -23,7 +24,7 @@ import { Switch } from './controls'
 import { Svg } from './icons'
 import { useConnection } from './store'
 import { About } from './About'
-import { signOut, useMe } from './access'
+import { levels, signOut, useMe } from './access'
 
 const pages = [
   { href: '#', label: 'Home', icon: mdiViewDashboardOutline },
@@ -33,9 +34,9 @@ const pages = [
 
 export type Page = (typeof pages)[number]['href']
 
-// The pages as tabs in the middle, the current one lit; a narrow screen keeps their icons only.
-// onLeave may hold the page, e.g. on unsaved changes; settings are the page's, under ⚙.
-export function AppBar({ page, onLeave, settings }: { page: Page; onLeave?: () => Promise<boolean>; settings?: ReactNode }) {
+// The pages as tabs in the middle, the current one lit, if it is one; a narrow screen keeps their
+// icons only. onLeave may hold the page, e.g. on unsaved changes; settings are the page's, under ⚙.
+export function AppBar({ page, onLeave, settings }: { page?: Page; onLeave?: () => Promise<boolean>; settings?: ReactNode }) {
   const [about, setAbout] = useState(false) // what Oiko is built from, opened from its logo
   return (
     <header className="sticky top-0 z-10 shrink-0 border-b border-neutral-800/80 bg-neutral-950/80 backdrop-blur">
@@ -92,9 +93,8 @@ function ConnectionBadge() {
   )
 }
 
-const levels = { guest: 'Guest', member: 'Member', admin: 'Admin' }
-
-// Who is signed in, with a menu to sign out; while Oiko has no Admin, where its Setup link is.
+// Who is signed in, with a menu to sign out, and an Admin's pages; while Oiko has no Admin, where
+// its Setup link is.
 function Account() {
   const me = useMe()
   if (me && !me.claimed)
@@ -124,6 +124,16 @@ function Account() {
       >
         <p className="truncate px-2.5 pt-2 font-medium">{me.name}</p>
         <p className="px-2.5 pb-2 text-xs text-neutral-400">{me.level && levels[me.level]}</p>
+        {me.level === 'admin' && 'person' in me.identity && (
+          <a
+            href="#programs"
+            onClick={() => document.getElementById('account')?.hidePopover()}
+            className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-neutral-800"
+          >
+            <Svg path={mdiApi} className="size-5 text-neutral-400" />
+            Programs
+          </a>
+        )}
         <button
           popoverTarget="account"
           popoverTargetAction="hide"

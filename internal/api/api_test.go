@@ -38,13 +38,18 @@ func handler(t *testing.T) (*home.Home, http.Handler) {
 
 // handlerAt is handler with Public URL public, and its access store.
 func handlerAt(t *testing.T, public *url.URL) (*home.Home, *access.Store, http.Handler) {
+	return handlerWith(t, public, time.Now)
+}
+
+// handlerWith is handlerAt with now the access store's clock.
+func handlerWith(t *testing.T, public *url.URL, now func() time.Time) (*home.Home, *access.Store, http.Handler) {
 	t.Helper()
 	store, err := history.Open(filepath.Join(t.TempDir(), "history.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Close() })
-	acc, err := access.Open(t.TempDir(), time.Now)
+	acc, err := access.Open(t.TempDir(), now)
 	if err != nil {
 		t.Fatal(err)
 	}

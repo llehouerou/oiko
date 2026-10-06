@@ -66,7 +66,7 @@ func TestTheSetupLinkMakesTheFirstAdminOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	id, ok := s.Resolve(session)
-	if !ok || id.Person.Name != "Alice" || id.Person.Level != Admin || id.Person.ID == "" {
+	if !ok || id.Kind != PersonKind || id.Name != "Alice" || id.Level != Admin || id.ID == "" {
 		t.Fatalf("Resolve = %+v, %v; want Alice, an Admin", id, ok)
 	}
 	if !s.Claimed() {
@@ -156,7 +156,7 @@ func TestSessionsSurviveARestartAndTheDocumentsHoldNoSecret(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if id, ok := open(t, dir, c).Resolve(session); !ok || id.Person.Name != "Alice" {
+	if id, ok := open(t, dir, c).Resolve(session); !ok || id.Name != "Alice" {
 		t.Errorf("after a restart: %+v, %v", id, ok)
 	}
 	for _, name := range []string{"persons.json", "sessions.json"} {

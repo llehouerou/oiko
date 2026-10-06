@@ -4,8 +4,10 @@ import { useSyncExternalStore } from 'react'
 
 export type Level = 'guest' | 'member' | 'admin'
 
+export const levels: Record<Level, string> = { guest: 'Guest', member: 'Member', admin: 'Admin' }
+
 export type Me = {
-  identity: { person: string } | null // null: not signed in
+  identity: { person: string } | { program: string } | null // null: not signed in
   name?: string
   level?: Level
   fresh: boolean // signed in lately enough for step-up

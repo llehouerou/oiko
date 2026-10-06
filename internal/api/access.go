@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/llehouerou/oiko/internal/access"
 )
@@ -15,11 +16,18 @@ const sessionCookie = "__Host-oiko-session"
 
 type identityKey struct{}
 
-// identify resolves the Session of each request, if any, to its identity,
-// which the request then carries. A request without one goes on anonymous.
+// identify resolves each request, by its Token or else its Session, to its
+// identity, which the request then carries. A request without either goes
+// on anonymous; one with a Token that is not valid is refused.
 func identify(acc *access.Store, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if id, ok := resolve(acc, r); ok {
+		id, ok := resolve(acc, r)
+		if _, isBearer := bearer(r); isBearer && !ok {
+			w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+			http.Error(w, "this Token is not valid: it was revoked, replaced or never existed", http.StatusUnauthorized)
+			return
+		}
+		if ok {
 			r = r.WithContext(context.WithValue(r.Context(), identityKey{}, id))
 		}
 		next.ServeHTTP(w, r)
@@ -32,14 +40,24 @@ func identity(r *http.Request) (access.Identity, bool) {
 	return id, ok
 }
 
-// resolve answers who holds r's Session, counting it as a use; false without
-// one that lasts.
+// resolve answers who holds r's Token or else its Session, counting it as a
+// use; false without one that lasts.
 func resolve(acc *access.Store, r *http.Request) (access.Identity, bool) {
+	if token, ok := bearer(r); ok {
+		return acc.ResolveToken(token)
+	}
 	c, err := r.Cookie(sessionCookie)
 	if err != nil {
 		return access.Identity{}, false
 	}
 	return acc.Resolve(c.Value)
+}
+
+// bearer is r's Token, accepted only in its Authorization header, never in
+// its URL (ADR 0028); false if it has none.
+func bearer(r *http.Request) (string, bool) {
+	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+	return token, ok && strings.EqualFold(scheme, "Bearer")
 }
 
 // handleAccess serves who a request is, the Setup link and signing out.
@@ -52,19 +70,16 @@ func handleAccess(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 	// Who am I: the identity, if signed in, and what the web client needs
 	// before: whether Oiko has an Admin, where sign-in works.
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) {
-		type person struct {
-			Person string `json:"person"`
-		}
 		me := struct {
-			Identity  *person      `json:"identity"`
-			Name      string       `json:"name,omitempty"`
-			Level     access.Level `json:"level,omitempty"`
-			Fresh     bool         `json:"fresh"`
-			Claimed   bool         `json:"claimed"`
-			PublicURL *string      `json:"publicUrl"`
+			Identity  map[access.Kind]string `json:"identity"` // {"person": id} or {"program": id}; null if anonymous
+			Name      string                 `json:"name,omitempty"`
+			Level     access.Level           `json:"level,omitempty"`
+			Fresh     bool                   `json:"fresh"`
+			Claimed   bool                   `json:"claimed"`
+			PublicURL *string                `json:"publicUrl"`
 		}{Claimed: acc.Claimed(), PublicURL: publicURL}
 		if id, ok := identity(r); ok {
-			me.Identity, me.Name, me.Level, me.Fresh = &person{id.Person.ID}, id.Person.Name, id.Person.Level, id.Fresh
+			me.Identity, me.Name, me.Level, me.Fresh = map[access.Kind]string{id.Kind: id.ID}, id.Name, id.Level, id.Fresh
 		}
 		writeJSON(w, http.StatusOK, me)
 	})

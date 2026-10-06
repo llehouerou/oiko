@@ -35,6 +35,7 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/updates", updates(h, acc, releases))
 	handleAccess(mux, acc, public)
+	handlePrograms(mux, acc)
 	mux.HandleFunc("GET /api/build", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, struct {
 			build.Build
@@ -257,10 +258,12 @@ func respond(w http.ResponseWriter, v any, err error) {
 // "releases" message, each time it changes. Updates available at once are
 // written together and flushed once. A client that stops reading ends the
 // stream, at the first write that does not go through within
-// streamWriteLimit. A stream opened in a Session counts as its use at each
-// keepalive, and ends with it.
+// streamWriteLimit. A stream opened in a Session or by a Token counts as its
+// use at each keepalive, and ends with it; a Program's ends at once when its
+// access ends or changes.
 func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		id, signedIn := identity(r)
 		snap, ch, cancel := h.Subscribe()
 		defer cancel()
 		statuses, changed := releases.Statuses()
@@ -301,8 +304,8 @@ func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.Ha
 				}
 			case <-keepalive.C:
 				// ponytail: an ended Session's stream closes at the next keepalive;
-				// streams indexed by identity close it at once when that is enforced.
-				if _, signedIn := identity(r); signedIn {
+				// an Ended for Sessions, like a Program's, would close it at once.
+				if signedIn {
 					if _, ok := resolve(acc, r); !ok {
 						return
 					}
@@ -310,6 +313,8 @@ func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.Ha
 				if !send(func() bool { _, err := w.Write([]byte(": keepalive\n\n")); return err == nil }) {
 					return
 				}
+			case <-id.Ended: // nil, never ready, but for a Program
+				return
 			case <-r.Context().Done():
 				return
 			}

@@ -1,8 +1,9 @@
 // Package access keeps who may use Oiko (ADR 0022, 0032): the Persons and
-// their Sessions, in persons.json and sessions.json, loaded at start and held
-// in memory, and the Setup link that claims a fresh Oiko (ADR 0026). Secrets
-// are 128 random bits or more, kept only as their SHA-256 hash; Oiko alone
-// decides when a Session ends (ADR 0025).
+// their Sessions, in persons.json and sessions.json, the Programs and their
+// Tokens, in programs.json, all loaded at start and held in memory, and the
+// Setup link that claims a fresh Oiko (ADR 0026). Secrets are 128 random bits
+// or more, kept only as their SHA-256 hash; Oiko alone decides when a Session
+// ends (ADR 0025).
 package access
 
 import (
@@ -73,11 +74,23 @@ type session struct {
 	LastUse  time.Time `json:"lastUse"`
 }
 
-// Identity is who a request is: its Person as they are now, and whether its
-// Session is fresh enough for step-up.
+// Kind is what an identity is.
+type Kind string
+
+const (
+	PersonKind  Kind = "person"
+	ProgramKind Kind = "program"
+)
+
+// Identity is who a request is, as they are now: a Person by their Session,
+// or a Program by its Token.
 type Identity struct {
-	Person Person
-	Fresh  bool
+	Kind  Kind
+	ID    string
+	Name  string
+	Level Level
+	Fresh bool            // a Session that proved itself lately enough for step-up
+	Ended <-chan struct{} // closed once this access ends or changes; nil if never
 }
 
 // StepUp refuses an action needing step-up unless the Session is fresh.
@@ -88,34 +101,49 @@ func (id Identity) StepUp() error {
 	return nil
 }
 
-// Store holds the Persons and their Sessions.
+// Store holds the Persons and their Sessions, and the Programs.
 type Store struct {
-	personsFile, sessionsFile string
-	now                       func() time.Time
+	personsFile, sessionsFile, programsFile string
+	now                                     func() time.Time
 
-	mu       sync.Mutex
-	persons  []Person
-	sessions map[string]*session // by hash
-	setup    string              // the Setup link's hash; "" when there is none
-	written  time.Time           // when sessions.json was last written
-	unsaved  bool                // a last use not yet written
+	mu          sync.Mutex
+	persons     []Person
+	sessions    map[string]*session // by hash
+	programs    []Program
+	ends        map[string]chan struct{} // closed when a Program's access ends or changes, by id
+	setup       string                   // the Setup link's hash; "" when there is none
+	sessionUses pending
+	programUses pending
 }
 
-// Open loads the Persons and their Sessions from dir, dropping the Sessions
-// that ended or whose Person is gone. now is the clock.
+// pending tells when a document was last written, and whether last uses held
+// in memory are not yet (ADR 0032).
+type pending struct {
+	written time.Time
+	unsaved bool
+}
+
+// Open loads the Persons, their Sessions and the Programs from dir, dropping
+// the Sessions that ended or whose Person is gone. now is the clock.
 func Open(dir string, now func() time.Time) (*Store, error) {
 	s := &Store{
 		personsFile:  filepath.Join(dir, "persons.json"),
 		sessionsFile: filepath.Join(dir, "sessions.json"),
+		programsFile: filepath.Join(dir, "programs.json"),
 		now:          now,
 		sessions:     map[string]*session{},
-		written:      now(),
+		ends:         map[string]chan struct{}{},
+		sessionUses:  pending{written: now()},
+		programUses:  pending{written: now()},
 	}
 	var sessions []*session
 	if err := store.Load(s.personsFile, PersonsFormat, &s.persons); err != nil {
 		return nil, err
 	}
 	if err := store.Load(s.sessionsFile, SessionsFormat, &sessions); err != nil {
+		return nil, err
+	}
+	if err := store.Load(s.programsFile, ProgramsFormat, &s.programs); err != nil {
 		return nil, err
 	}
 	for _, x := range sessions {
@@ -211,13 +239,9 @@ func (s *Store) Resolve(secret string) (Identity, bool) {
 	}
 	now := s.now()
 	x.LastUse = now
-	s.unsaved = true
-	if now.Sub(s.written) >= writeLastUse {
-		if err := s.saveSessions(); err != nil {
-			slog.Error("access: writing last use", "err", err)
-		}
-	}
-	return Identity{Person: s.persons[i], Fresh: now.Sub(x.SignedIn) < freshFor}, true
+	s.used(&s.sessionUses, s.saveSessions)
+	p := s.persons[i]
+	return Identity{Kind: PersonKind, ID: p.ID, Name: p.Name, Level: p.Level, Fresh: now.Sub(x.SignedIn) < freshFor}, true
 }
 
 // SignOut ends the Session of secret, if there is one.
@@ -234,10 +258,25 @@ func (s *Store) SignOut(secret string) error {
 func (s *Store) Flush() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.unsaved {
-		return nil
+	var errs []error
+	if s.sessionUses.unsaved {
+		errs = append(errs, s.saveSessions())
 	}
-	return s.saveSessions()
+	if s.programUses.unsaved {
+		errs = append(errs, s.savePrograms(s.programs))
+	}
+	return errors.Join(errs...)
+}
+
+// used notes a last use held in memory for the document p tracks, and writes
+// it with save an hour after its last write. Callers hold s.mu.
+func (s *Store) used(p *pending, save func() error) {
+	p.unsaved = true
+	if s.now().Sub(p.written) >= writeLastUse {
+		if err := save(); err != nil {
+			slog.Error("access: writing last use", "err", err)
+		}
+	}
 }
 
 // end deletes Session x. Callers hold s.mu.
@@ -272,7 +311,7 @@ func (s *Store) saveSessions() error {
 	if err := store.Save(s.sessionsFile, SessionsFormat, all); err != nil {
 		return err
 	}
-	s.written, s.unsaved = s.now(), false
+	s.sessionUses = pending{written: s.now()}
 	return nil
 }
 
