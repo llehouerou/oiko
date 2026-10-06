@@ -84,11 +84,15 @@ func resolve(acc *access.Store, r *http.Request) (access.Identity, bool) {
 	if token, ok := bearer(r); ok {
 		return acc.ResolveToken(token)
 	}
-	c, err := r.Cookie(sessionCookie)
-	if err != nil {
-		return access.Identity{}, false
+	return acc.Resolve(sessionSecret(r))
+}
+
+// sessionSecret is the secret of r's Session cookie; "" if it has none.
+func sessionSecret(r *http.Request) string {
+	if c, err := r.Cookie(sessionCookie); err == nil {
+		return c.Value
 	}
-	return acc.Resolve(c.Value)
+	return ""
 }
 
 // bearer is r's Token, accepted only in its Authorization header, never in
@@ -153,11 +157,9 @@ func handleAccess(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 		respond(w, names, err)
 	})
 	mux.HandleFunc("POST /api/sign-out", func(w http.ResponseWriter, r *http.Request) {
-		if c, err := r.Cookie(sessionCookie); err == nil {
-			if err := acc.SignOut(c.Value); err != nil {
-				reply(w, err)
-				return
-			}
+		if err := acc.SignOut(sessionSecret(r)); err != nil {
+			reply(w, err)
+			return
 		}
 		setSession(w, "", -1)
 		w.WriteHeader(http.StatusNoContent)

@@ -14,13 +14,7 @@ import (
 // at the origin of the page asking, one where sign-in works: options first,
 // for the browser's passkey sheet, then its answer.
 func handlePasskeys(mux *http.ServeMux, acc *access.Store, public *url.URL) {
-	at := func(r *http.Request) string { return r.Header.Get("Origin") }
-	session := func(r *http.Request) string {
-		if c, err := r.Cookie(sessionCookie); err == nil {
-			return c.Value
-		}
-		return ""
-	}
+	origin := func(r *http.Request) string { return r.Header.Get("Origin") }
 	// answer is the browser's PublicKeyCredential in r, as JSON; false once
 	// refused.
 	answer := func(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
@@ -31,7 +25,7 @@ func handlePasskeys(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 	// Username-less: the passkey sheet picks the account, any Passkey of this
 	// Oiko; a phone's, across devices, needs nothing more.
 	mux.HandleFunc("POST /api/sign-in/passkey/options", atSignInOrigin(public, func(w http.ResponseWriter, r *http.Request) {
-		options, err := acc.BeginSignIn(at(r))
+		options, err := acc.BeginSignIn(origin(r))
 		respond(w, options, err)
 	}))
 	mux.HandleFunc("POST /api/sign-in/passkey", atSignInOrigin(public, func(w http.ResponseWriter, r *http.Request) {
@@ -39,7 +33,7 @@ func handlePasskeys(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 		if !ok {
 			return
 		}
-		secret, err := acc.FinishSignIn(at(r), a, access.Browser(r.UserAgent()))
+		secret, err := acc.FinishSignIn(origin(r), a, access.Browser(r.UserAgent()))
 		if err != nil {
 			reply(w, err)
 			return
@@ -50,12 +44,12 @@ func handlePasskeys(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 
 	// Step-up: confirming one of their Passkeys makes this Session fresh.
 	mux.HandleFunc("POST /api/step-up/options", atSignInOrigin(public, func(w http.ResponseWriter, r *http.Request) {
-		options, err := acc.BeginStepUp(session(r), at(r))
+		options, err := acc.BeginStepUp(sessionSecret(r), origin(r))
 		respond(w, options, err)
 	}))
 	mux.HandleFunc("POST /api/step-up", atSignInOrigin(public, func(w http.ResponseWriter, r *http.Request) {
 		if a, ok := answer(w, r); ok {
-			reply(w, acc.FinishStepUp(session(r), at(r), a))
+			reply(w, acc.FinishStepUp(sessionSecret(r), origin(r), a))
 		}
 	}))
 
@@ -68,20 +62,20 @@ func handlePasskeys(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 	}
 	mux.HandleFunc("GET /api/me/passkeys", func(w http.ResponseWriter, r *http.Request) {
 		id, _ := identity(r)
-		keys, err := acc.Passkeys(id)
+		passkeys, err := acc.Passkeys(id)
 		if err != nil {
 			reply(w, err)
 			return
 		}
-		list := make([]passkey, len(keys))
-		for i, k := range keys {
-			list[i] = passkey{k.Key(), access.Provider(k.AAGUID), k.Created, k.LastUse}
+		list := make([]passkey, len(passkeys))
+		for i, p := range passkeys {
+			list[i] = passkey{p.ID.String(), access.Provider(p.AAGUID), p.Created, p.LastUse}
 		}
 		writeJSON(w, http.StatusOK, list)
 	})
 	mux.HandleFunc("POST /api/me/passkeys/options", atSignInOrigin(public, func(w http.ResponseWriter, r *http.Request) {
 		id, _ := identity(r)
-		options, err := acc.BeginPasskey(id, at(r))
+		options, err := acc.BeginPasskey(id, origin(r))
 		respond(w, options, err)
 	}))
 	mux.HandleFunc("POST /api/me/passkeys", atSignInOrigin(public, func(w http.ResponseWriter, r *http.Request) {
@@ -90,12 +84,12 @@ func handlePasskeys(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 			return
 		}
 		id, _ := identity(r)
-		key, err := acc.FinishPasskey(id, at(r), a)
+		added, err := acc.FinishPasskey(id, origin(r), a)
 		if err != nil {
 			reply(w, err)
 			return
 		}
-		writeJSON(w, http.StatusCreated, map[string]string{"id": key})
+		writeJSON(w, http.StatusCreated, map[string]string{"id": added})
 	}))
 	mux.HandleFunc("DELETE /api/me/passkeys/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id, _ := identity(r)

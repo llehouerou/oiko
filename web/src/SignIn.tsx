@@ -45,7 +45,7 @@ export function SignIn({ me }: { me: Me }) {
             >
               Sign in with a Passkey
             </button>
-            <p className="text-neutral-400">No Passkey on this device? Your browser can use your phone's. Otherwise, ask an Admin for a sign-in link.</p>
+            <p className="text-neutral-400">No Passkey on this device? Your browser can use your phone's. Otherwise, ask an Admin for a Sign-in link.</p>
           </>
         )}
       </div>

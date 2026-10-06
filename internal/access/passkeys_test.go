@@ -64,11 +64,11 @@ func TestAPersonSignsInWithTheirPasskey(t *testing.T) {
 		if !ok || id.ID != alice.ID || id.Level != Admin || !id.Fresh {
 			t.Errorf("at %s: signed in as %+v, %v; want Alice, fresh", origin, id, ok)
 		}
-		keys, err := s.Passkeys(id)
-		if err != nil || len(keys) != 1 {
-			t.Fatalf("Passkeys = %v, %v", keys, err)
+		passkeys, err := s.Passkeys(id)
+		if err != nil || len(passkeys) != 1 {
+			t.Fatalf("Passkeys = %v, %v", passkeys, err)
 		}
-		if k := keys[0]; !k.LastUse.Equal(c.t) || !k.Created.Equal(newClock().t) || Provider(k.AAGUID) != "Google Password Manager" {
+		if k := passkeys[0]; !k.LastUse.Equal(c.t) || !k.Created.Equal(newClock().t) || Provider(k.AAGUID) != "Google Password Manager" {
 			t.Errorf("Passkey = created %v, last used %v, provider %q", k.Created, k.LastUse, Provider(k.AAGUID))
 		}
 	}
@@ -218,29 +218,34 @@ func TestAddingOrRemovingAPasskeyNeedsStepUp(t *testing.T) {
 	alice, _ := s.Resolve(session)
 	first := enrol(t, s, alice, public)
 	second := enrol(t, s, alice, public)
-	keys, _ := s.Passkeys(alice)
-	if len(keys) != 2 {
-		t.Fatalf("%d Passkeys, want 2", len(keys))
+	passkeys, _ := s.Passkeys(alice)
+	if len(passkeys) != 2 {
+		t.Fatalf("%d Passkeys, want 2", len(passkeys))
 	}
-
-	c.advance(10 * time.Minute)
+	// Begun while fresh, finished once not.
+	c.advance(9 * time.Minute)
+	options, _ := s.BeginPasskey(alice, public)
+	c.advance(time.Minute)
 	alice, _ = s.Resolve(session)
+	if _, err := s.FinishPasskey(alice, public, passkeytest.New(public).Create(t, options)); !errors.Is(err, ErrStale) {
+		t.Errorf("finishing a Passkey, no longer fresh: %v, want ErrStale", err)
+	}
 	if _, err := s.BeginPasskey(alice, public); !errors.Is(err, ErrStale) {
 		t.Errorf("adding a Passkey, not fresh: %v, want ErrStale", err)
 	}
-	if err := s.RemovePasskey(alice, keys[0].Key()); !errors.Is(err, ErrStale) {
+	if err := s.RemovePasskey(alice, passkeys[0].ID.String()); !errors.Is(err, ErrStale) {
 		t.Errorf("removing a Passkey, not fresh: %v, want ErrStale", err)
 	}
 
-	options, _ := s.BeginStepUp(session, public)
-	if err := s.FinishStepUp(session, public, second.Get(t, options)); err != nil {
+	confirm, _ := s.BeginStepUp(session, public)
+	if err := s.FinishStepUp(session, public, second.Get(t, confirm)); err != nil {
 		t.Fatal(err)
 	}
 	alice, _ = s.Resolve(session)
-	if err := s.RemovePasskey(alice, keys[0].Key()); err != nil {
+	if err := s.RemovePasskey(alice, passkeys[0].ID.String()); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RemovePasskey(alice, keys[0].Key()); err == nil {
+	if err := s.RemovePasskey(alice, passkeys[0].ID.String()); err == nil {
 		t.Error("removing a removed Passkey: no error")
 	}
 	if _, err := signIn(t, s, first, public); !errors.Is(err, ErrRefused) {

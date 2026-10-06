@@ -3,7 +3,6 @@ package access
 import (
 	"bytes"
 	"container/list"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -18,20 +17,18 @@ import (
 )
 
 // Passkey is a Person's WebAuthn credential as stored (ADR 0024, 0032): its
-// public key, the signature counter it last reported, the AAGUID naming its
-// provider, and when it was created and last used.
+// id, in base64url, which the API names it by, its public key, the
+// signature counter it last reported, the AAGUID naming its provider, and
+// when it was created and last used.
 type Passkey struct {
-	ID             []byte    `json:"id"`
-	PublicKey      []byte    `json:"publicKey"`
-	Counter        uint32    `json:"counter"`
-	BackupEligible bool      `json:"backupEligible"` // synced by its provider; WebAuthn checks it never changes
-	AAGUID         []byte    `json:"aaguid,omitempty"`
-	Created        time.Time `json:"created"`
-	LastUse        time.Time `json:"lastUse,omitzero"`
+	ID             protocol.URLEncodedBase64 `json:"id"`
+	PublicKey      []byte                    `json:"publicKey"`
+	Counter        uint32                    `json:"counter"`
+	BackupEligible bool                      `json:"backupEligible"` // synced by its provider; WebAuthn checks it never changes
+	AAGUID         []byte                    `json:"aaguid,omitempty"`
+	Created        time.Time                 `json:"created"`
+	LastUse        time.Time                 `json:"lastUse,omitzero"`
 }
-
-// Key is how the API names Passkey p: its credential id in base64url.
-func (p Passkey) Key() string { return base64.RawURLEncoding.EncodeToString(p.ID) }
 
 // Ceremonies in memory (ADR 0032, 0034).
 const (
@@ -122,12 +119,12 @@ func (u user) WebAuthnDisplayName() string { return u.p.Name }
 
 func (u user) WebAuthnCredentials() []webauthn.Credential {
 	cs := make([]webauthn.Credential, len(u.p.Passkeys))
-	for i, k := range u.p.Passkeys {
+	for i, p := range u.p.Passkeys {
 		cs[i] = webauthn.Credential{
-			ID:            k.ID,
-			PublicKey:     k.PublicKey,
-			Flags:         webauthn.CredentialFlags{BackupEligible: k.BackupEligible},
-			Authenticator: webauthn.Authenticator{AAGUID: k.AAGUID, SignCount: k.Counter},
+			ID:            p.ID,
+			PublicKey:     p.PublicKey,
+			Flags:         webauthn.CredentialFlags{BackupEligible: p.BackupEligible},
+			Authenticator: webauthn.Authenticator{AAGUID: p.AAGUID, SignCount: p.Counter},
 		}
 	}
 	return cs
@@ -140,9 +137,9 @@ func (s *Store) keep(c ceremony, data *webauthn.SessionData) {
 	s.ceremonies.add(&c)
 }
 
-// take ends the ceremony for purpose whose challenge clientData names, as
-// finished at origin; refused if there is none. Callers hold s.mu.
-func (s *Store) take(clientData protocol.CollectedClientData, p purpose, origin string) (*ceremony, error) {
+// ceremony ends the ceremony for purpose whose challenge clientData names,
+// as finished at origin; refused if there is none. Callers hold s.mu.
+func (s *Store) ceremony(clientData protocol.CollectedClientData, p purpose, origin string) (*ceremony, error) {
 	c := s.ceremonies.take(clientData.Challenge, s.now())
 	if c == nil || c.purpose != p || c.origin != origin {
 		return nil, fmt.Errorf("%w: this Passkey request ended or was already used; try again", ErrRefused)
@@ -190,7 +187,7 @@ func (s *Store) FinishSignIn(origin string, response []byte, browser string) (st
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	c, err := s.take(parsed.Response.CollectedClientData, signingIn, origin)
+	c, err := s.ceremony(parsed.Response.CollectedClientData, signingIn, origin)
 	if err != nil {
 		return "", err
 	}
@@ -282,7 +279,7 @@ func (s *Store) FinishStepUp(secret, origin string, response []byte) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	c, err := s.take(parsed.Response.CollectedClientData, steppingUp, origin)
+	c, err := s.ceremony(parsed.Response.CollectedClientData, steppingUp, origin)
 	if err != nil {
 		return err
 	}
@@ -365,8 +362,8 @@ func (s *Store) BeginPasskey(by Identity, origin string) (*protocol.CredentialCr
 	return options, nil
 }
 
-// FinishPasskey adds to Person by the Passkey of response, created for the
-// ceremony begun at origin, and answers its key.
+// FinishPasskey adds to Person by, still fresh for step-up, the Passkey of
+// response, created for the ceremony begun at origin, and answers its id.
 func (s *Store) FinishPasskey(by Identity, origin string, response []byte) (string, error) {
 	parsed, err := protocol.ParseCredentialCreationResponseBytes(response)
 	if err != nil {
@@ -378,11 +375,11 @@ func (s *Store) FinishPasskey(by Identity, origin string, response []byte) (stri
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	i, err := s.self(by, false) // fresh when it began
+	i, err := s.self(by, true)
 	if err != nil {
 		return "", err
 	}
-	c, err := s.take(parsed.Response.CollectedClientData, enrolling, origin)
+	c, err := s.ceremony(parsed.Response.CollectedClientData, enrolling, origin)
 	if err != nil {
 		return "", err
 	}
@@ -404,20 +401,20 @@ func (s *Store) FinishPasskey(by Identity, origin string, response []byte) (stri
 	if err := s.changePasskeys(i, func(ks []Passkey) []Passkey { return append(ks, k) }); err != nil {
 		return "", err
 	}
-	return k.Key(), nil
+	return k.ID.String(), nil
 }
 
-// RemovePasskey removes Passkey key from Person by, fresh for step-up.
-func (s *Store) RemovePasskey(by Identity, key string) error {
+// RemovePasskey removes Passkey id from Person by, fresh for step-up.
+func (s *Store) RemovePasskey(by Identity, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	i, err := s.self(by, true)
 	if err != nil {
 		return err
 	}
-	j := slices.IndexFunc(s.persons[i].Passkeys, func(k Passkey) bool { return k.Key() == key })
+	j := slices.IndexFunc(s.persons[i].Passkeys, func(k Passkey) bool { return k.ID.String() == id })
 	if j < 0 {
-		return fmt.Errorf("passkey %q: %w", key, home.ErrNotFound)
+		return fmt.Errorf("passkey %q: %w", id, home.ErrNotFound)
 	}
 	return s.changePasskeys(i, func(ks []Passkey) []Passkey { return slices.Delete(ks, j, j+1) })
 }

@@ -41,7 +41,7 @@ export function Account() {
             A Passkey signs you in without a password, unlocked by your fingerprint, face or screen lock. Your phone's also signs you in on a computer.
           </p>
           {error && <p className="text-red-400">{error}</p>}
-          {passkeys?.length === 0 && <p className="text-neutral-500">No Passkeys yet: once this session ends, you will need a new sign-in link.</p>}
+          {passkeys?.length === 0 && <p className="text-neutral-500">No Passkeys yet: once this Session ends, you will need a new Sign-in link.</p>}
           <ul className="space-y-3">
             {passkeys?.map((k) => (
               <li key={k.id} className="flex flex-wrap items-center gap-3 rounded-xl bg-neutral-900 p-4">

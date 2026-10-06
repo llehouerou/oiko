@@ -86,7 +86,7 @@ export function PasskeyOffer({ onDone }: { onDone: () => void }) {
   if (declined)
     return (
       <div className="space-y-4">
-        <p>Without a Passkey, you will need a new sign-in link once this device's session ends.</p>
+        <p>Without a Passkey, you will need a new Sign-in link once this Session ends.</p>
         <button onClick={onDone} className={primary}>
           Open Oiko
         </button>
