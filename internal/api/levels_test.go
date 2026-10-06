@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -30,7 +31,6 @@ var homeEndpoints = []struct {
 	{"GET", "/api/updates", "", access.Guest},
 	{"POST", "/api/commands", `{"target": "flag:unknown", "values": {"on": true}}`, access.Guest},
 	{"POST", "/api/automations/unknown/steps/go/run", "", access.Guest},
-	{"GET", "/api/automations/tiles", "", access.Guest},
 	{"GET", "/api/automations", "", access.Member},
 	{"GET", "/api/automations/unknown/state", "", access.Member},
 	{"GET", "/api/automations/unknown/runs", "", access.Member},
@@ -207,50 +207,102 @@ func next(t *testing.T, msgs <-chan map[string]any, kind string) map[string]any 
 	}
 }
 
-func TestAGuestSeesNeitherOriginsNorWhoStartedARun(t *testing.T) {
+// automations are the snapshot's Automation statuses, by Name, as JSON.
+func automations(t *testing.T, snapshot map[string]any) map[string]string {
+	t.Helper()
+	byName := map[string]string{}
+	for _, a := range snapshot["automations"].([]any) {
+		s := a.(map[string]any)
+		delete(s, "id")
+		b, _ := json.Marshal(s)
+		byName[s["name"].(string)] = string(b)
+	}
+	return byName
+}
+
+func TestAGuestSeesOnlyWhatTheyCanPressAndNeverWho(t *testing.T) {
 	h, as := levelled(t)
 	flag, _ := h.CreateFlag("Away")
 	admin, member, guest := as[access.Admin]["Session"], as[access.Member]["Token"], as[access.Guest]
-	auto := decodeAs[struct{ ID string }](t, admin("POST", "/api/automations", fmt.Sprintf(`{"name": "Leave", "enabled": true, "steps": [
-		{"id": "go", "kind": "manualTrigger", "name": "Go", "params": {}},
-		{"id": "set", "kind": "command", "params": {"targets": ["flag:%s"], "values": {"on": true}}}
-	], "edges": [{"from": {"step": "go", "handle": "out"}, "to": {"step": "set", "handle": "in"}}]}`, flag)), http.StatusCreated)
+	set := func(target string) string {
+		return fmt.Sprintf(`{"id": "set", "kind": "command", "params": {"targets": [%q], "values": {"on": true}}}`, target)
+	}
+	create := func(name, trigger, target string) string {
+		return decodeAs[struct{ ID string }](t, admin("POST", "/api/automations", fmt.Sprintf(`{"name": %q, "enabled": true, "steps": [%s, %s],
+			"edges": [{"from": {"step": "go", "handle": "out"}, "to": {"step": "set", "handle": "in"}}]}`, name, trigger, set(target))), http.StatusCreated).ID
+	}
+	manual := `{"id": "go", "kind": "manualTrigger", "name": "Go", "params": {}}`
+	leave := create("Leave", manual, "flag:"+string(flag))
+	create("Gone", manual, "flag:unknown")
+	create("Night", fmt.Sprintf(`{"id": "go", "kind": "valueTrigger", "params": {"target": "flag:%s", "capability": "on", "op": "eq", "value": true}}`, flag), "flag:"+string(flag))
 	streams := map[string]<-chan map[string]any{
 		"a Member's":        stream(t, member),
 		"a Guest's":         stream(t, guest["Session"]),
 		"a Guest Program's": stream(t, guest["Token"]),
 	}
-	for _, s := range streams {
-		next(t, s, "snapshot")
+
+	// Of the Automations, a Guest sees those with a Manual trigger: their
+	// Tile, never why one is broken.
+	gone := `"name":"Gone","reason":"step \"set\": target flag:unknown is deleted","status":"broken","step":"set"}`
+	for who, s := range streams {
+		got := automations(t, next(t, s, "snapshot"))
+		want := map[string]string{
+			"Leave": `{"manualTriggers":[{"name":"Go","step":"go"}],"name":"Leave","status":"enabled"}`,
+			"Gone":  `{"manualTriggers":[{"name":"Go","step":"go"}],` + gone,
+			"Night": `{"name":"Night","status":"enabled"}`,
+		}
+		if strings.Contains(who, "Guest") {
+			want["Gone"] = `{"manualTriggers":[{"name":"Go","step":"go"}],"name":"Gone","status":"broken"}`
+			delete(want, "Night")
+		}
+		if !maps.Equal(got, want) {
+			t.Errorf("%s snapshot: Automations %v, want %v", who, got, want)
+		}
 	}
 
-	// A Guest starts the Run: its answer does not say who did.
-	resp := guest["Session"]("POST", "/api/automations/"+auto.ID+"/steps/go/run", "")
+	// A Guest starts a Run: its answer does not say who did; a Guest's
+	// stream carries its Command without its Origin, and no Run.
+	resp := guest["Session"]("POST", "/api/automations/"+leave+"/steps/go/run", "")
 	if end := decodeAs[map[string]any](t, resp, http.StatusOK); end["trigger"].(map[string]any)["by"] != nil {
 		t.Errorf("the Run's end, to the Guest who started it: %v", end)
 	}
+	h.CreateFlag("Then") // after the Run: its Update ends what each stream reads
 	for who, s := range streams {
 		guestly := strings.Contains(who, "Guest")
-		for seen := map[string]bool{}; !seen["run"] || !seen["command"]; {
-			m := next(t, s, "")
+		seen := map[string]bool{}
+		for m := next(t, s, ""); m["kind"] != "flags"; m = next(t, s, "") {
 			switch m["kind"] {
-			case "run":
-				if by := m["run"].(map[string]any)["trigger"].(map[string]any)["by"]; (by == nil) != guestly {
-					t.Errorf("%s stream: the Run started by %v", who, by)
+			case "run": // Leave's, and Night's, which Leave's Command starts
+				if m["run"].(map[string]any)["trigger"].(map[string]any)["by"] != nil {
+					seen["run started by someone"] = true
 				}
 			case "command":
 				if origin, has := m["command"].(map[string]any)["origin"]; has == guestly {
-					t.Errorf("%s stream: the Run's Command from %v", who, origin)
+					t.Errorf("%s stream: a Command from %v", who, origin)
 				}
 			}
 			seen[m["kind"].(string)] = true
 		}
+		if !seen["command"] || seen["run"] == guestly || seen["run started by someone"] == guestly {
+			t.Errorf("%s stream: saw %v", who, seen)
+		}
 	}
-	// The Guests' Tiles show the Manual trigger, not how the Automation is built.
-	tiles := decodeAs[[]map[string]any](t, guest["Session"]("GET", "/api/automations/tiles", ""), http.StatusOK)
-	want := `[{"id":"` + auto.ID + `","manualTriggers":[{"name":"Go","step":"go"}],"name":"Leave","status":"enabled"}]`
-	if got, _ := json.Marshal(tiles); string(got) != want {
-		t.Errorf("tiles = %s, want %s", got, want)
+
+	// A rename reaches a Guest; an Automation without a Manual trigger, never.
+	doc := decodeAs[[]map[string]any](t, admin("GET", "/api/automations", ""), http.StatusOK)
+	for _, d := range doc {
+		d["name"] = d["name"].(string) + "!"
+		b, _ := json.Marshal(d)
+		admin("PUT", "/api/automations/"+d["id"].(string), string(b))
+	}
+	for who, s := range streams {
+		var names []string
+		for _, a := range next(t, s, "automations")["automations"].([]any) {
+			names = append(names, a.(map[string]any)["name"].(string))
+		}
+		if want := map[bool]string{true: "Leave! Gone", false: "Leave! Gone Night"}[strings.Contains(who, "Guest")]; strings.Join(names, " ") != want {
+			t.Errorf("%s stream after the first rename: %v, want %s", who, names, want)
+		}
 	}
 }
 

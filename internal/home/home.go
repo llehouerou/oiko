@@ -136,13 +136,22 @@ const (
 	AutomationRunaway  AutomationState = "runaway" // until re-enabled
 )
 
-// AutomationStatus is the status of one Automation, by its id.
+// AutomationStatus is the status of one Automation, by its id, with what its
+// Tile shows: its Name and its Manual triggers, in document order.
 type AutomationStatus struct {
-	ID     string          `json:"id"`
-	Status AutomationState `json:"status"`
-	Reason string          `json:"reason,omitempty"`
-	Step   string          `json:"step,omitempty"` // the Step it is broken at, if any
-	Since  time.Time       `json:"since,omitzero"` // when it became runaway
+	ID             string          `json:"id"`
+	Name           string          `json:"name"`
+	Status         AutomationState `json:"status"`
+	Reason         string          `json:"reason,omitempty"`
+	Step           string          `json:"step,omitempty"` // the Step it is broken at, if any
+	Since          time.Time       `json:"since,omitzero"` // when it became runaway
+	ManualTriggers []ManualTrigger `json:"manualTriggers,omitempty"`
+}
+
+// ManualTrigger is a Manual trigger Step of an Automation, by its id and Name.
+type ManualTrigger struct {
+	Step string `json:"step"`
+	Name string `json:"name"`
 }
 
 type CommandStatus string

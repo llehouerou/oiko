@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -99,7 +100,7 @@ func TestAutomationEndpoints(t *testing.T) {
 	if docs := list(); len(docs) != 1 || docs[0].ID != created.ID || docs[0].Name != "Night" {
 		t.Errorf("list = %+v", docs)
 	}
-	if s := status(); len(s) != 1 || s[0] != (home.AutomationStatus{ID: created.ID, Status: home.AutomationEnabled}) {
+	if s := status(); len(s) != 1 || !reflect.DeepEqual(s[0], home.AutomationStatus{ID: created.ID, Name: "Night", Status: home.AutomationEnabled}) {
 		t.Errorf("status = %+v", s)
 	}
 

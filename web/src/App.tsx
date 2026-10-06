@@ -18,7 +18,7 @@ import {
   useValue,
   useOnCount,
 } from './store'
-import type { Aggregate, Area, AutomationStatus, AutomationTile, Capability, CommandState, Device, Flag, Fn, Ref, Target } from './types'
+import type { Aggregate, Area, AutomationStatus, Capability, CommandState, Device, Flag, Fn, Ref, Target } from './types'
 import { aggregateTarget, deviceTarget, flagTarget, parseTarget, targetKind } from './targets'
 import { Automations } from './automation/Automations'
 import { confirm } from './confirm'
@@ -69,7 +69,7 @@ import { Setup } from './Setup'
 import { SignIn } from './SignIn'
 import { Programs } from './Programs'
 import { Account } from './Account'
-import { api, screen, useAllows, useMe } from './access'
+import { screen, useAllows, useMe } from './access'
 import {
   DndContext,
   PointerSensor,
@@ -121,19 +121,9 @@ function Home() {
   const aggregates = useAggregates()
   const flags = useFlags()
   const areas = useAreas()
-  const statuses = useAutomationStatuses()
+  const automations = useAutomationStatuses() // their Tiles: those with a Manual trigger show
   const member = useAllows('member') // reads the home's past: its tiles' charts
   const admin = useAllows('admin') // edits the home: its panels, arranging it, creating in it
-  // The Tiles of the Automations with a Manual trigger, fetched again as Automations come, go or change status.
-  const [manual, setManual] = useState<AutomationTile[]>([])
-  useEffect(() => {
-    api('/api/automations/tiles')
-      .then((r) => (r.ok ? r.json() : []))
-      .then(
-        (tiles: AutomationTile[]) => setManual(tiles.filter((a) => a.manualTriggers.length)),
-        () => {},
-      )
-  }, [statuses])
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null)
   // Whether the tiles show their 24 h charts; each browser remembers its choice.
   const [charts, setCharts] = useState(() => localStorage.getItem('oiko.charts') !== 'hidden')
@@ -158,17 +148,12 @@ function Home() {
   const openAggregate = aggregates.find((a) => a.id === openId)
   const openFlag = flags.find((f) => f.id === openId)
   const openArea = areas.find((a) => a.id === openId)
-  const { pills, sections } = dashboard(devices, aggregates, flags, areas, manual)
+  const { pills, sections } = dashboard(devices, aggregates, flags, areas, automations)
   // A Tile's ⋯ opens its Device's, Aggregate's or Flag's panel, to an Admin.
   const opener = (t: TargetTile) => (admin ? (back?: () => void) => setOpenId(parseTarget(t.subject)!.id, back) : undefined)
   const tile = (t: DashboardTile): TileNode => ({
     ...t,
-    node:
-      t.kind === 'manual' ? (
-        <ManualTile key={t.key} automation={t.automation} status={statuses.find((s) => s.id === t.automation.id)} onResult={setToast} />
-      ) : (
-        <Tile key={t.key} tile={t} onOpen={opener(t)} />
-      ),
+    node: t.kind === 'manual' ? <ManualTile key={t.key} automation={t.automation} onResult={setToast} /> : <Tile key={t.key} tile={t} onOpen={opener(t)} />,
   })
   // The sections this browser folds, by Area id ('' for Others).
   const [collapsed, setCollapsed] = useState<string[]>(() => JSON.parse(localStorage.getItem('oiko.collapsed') ?? '[]'))
@@ -546,16 +531,8 @@ function FlagPill({ flag, onOpen }: { flag: Flag; onOpen?: () => void }) {
 
 // An Automation's Tile with Manual triggers: a button for each, named after it.
 // Only an enabled Automation runs; otherwise the tile is dimmed and says why.
-function ManualTile({
-  automation,
-  status,
-  onResult,
-}: {
-  automation: AutomationTile
-  status?: AutomationStatus
-  onResult: (r: { text: string; error?: boolean }) => void
-}) {
-  const off = status && status.status !== 'enabled' ? status.status : null
+function ManualTile({ automation, onResult }: { automation: AutomationStatus; onResult: (r: { text: string; error?: boolean }) => void }) {
+  const off = automation.status !== 'enabled' ? automation.status : null
   return (
     <section className={`space-y-3 rounded-xl bg-neutral-900 p-4 ${off ? 'opacity-50' : ''}`}>
       <div className="min-w-0">
@@ -565,7 +542,7 @@ function ManualTile({
         <p className="text-xs text-neutral-500">{['automation', off].filter(Boolean).join(' · ')}</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        {automation.manualTriggers.map((s) => (
+        {automation.manualTriggers?.map((s) => (
           <button
             key={s.step}
             disabled={!!off}

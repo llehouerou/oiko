@@ -39,19 +39,16 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	guest, member, admin := access.Guest, access.Member, access.Admin
 
 	// A Guest observes the home as it is now, commands it and starts Manual
-	// triggers.
+	// triggers, which the event stream carries as Automation statuses.
 	handle(guest, "GET /api/updates", updates(h, acc, releases))
 	handle(guest, "POST /api/commands", command(h))
 	// Runs an Automation from its Manual trigger step, at once: how the Run ended.
 	handle(guest, "POST /api/automations/{id}/steps/{step}/run", func(w http.ResponseWriter, r *http.Request) {
 		end, err := automations.Trigger(r.PathValue("id"), r.PathValue("step"), origin(r))
 		if id, _ := identity(r); !id.Level.Allows(access.Member) {
-			end = startedByNobody(end)
+			end.Trigger.By = nil // ADR 0031
 		}
 		respond(w, end, err)
-	})
-	handle(guest, "GET /api/automations/tiles", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, automations.Tiles())
 	})
 
 	// A Member also reads the home's past and how its Automations are built.
@@ -276,23 +273,27 @@ func respond(w http.ResponseWriter, v any, err error) {
 }
 
 // updates streams a snapshot, then every Update, as Server-Sent Events, as
-// the identity's Access level lets it see them: a Guest's Commands without
-// their Origin and Run ends without who started them (ADR 0031). The Status
-// of each module's Releases comes to an Admin with the snapshot, and again,
-// as a "releases" message, each time it changes (ADR 0023). Updates
-// available at once are written together and flushed once. A client that
-// stops reading ends the stream, at the first write that does not go through
-// within streamWriteLimit. It counts as a use of its Session or Token at each
-// keepalive, and ends at once when either ends, or the identity's access
-// changes: the client reconnects and gets what its level sees now.
+// the identity's Access level lets it see them: a Guest sees only what it can
+// press, never who did what (ADR 0031). The Status of each module's Releases
+// comes to an Admin with the snapshot, and again, as a "releases" message,
+// each time it changes (ADR 0023). Updates available at once are written
+// together and flushed once. A client that stops reading ends the stream, at
+// the first write that does not go through within streamWriteLimit. It counts
+// as a use of its Session or Token at each keepalive, and ends at once when
+// either ends, or the identity's access changes: the client reconnects and
+// gets what its level sees now.
 func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := identity(r)
-		see := func(u home.Update) any { return u }
-		if !id.Level.Allows(access.Member) {
+		guest := !id.Level.Allows(access.Member)
+		see := func(u home.Update) (any, bool) { return u, true }
+		if guest {
 			see = forGuest
 		}
 		snap, ch, cancel := h.Subscribe()
+		if guest {
+			snap.Automations = pressable(snap.Automations)
+		}
 		defer cancel()
 		statuses, changed := []release.Status{}, (<-chan struct{})(nil) // nil: never
 		if id.Level.Allows(access.Admin) {
@@ -350,10 +351,10 @@ func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.Ha
 }
 
 // writeBatch writes u and every Update already queued behind it, each as see
-// shows it; it reports false if the stream must end.
-func writeBatch(w http.ResponseWriter, u home.Update, ch <-chan home.Update, see func(home.Update) any) bool {
+// shows it, if it shows it; it reports false if the stream must end.
+func writeBatch(w http.ResponseWriter, u home.Update, ch <-chan home.Update, see func(home.Update) (any, bool)) bool {
 	for {
-		if writeEvent(w, see(u)) != nil {
+		if v, ok := see(u); ok && writeEvent(w, v) != nil {
 			return false
 		}
 		select {
@@ -368,22 +369,18 @@ func writeBatch(w http.ResponseWriter, u home.Update, ch <-chan home.Update, see
 	}
 }
 
-// startedByNobody is the end of a Run as a Guest sees it (ADR 0031): without
-// who started it.
-func startedByNobody(end home.RunEnd) home.RunEnd {
-	end.Trigger.By = nil
-	return end
-}
-
-// forGuest is u as a Guest sees it (ADR 0031): a Command without its Origin,
-// the end of a Run without who started it.
-func forGuest(u home.Update) any {
-	if u.Run != nil {
-		run := startedByNobody(*u.Run)
-		u.Run = &run
-	}
-	if u.Command == nil {
-		return u
+// forGuest is u as a Guest sees it, false if not at all (ADR 0031): of the
+// Automations, only those with a Manual trigger, without why one is broken or
+// since when it is runaway; no Run; a Command without its Origin.
+func forGuest(u home.Update) (any, bool) {
+	switch {
+	case u.Kind == home.RunEnded:
+		return nil, false
+	case u.Kind == home.AutomationsChanged:
+		u.Automations = pressable(u.Automations)
+		return u, true
+	case u.Command == nil:
+		return u, true
 	}
 	type command struct {
 		home.CommandState
@@ -392,7 +389,19 @@ func forGuest(u home.Update) any {
 	return struct {
 		home.Update
 		Command command `json:"command"`
-	}{u, command{CommandState: *u.Command}}
+	}{u, command{CommandState: *u.Command}}, true
+}
+
+// pressable is what a Guest sees of the Automations: their Tiles, those with
+// a Manual trigger only, and their state without its cause.
+func pressable(list []home.AutomationStatus) []home.AutomationStatus {
+	tiles := []home.AutomationStatus{}
+	for _, s := range list {
+		if len(s.ManualTriggers) > 0 {
+			tiles = append(tiles, home.AutomationStatus{ID: s.ID, Name: s.Name, Status: s.Status, ManualTriggers: s.ManualTriggers})
+		}
+	}
+	return tiles
 }
 
 func writeEvent(w http.ResponseWriter, v any) error {

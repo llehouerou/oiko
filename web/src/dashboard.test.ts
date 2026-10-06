@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import { dashboard, type DashboardSection } from './dashboard'
-import type { Aggregate, Area, AutomationTile, Capability, Device, Fn, Target } from './types'
+import type { Aggregate, Area, AutomationStatus, Capability, Device, Fn, Target } from './types'
 
 const on: Capability = { key: 'state', label: 'State', type: 'binary', access: { observable: true, settable: true, queryable: true }, category: 'primary' }
 const fn = (key: string, area?: string): Fn => ({ key, kind: key, area, capabilities: [on] })
@@ -117,11 +117,12 @@ test('Flags without an Area are pills; Others opens with the manual Automations 
     { id: 'guest', name: 'Guest', kind: 'flag', area: 'living', capabilities: [on] },
   ]
   const group: Aggregate = { id: 'g', name: 'G', members: [], binary: 'any', numeric: 'mean' }
-  const manual: AutomationTile[] = [{ id: 'bedtime', name: 'Bedtime', status: 'enabled', manualTriggers: [{ step: 'go', name: 'Go' }] }]
-  const empty = dashboard([], [], flags, [area('living')], [])
+  const night: AutomationStatus = { id: 'night', name: 'Night', status: 'enabled' } // no Manual trigger: no Tile
+  const bedtime: AutomationStatus = { id: 'bedtime', name: 'Bedtime', status: 'enabled', manualTriggers: [{ step: 'go', name: 'Go' }] }
+  const empty = dashboard([], [], flags, [area('living')], [night])
   expect(empty.pills.map((f) => f.id)).toEqual(['away'])
   expect(empty.sections.map(short)).toMatchObject([{ area: 'living', tiles: ['flag:guest'] }])
-  const full = dashboard([device('lamp', undefined, fn('light'))], [group], flags, [area('living')], manual)
+  const full = dashboard([device('lamp', undefined, fn('light'))], [group], flags, [area('living')], [night, bedtime])
   expect(full.sections.map(short).at(-1)).toEqual({
     area: undefined,
     climate: [],

@@ -1,7 +1,9 @@
 package automation
 
 import (
+	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/llehouerou/oiko/internal/home"
@@ -55,4 +57,25 @@ func TestManualTriggerRunsALiveAutomationOnly(t *testing.T) {
 		t.Errorf("disabled: %v, want %v", err, home.ErrNotRunning)
 	}
 	expect(t, f, "while disabled")
+}
+
+func TestAStatusIsTheAutomationsTileAndFollowsItsEdits(t *testing.T) {
+	f := fixture()
+	e := New(f, nil, nil, nil, nil, nil, nil)
+	d := doc("lamps", []string{pressSingle, cmd("set", `"flag:a"`)}, "single.out set.in")
+	id := create(t, e, d)
+	if s := statusOf(f, id); s.Name != "lamps" || s.ManualTriggers != nil {
+		t.Errorf("status = %+v, want lamps without Manual triggers", s)
+	}
+
+	// Neither a rename nor a Manual trigger changes how it runs; both change its Tile.
+	d.Name = "Lamps"
+	d.Steps = append(d.Steps, Step{ID: "go", Kind: manualTrigger, Name: "Go", Params: json.RawMessage(`{}`)})
+	if err := e.Replace(id, d); err != nil {
+		t.Fatal(err)
+	}
+	want := home.AutomationStatus{ID: id, Name: "Lamps", Status: home.AutomationEnabled, ManualTriggers: []home.ManualTrigger{{Step: "go", Name: "Go"}}}
+	if s := statusOf(f, id); !reflect.DeepEqual(s, want) {
+		t.Errorf("status = %+v, want %+v", s, want)
+	}
 }

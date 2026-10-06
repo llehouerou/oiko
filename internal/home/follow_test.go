@@ -1,7 +1,7 @@
 package home
 
 import (
-	"slices"
+	"reflect"
 	"testing"
 	"time"
 
@@ -53,15 +53,15 @@ func TestAutomationStatusIsInSnapshotAndUpdates(t *testing.T) {
 	h, _, updates, _ := setup(t)
 	drain(updates)
 	list := []AutomationStatus{
-		{ID: "a", Status: AutomationEnabled},
-		{ID: "b", Status: AutomationBroken, Reason: "gone"},
+		{ID: "a", Name: "A", Status: AutomationEnabled, ManualTriggers: []ManualTrigger{{Step: "go", Name: "Go"}}},
+		{ID: "b", Name: "B", Status: AutomationBroken, Reason: "gone"},
 	}
 	h.SetAutomationStatus(list)
 	us := drain(updates)
-	if len(us) != 1 || us[0].Kind != AutomationsChanged || !slices.Equal(us[0].Automations, list) {
+	if len(us) != 1 || us[0].Kind != AutomationsChanged || !reflect.DeepEqual(us[0].Automations, list) {
 		t.Errorf("Updates = %+v", us)
 	}
-	if got := snapshot(h).Automations; !slices.Equal(got, list) {
+	if got := snapshot(h).Automations; !reflect.DeepEqual(got, list) {
 		t.Errorf("Snapshot automations = %+v", got)
 	}
 }

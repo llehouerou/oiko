@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand/v2"
+	"reflect"
 	"slices"
 	"sync"
 	"time"
@@ -64,7 +65,12 @@ type automation struct {
 type problem struct{ step, reason string }
 
 func (a *automation) status() home.AutomationStatus {
-	s := home.AutomationStatus{ID: a.doc.ID, Status: home.AutomationEnabled}
+	s := home.AutomationStatus{ID: a.doc.ID, Name: a.doc.Name, Status: home.AutomationEnabled}
+	for _, step := range a.doc.Steps {
+		if step.Kind == manualTrigger {
+			s.ManualTriggers = append(s.ManualTriggers, home.ManualTrigger{Step: step.ID, Name: step.Name})
+		}
+	}
 	switch {
 	case a.broken.reason != "":
 		s.Status, s.Reason, s.Step = home.AutomationBroken, a.broken.reason, a.broken.step
@@ -504,7 +510,7 @@ func (e *Engine) publish() {
 	for i, a := range e.autos {
 		list[i] = a.status()
 	}
-	if slices.Equal(list, e.published) {
+	if slices.EqualFunc(list, e.published, func(a, b home.AutomationStatus) bool { return reflect.DeepEqual(a, b) }) {
 		return
 	}
 	e.published = list

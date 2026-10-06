@@ -176,21 +176,16 @@ export interface StepState {
   state?: unknown
 }
 
-// Mirrors home.AutomationStatus.
+// Mirrors home.AutomationStatus: an Automation's status and what its Tile shows. A Guest gets only
+// those with Manual triggers, without reason, step or since.
 export interface AutomationStatus {
   id: string
+  name: string
   status: 'enabled' | 'disabled' | 'broken' | 'runaway'
   reason?: string // why it is broken
   step?: string // the Step it is broken at
   since?: string // when it became runaway
-}
-
-// Mirrors automation.Tile: what anyone signed in sees of an Automation, never how it is built.
-export interface AutomationTile {
-  id: string
-  name: string
-  status: AutomationStatus['status']
-  manualTriggers: { step: string; name: string }[]
+  manualTriggers?: { step: string; name: string }[] // in document order
 }
 
 // Mirrors build.Build, served with Oiko's Install and the type of each Bridge of the configuration.
