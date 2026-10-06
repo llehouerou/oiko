@@ -1,5 +1,13 @@
 import { expect, test } from 'vitest'
-import { endsAfter, lastDay, qrPath } from './manage'
+import { endsAfter, howSignedIn, lastDay, qrPath, type Session } from './manage'
+
+test('a Session tells how it signed in', () => {
+  const s = (x: Partial<Session>): Session => ({ id: 's', browser: '', method: '', signedIn: '', lastUse: '', current: false, ...x })
+  expect(howSignedIn(s({ method: 'passkey', provider: 'Apple Passwords' }))).toBe('with a Passkey from Apple Passwords')
+  expect(howSignedIn(s({ method: 'link', by: { id: 'p1', name: 'Alice' } }))).toBe('with a Sign-in link from Alice')
+  expect(howSignedIn(s({ method: 'link', by: { id: 'p1' } }))).toBe('with a Sign-in link from a removed Person')
+  expect(howSignedIn(s({ method: 'link' }))).toBe('with a Sign-in link')
+})
 
 test("a Guest's last day ends as the next one begins, and reads back as that day", () => {
   const ends = endsAfter('2026-03-31')!

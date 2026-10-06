@@ -217,11 +217,12 @@ func (s *Store) FinishSignIn(origin string, response []byte, browser string) (st
 		return "", err
 	}
 	p := s.persons[who]
-	session, err := s.signIn(p.ID, browser, "passkey", "")
+	x := session{Person: p.ID, Browser: browser, Method: "passkey", Provider: Provider(credential.Authenticator.AAGUID)}
+	secret, err := s.signIn(&x)
 	if err == nil {
-		s.recordSignIn(p, browser, "passkey", "")
+		s.recordSignIn(p, x)
 	}
-	return session, err
+	return secret, err
 }
 
 // signedWith records a sign-in or a step-up with Person i's Passkey credential: its
@@ -337,11 +338,12 @@ func (s *Store) self(by Identity, stepUp bool) (int, error) {
 	return i, nil
 }
 
-// Passkeys answers the Passkeys of Person by, oldest first.
-func (s *Store) Passkeys(by Identity) ([]Passkey, error) {
+// Passkeys answers the Passkeys of Person person, oldest first, to them, or
+// to a fresh Admin Person.
+func (s *Store) Passkeys(by Identity, person string) ([]Passkey, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	i, err := s.self(by, false)
+	i, err := s.whose(by, person, false)
 	if err != nil {
 		return nil, err
 	}
@@ -419,11 +421,12 @@ func (s *Store) FinishPasskey(by Identity, origin string, response []byte) (stri
 	return k.ID.String(), nil
 }
 
-// RemovePasskey removes Passkey id from Person by, fresh for step-up.
-func (s *Store) RemovePasskey(by Identity, id string) error {
+// RemovePasskey removes Passkey id of Person person, as they or a fresh
+// Admin Person do, each fresh for step-up (ADR 0025).
+func (s *Store) RemovePasskey(by Identity, person, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	i, err := s.self(by, true)
+	i, err := s.whose(by, person, true)
 	if err != nil {
 		return err
 	}
@@ -435,8 +438,7 @@ func (s *Store) RemovePasskey(by Identity, id string) error {
 	if err := s.changePasskeys(i, func(ks []Passkey) []Passkey { return slices.Delete(ks, j, j+1) }); err != nil {
 		return err
 	}
-	p := personParty(s.persons[i])
-	s.record(Entry{Event: PasskeyRemoved, Actor: p, Subject: p, Detail: provider(k)})
+	s.record(Entry{Event: PasskeyRemoved, Actor: party(by), Subject: personParty(s.persons[i]), Detail: provider(k)})
 	return nil
 }
 

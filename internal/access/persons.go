@@ -337,9 +337,10 @@ func (s *Store) SignInWithLink(secret, browser string) (string, error) {
 	if by == p.ID {
 		by = ""
 	}
-	session, err := s.signIn(p.ID, browser, "link", by)
+	x := session{Person: p.ID, Browser: browser, Method: "link", By: by}
+	session, err := s.signIn(&x)
 	if err == nil {
-		s.recordSignIn(p, browser, "link", by)
+		s.recordSignIn(p, x)
 	}
 	return session, err
 }

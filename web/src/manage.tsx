@@ -1,6 +1,6 @@
-// What the pages managing access share: dates, the Access level picker, and handing over a secret
-// shown once: a Copy button, and a Sign-in link with its QR code and the device's share sheet (ADR
-// 0030). Oiko never sends a link itself.
+// What the pages managing access share: dates, the Access level picker, a Person's Sessions and
+// Passkeys, and handing over a secret shown once: a Copy button, and a Sign-in link with its QR code
+// and the device's share sheet (ADR 0030). Oiko never sends a link itself.
 
 import { useState } from 'react'
 import qrcode from 'qrcode-generator'
@@ -24,6 +24,80 @@ export function lastDay(ends: string): string {
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
 }
 export const day = (ends: string) => new Date(new Date(ends).getTime() - 1).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })
+
+// A Session as /api/me/sessions and /api/persons/{id}/sessions list it (ADR 0025).
+export type Session = {
+  id: string
+  browser: string
+  method: string
+  provider?: string
+  by?: { id: string; name?: string }
+  signedIn: string
+  lastUse: string
+  current: boolean
+}
+
+// How s signed in, in words: with a Passkey from its provider, a Sign-in link from whoever created it…
+export function howSignedIn(s: Session): string {
+  switch (s.method) {
+    case 'setup':
+      return 'with the Setup link'
+    case 'passkey':
+      return s.provider ? `with a Passkey from ${s.provider}` : 'with a Passkey'
+    case 'link':
+      return s.by ? `with a Sign-in link from ${s.by.name ?? 'a removed Person'}` : 'with a Sign-in link'
+  }
+  return ''
+}
+
+export type Passkey = { id: string; provider?: string; created: string; lastUse?: string }
+
+const row = 'flex flex-wrap items-center gap-3 rounded-xl bg-neutral-900 p-4'
+
+// Sessions, each with a button ending it.
+export function SessionList({ sessions, onEnd }: { sessions: Session[]; onEnd: (s: Session) => void }) {
+  return (
+    <ul className="space-y-3">
+      {sessions.map((s) => (
+        <li key={s.id} className={row}>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-base font-medium">
+              {s.browser || 'Unknown browser'}
+              {s.current && <span className="ml-2 text-sm font-normal text-amber-300">this device</span>}
+            </p>
+            <p className="text-neutral-400">
+              Signed in {howSignedIn(s)} on {date(s.signedIn)} · last used {date(s.lastUse)}
+            </p>
+          </div>
+          <button onClick={() => onEnd(s)} className={secondary}>
+            Sign out
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+// Passkeys, each named by its provider, with a button removing it.
+export function PasskeyList({ passkeys, onRemove }: { passkeys: Passkey[]; onRemove: (k: Passkey) => void }) {
+  return (
+    <ul className="space-y-3">
+      {passkeys.map((k) => (
+        <li key={k.id} className={row}>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-base font-medium">{k.provider ?? 'Passkey'}</p>
+            <p className="text-neutral-400">
+              Added {date(k.created)} · {k.lastUse ? `last used ${date(k.lastUse)}` : 'never used'}
+            </p>
+          </div>
+          <button onClick={() => onRemove(k)} className={`${secondary} text-red-400`}>
+            Remove
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 export function LevelSelect(props: { name?: string; defaultValue?: Level; value?: Level; onChange?: (l: Level) => void }) {
   const { onChange, ...rest } = props

@@ -159,7 +159,7 @@ func TestPasskeysAreRecorded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	recorded(t, c.take(), Entry{Event: SignedIn, Actor: me, Subject: me, Browser: "Safari on iPhone", Detail: map[string]any{"method": "passkey"}})
+	recorded(t, c.take(), Entry{Event: SignedIn, Actor: me, Subject: me, Browser: "Safari on iPhone", Detail: map[string]any{"method": "passkey", "provider": "Google Password Manager"}})
 
 	// Another Oiko's Passkey is anonymous; a counter going backwards is its
 	// Person's, as is a Passkey never added that says it is theirs.
@@ -199,8 +199,8 @@ func TestPasskeysAreRecorded(t *testing.T) {
 	recorded(t, c.take())
 
 	alice, _ = s.Resolve(session)
-	passkeys, _ := s.Passkeys(alice)
-	if err := s.RemovePasskey(alice, passkeys[0].ID.String()); err != nil {
+	passkeys, _ := s.Passkeys(alice, alice.ID)
+	if err := s.RemovePasskey(alice, alice.ID, passkeys[0].ID.String()); err != nil {
 		t.Fatal(err)
 	}
 	recorded(t, c.take(), Entry{Event: PasskeyRemoved, Actor: me, Subject: me, Detail: map[string]any{"provider": "Google Password Manager"}})

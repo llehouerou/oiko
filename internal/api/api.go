@@ -161,6 +161,7 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	handlePasskeys(mux, acc, public)
 	handlePrograms(mux, acc)
 	handlePersons(mux, acc, public)
+	handleSessions(mux, acc)
 	handleAudit(mux, acc, hist)
 
 	client := files(static)

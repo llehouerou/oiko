@@ -1,35 +1,45 @@
 // The signed-in Person's own page (#account): their Name; their Passkeys, each named by its provider,
-// added and removed after step-up; a Sign-in link to sign in another device of theirs; and what the
-// Audit log holds of them.
+// added and removed after step-up, after which they are offered to sign out every other device; their
+// Sessions, which they end without step-up (ADR 0025); a Sign-in link to sign in another device of
+// theirs; and what the Audit log holds of them.
 
 import { useEffect, useState, type FormEvent } from 'react'
 import { AppBar } from './AppBar'
 import { confirm } from './confirm'
 import { edit } from './store'
-import { api, levels, loadMe, signInLink, useMe } from './access'
+import { api, levels, loadMe, signInLink, signOut, useMe } from './access'
 import { addPasskey, stepUp } from './passkeys'
-import { date, ShareLink } from './manage'
+import { PasskeyList, SessionList, ShareLink, type Passkey, type Session } from './manage'
 import { AuditLog } from './Audit'
-
-type Passkey = { id: string; provider?: string; created: string; lastUse?: string }
 
 export function Account() {
   const me = useMe()
   const [passkeys, setPasskeys] = useState<Passkey[] | null>(null)
+  const [sessions, setSessions] = useState<Session[]>([])
   const [error, setError] = useState<string | null>(null)
   const [shown, setShown] = useState<{ link: string; expires: string } | null>(null) // a link just created
   const load = async () => {
-    const res = await api('/api/me/passkeys')
-    if (res.ok) setPasskeys(await res.json())
-    else setError((await res.text()).trim())
+    const [keys, signedIn] = await Promise.all([api('/api/me/passkeys'), api('/api/me/sessions')])
+    if (!keys.ok) return setError((await keys.text()).trim())
+    setPasskeys(await keys.json())
+    if (signedIn.ok) setSessions(await signedIn.json())
   }
   useEffect(() => void load(), [])
   const change = async (err: string | null) => (setError(err), load())
-  const add = async () => (await stepUp()) && change(await addPasskey())
+  // After a Passkey is added or removed: whoever holds another of this Person's Sessions may be who
+  // they are locking out.
+  const offer = async (err: string | null) => {
+    if (!err && sessions.some((s) => !s.current) && (await confirm('Sign out all your other devices too?', 'Sign out'))) {
+      err = await edit('DELETE', 'me/sessions')
+    }
+    change(err)
+  }
+  const add = async () => (await stepUp()) && offer(await addPasskey())
   const remove = async (k: Passkey) =>
     (await confirm(`Remove this ${k.provider ?? 'Passkey'}? It will no longer sign you in.`, 'Remove')) &&
     (await stepUp()) &&
-    change(await edit('DELETE', `me/passkeys/${k.id}`))
+    offer(await edit('DELETE', `me/passkeys/${k.id}`))
+  const end = async (s: Session) => (s.current ? signOut() : change(await edit('DELETE', `me/sessions/${s.id}`)))
   const rename = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const err = await edit('PUT', 'me', { name: new FormData(e.currentTarget).get('name') })
@@ -69,24 +79,20 @@ export function Account() {
             A Passkey signs you in without a password, unlocked by your fingerprint, face or screen lock. Your phone's also signs you in on a computer.
           </p>
           {passkeys?.length === 0 && <p className="text-neutral-500">No Passkeys yet: once this Session ends, you will need a new Sign-in link.</p>}
-          <ul className="space-y-3">
-            {passkeys?.map((k) => (
-              <li key={k.id} className="flex flex-wrap items-center gap-3 rounded-xl bg-neutral-900 p-4">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-medium">{k.provider ?? 'Passkey'}</p>
-                  <p className="text-neutral-400">
-                    Added {date(k.created)} · {k.lastUse ? `last used ${date(k.lastUse)}` : 'never used'}
-                  </p>
-                </div>
-                <button onClick={() => remove(k)} className="rounded bg-neutral-800 px-3 py-1 text-red-400 hover:bg-neutral-700">
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
+          <PasskeyList passkeys={passkeys ?? []} onRemove={remove} />
           <button onClick={add} className="rounded bg-amber-400 px-3 py-1 font-medium text-neutral-900 hover:bg-amber-300">
             Add a Passkey
           </button>
+        </section>
+        <section className="space-y-3">
+          <h2 className="text-base font-medium">Signed-in devices</h2>
+          <p className="text-neutral-400">Each browser signed in as you, until you sign it out, or after 30 days without use.</p>
+          <SessionList sessions={sessions} onEnd={end} />
+          {sessions.filter((s) => !s.current).length > 1 && (
+            <button onClick={async () => change(await edit('DELETE', 'me/sessions'))} className="rounded bg-neutral-800 px-3 py-1 hover:bg-neutral-700">
+              Sign out all other devices
+            </button>
+          )}
         </section>
         <section className="space-y-3">
           <h2 className="text-base font-medium">Another device</h2>

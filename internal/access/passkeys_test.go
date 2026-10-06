@@ -64,7 +64,7 @@ func TestAPersonSignsInWithTheirPasskey(t *testing.T) {
 		if !ok || id.ID != alice.ID || id.Level != Admin || !id.Fresh {
 			t.Errorf("at %s: signed in as %+v, %v; want Alice, fresh", origin, id, ok)
 		}
-		passkeys, err := s.Passkeys(id)
+		passkeys, err := s.Passkeys(id, id.ID)
 		if err != nil || len(passkeys) != 1 {
 			t.Fatalf("Passkeys = %v, %v", passkeys, err)
 		}
@@ -218,7 +218,7 @@ func TestAddingOrRemovingAPasskeyNeedsStepUp(t *testing.T) {
 	alice, _ := s.Resolve(session)
 	first := enrol(t, s, alice, public)
 	second := enrol(t, s, alice, public)
-	passkeys, _ := s.Passkeys(alice)
+	passkeys, _ := s.Passkeys(alice, alice.ID)
 	if len(passkeys) != 2 {
 		t.Fatalf("%d Passkeys, want 2", len(passkeys))
 	}
@@ -233,7 +233,7 @@ func TestAddingOrRemovingAPasskeyNeedsStepUp(t *testing.T) {
 	if _, err := s.BeginPasskey(alice, public); !errors.Is(err, ErrStale) {
 		t.Errorf("adding a Passkey, not fresh: %v, want ErrStale", err)
 	}
-	if err := s.RemovePasskey(alice, passkeys[0].ID.String()); !errors.Is(err, ErrStale) {
+	if err := s.RemovePasskey(alice, alice.ID, passkeys[0].ID.String()); !errors.Is(err, ErrStale) {
 		t.Errorf("removing a Passkey, not fresh: %v, want ErrStale", err)
 	}
 
@@ -242,10 +242,10 @@ func TestAddingOrRemovingAPasskeyNeedsStepUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	alice, _ = s.Resolve(session)
-	if err := s.RemovePasskey(alice, passkeys[0].ID.String()); err != nil {
+	if err := s.RemovePasskey(alice, alice.ID, passkeys[0].ID.String()); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RemovePasskey(alice, passkeys[0].ID.String()); err == nil {
+	if err := s.RemovePasskey(alice, alice.ID, passkeys[0].ID.String()); err == nil {
 		t.Error("removing a removed Passkey: no error")
 	}
 	if _, err := signIn(t, s, first, public); !errors.Is(err, ErrRefused) {
@@ -259,7 +259,7 @@ func TestAddingOrRemovingAPasskeyNeedsStepUp(t *testing.T) {
 func TestOnlyAPersonHasPasskeys(t *testing.T) {
 	s, _, _ := withPasskey(t, t.TempDir(), newClock())
 	program := Identity{Kind: ProgramKind, ID: "p1", Level: Admin, Fresh: true}
-	if _, err := s.Passkeys(program); !errors.Is(err, ErrRefused) {
+	if _, err := s.Passkeys(program, program.ID); !errors.Is(err, ErrRefused) {
 		t.Errorf("a Program's Passkeys: %v, want ErrRefused", err)
 	}
 	if _, err := s.BeginPasskey(program, public); !errors.Is(err, ErrRefused) {

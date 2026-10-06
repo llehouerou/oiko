@@ -232,7 +232,7 @@ func (s *Store) sessionOf(t *testing.T, id string) string {
 	t.Helper()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	secret, err := s.signIn(id, "", "link", "")
+	secret, err := s.signIn(&session{Person: id, Method: "link"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -81,18 +81,29 @@ type Person struct {
 	Link     *Link     `json:"link,omitempty"` // their unused Sign-in link, if any
 }
 
-// session is a Session as stored: its secret's hash, whose it is, the
-// browser it lives in, how and when it signed in, when it last confirmed a
-// Passkey, and when it was last used.
+// session is a Session as stored: its secret's hash, the id the API names it
+// by, whose it is, the browser it lives in, how and when it signed in, when
+// it last confirmed a Passkey, and when it was last used.
 type session struct {
 	Hash      string    `json:"hash"`
+	ID        string    `json:"id"`
 	Person    string    `json:"person"`
 	Browser   string    `json:"browser"`
-	Method    string    `json:"method"`       // how it signed in: "setup", "passkey" or "link"
-	By        string    `json:"by,omitempty"` // the Person who created the link it signed in with, when not its own
+	Method    string    `json:"method"`             // how it signed in: "setup", "passkey" or "link"
+	Provider  string    `json:"provider,omitempty"` // the provider of the Passkey it signed in with, if known
+	By        string    `json:"by,omitempty"`       // the Person who created the link it signed in with, when not its own
 	SignedIn  time.Time `json:"signedIn"`
 	Confirmed time.Time `json:"confirmed,omitzero"`
 	LastUse   time.Time `json:"lastUse"`
+}
+
+// Session is a Session as its Person, or an Admin, sees it (ADR 0025): its
+// id, the browser it lives in, how it signed in (with a Passkey from
+// Provider, if known; with a link By created, if not their own), when, and
+// when it was last used.
+type Session struct {
+	ID, Browser, Method, Provider, By string
+	SignedIn, LastUse                 time.Time
 }
 
 // fresh reports whether Session x signed in, or confirmed a Passkey, lately
@@ -114,12 +125,13 @@ const (
 // Identity is who a request is, as they are now: a Person by their Session,
 // or a Program by its Token.
 type Identity struct {
-	Kind  Kind
-	ID    string
-	Name  string
-	Level Level
-	Fresh bool            // a Session that proved itself lately enough for step-up
-	Ended <-chan struct{} // closed once this Session or Token ends, or the identity's access changes
+	Kind    Kind
+	ID      string
+	Name    string
+	Level   Level
+	Session string          // the id of the Session it holds, if any
+	Fresh   bool            // a Session that proved itself lately enough for step-up
+	Ended   <-chan struct{} // closed once this Session or Token ends, or the identity's access changes
 }
 
 // StepUp refuses an action needing step-up unless the Session is fresh.
@@ -237,7 +249,8 @@ func (s *Store) Claim(secret, name, browser string) (string, error) {
 	}
 	// The Session first: written without its Person, it is dropped on load.
 	p := Person{ID: uuid.NewV7().String(), Name: name, Level: Admin}
-	session, err := s.signIn(p.ID, browser, "setup", "")
+	x := session{Person: p.ID, Browser: browser, Method: "setup"}
+	session, err := s.signIn(&x)
 	if err != nil {
 		return "", err
 	}
@@ -247,16 +260,17 @@ func (s *Store) Claim(secret, name, browser string) (string, error) {
 	}
 	s.setup = ""
 	s.record(Entry{Event: PersonCreated, Actor: personParty(p), Subject: personParty(p), Detail: map[string]any{"level": p.Level}})
-	s.recordSignIn(p, browser, "setup", "")
+	s.recordSignIn(p, x)
 	return session, nil
 }
 
-// signIn opens a Session for Person person, signed in by method, with a
-// Sign-in link by created if not "". Callers hold s.mu.
-func (s *Store) signIn(person, browser, method, by string) (string, error) {
+// signIn opens Session x, of its Person, browser and how it signed in, and
+// answers its secret. Callers hold s.mu.
+func (s *Store) signIn(x *session) (string, error) {
 	secret := rand.Text()
-	now := s.now()
-	x := &session{Hash: hash(secret), Person: person, Browser: browser, Method: method, By: by, SignedIn: now, LastUse: now}
+	x.Hash, x.ID = hash(secret), uuid.NewV7().String()
+	x.SignedIn = s.now()
+	x.LastUse = x.SignedIn
 	s.sessions[x.Hash] = x
 	if err := s.saveSessions(); err != nil {
 		delete(s.sessions, x.Hash)
@@ -265,14 +279,17 @@ func (s *Store) signIn(person, browser, method, by string) (string, error) {
 	return secret, nil
 }
 
-// recordSignIn records that Person p signed in, by method, with a Sign-in
-// link by created if not "". Callers hold s.mu.
-func (s *Store) recordSignIn(p Person, browser, method, by string) {
-	detail := map[string]any{"method": method}
-	if by != "" {
-		detail["by"] = s.personParty(by)
+// recordSignIn records that Person p signed in, opening Session x. Callers
+// hold s.mu.
+func (s *Store) recordSignIn(p Person, x session) {
+	detail := map[string]any{"method": x.Method}
+	if x.By != "" {
+		detail["by"] = s.personParty(x.By)
 	}
-	s.record(Entry{Event: SignedIn, Actor: personParty(p), Subject: personParty(p), Browser: browser, Detail: detail})
+	if x.Provider != "" {
+		detail["provider"] = x.Provider
+	}
+	s.record(Entry{Event: SignedIn, Actor: personParty(p), Subject: personParty(p), Browser: x.Browser, Detail: detail})
 }
 
 // personParty is Person p as the Audit log names them.
@@ -309,7 +326,7 @@ func (s *Store) Resolve(secret string) (Identity, bool) {
 	x.LastUse = now
 	s.used(&s.sessionUses, s.saveSessions)
 	p := s.persons[i]
-	return Identity{Kind: PersonKind, ID: p.ID, Name: p.Name, Level: p.Level, Fresh: x.fresh(now), Ended: s.ending(x.Hash)}, true
+	return Identity{Kind: PersonKind, ID: p.ID, Name: p.Name, Level: p.Level, Session: x.ID, Fresh: x.fresh(now), Ended: s.ending(x.Hash)}, true
 }
 
 // ending is what closes when the access of key ends or changes, made on

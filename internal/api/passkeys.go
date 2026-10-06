@@ -53,16 +53,17 @@ func handlePasskeys(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 		}
 	}))
 
-	// The signed-in Person's own Passkeys.
+	// The signed-in Person's own Passkeys, and, to a fresh Admin Person,
+	// anyone's (ADR 0025).
 	type passkey struct {
 		ID       string    `json:"id"`
 		Provider string    `json:"provider,omitempty"` // none when unknown
 		Created  time.Time `json:"created"`
 		LastUse  time.Time `json:"lastUse,omitzero"`
 	}
-	mux.HandleFunc("GET /api/me/passkeys", func(w http.ResponseWriter, r *http.Request) {
+	list := func(w http.ResponseWriter, r *http.Request, person string) {
 		id, _ := identity(r)
-		passkeys, err := acc.Passkeys(id)
+		passkeys, err := acc.Passkeys(id, person)
 		if err != nil {
 			reply(w, err)
 			return
@@ -72,6 +73,17 @@ func handlePasskeys(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 			list[i] = passkey{p.ID.String(), access.Provider(p.AAGUID), p.Created, p.LastUse}
 		}
 		writeJSON(w, http.StatusOK, list)
+	}
+	mux.HandleFunc("GET /api/me/passkeys", func(w http.ResponseWriter, r *http.Request) {
+		id, _ := identity(r)
+		list(w, r, id.ID)
+	})
+	mux.HandleFunc("GET /api/persons/{id}/passkeys", func(w http.ResponseWriter, r *http.Request) {
+		list(w, r, r.PathValue("id"))
+	})
+	mux.HandleFunc("DELETE /api/persons/{id}/passkeys/{passkey}", func(w http.ResponseWriter, r *http.Request) {
+		id, _ := identity(r)
+		reply(w, acc.RemovePasskey(id, r.PathValue("id"), r.PathValue("passkey")))
 	})
 	mux.HandleFunc("POST /api/me/passkeys/options", atSignInOrigin(public, func(w http.ResponseWriter, r *http.Request) {
 		id, _ := identity(r)
@@ -93,6 +105,6 @@ func handlePasskeys(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 	}))
 	mux.HandleFunc("DELETE /api/me/passkeys/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id, _ := identity(r)
-		reply(w, acc.RemovePasskey(id, r.PathValue("id")))
+		reply(w, acc.RemovePasskey(id, id.ID, r.PathValue("id")))
 	})
 }

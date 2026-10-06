@@ -9,7 +9,7 @@ import { confirm } from './confirm'
 import { edit } from './store'
 import { api, levels, loadMe, signInLink, useMe, type Level } from './access'
 import { stepUp } from './passkeys'
-import { date, day, endsAfter, lastDay, LevelSelect, ShareLink } from './manage'
+import { date, day, endsAfter, lastDay, LevelSelect, PasskeyList, SessionList, ShareLink, type Passkey, type Session } from './manage'
 
 type Person = {
   id: string
@@ -150,10 +150,50 @@ export function Persons() {
                   Remove
                 </button>
               </div>
+              <Credentials person={p} onError={setError} />
             </li>
           ))}
         </ul>
       </main>
     </>
+  )
+}
+
+// A Person's Sessions and Passkeys, shown to an Admin after step-up, who signs out the one or removes
+// the other (ADR 0025).
+function Credentials({ person, onError }: { person: Person; onError: (err: string | null) => void }) {
+  const [lists, setLists] = useState<{ sessions: Session[]; passkeys: Passkey[] } | null>(null)
+  const load = async () => {
+    const res = await Promise.all([api(`/api/persons/${person.id}/sessions`), api(`/api/persons/${person.id}/passkeys`)])
+    const refused = res.find((r) => !r.ok)
+    if (refused) return onError((await refused.text()).trim())
+    const [sessions, passkeys] = await Promise.all(res.map((r) => r.json()))
+    setLists({ sessions, passkeys })
+  }
+  const change = async (path: string) => (await stepUp()) && (onError(await edit('DELETE', path)), load())
+  if (!lists)
+    return (
+      <button onClick={async () => (await stepUp()) && load()} className="text-neutral-400 hover:text-white">
+        Sessions and Passkeys…
+      </button>
+    )
+  return (
+    <div className="space-y-3 border-t border-neutral-800 pt-3">
+      <h3 className="font-medium">Signed-in devices</h3>
+      {lists.sessions.length === 0 && <p className="text-neutral-500">None.</p>}
+      <SessionList sessions={lists.sessions} onEnd={(s) => change(`persons/${person.id}/sessions/${s.id}`)} />
+      <h3 className="font-medium">Passkeys</h3>
+      {lists.passkeys.length === 0 && <p className="text-neutral-500">None.</p>}
+      <PasskeyList
+        passkeys={lists.passkeys}
+        onRemove={async (k) =>
+          (await confirm(`Remove this ${k.provider ?? 'Passkey'} of ${person.name}? It will no longer sign them in.`, 'Remove')) &&
+          change(`persons/${person.id}/passkeys/${k.id}`)
+        }
+      />
+      <button onClick={() => setLists(null)} className="text-neutral-400 hover:text-white">
+        Hide
+      </button>
+    </div>
   )
 }
