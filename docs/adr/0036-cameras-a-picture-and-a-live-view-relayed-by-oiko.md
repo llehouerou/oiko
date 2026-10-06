@@ -24,5 +24,5 @@ A Picture and a Live view are what the home looks like now, so a Guest sees them
 - **Memory.** At most 4 viewers per camera and 16 in all; one more is refused (ADR 0034).
 - **Tiles.** The `camera` kind gives a Picture Tile (ADR 0014), placed and sized by the Layout like any other. A camera Function may have no Capability at all.
 - **Pictures** are fetched from the Bridge when asked for, and kept in memory only for as long as Oiko serves them; a fresh Picture, which wakes the camera, is not part of this decision.
-- **Recordings** a camera's vendor keeps (Arlo's library) are the home's past, for a Member and above, and a later decision.
+- **Recordings** a camera's vendor keeps (Arlo's library) are the home's past, for a Member and above: see ADR 0038.
 - **HomeKit cameras** stream over HAP and SRTP, not RTSP: the built-in homekit Bridge would hand the relay a go2rtc source of its own, outside the contract.

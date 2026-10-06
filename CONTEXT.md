@@ -88,6 +88,10 @@ _Avoid_: snapshot, still, thumbnail, last image
 A camera Function's video as it happens, opened on demand by a Person, a Kiosk or a Program and shared by everyone watching it at once. Recorded in the camera's History, with its Origin and how long it lasted; never recorded as video.
 _Avoid_: stream, live feed, live stream, video
 
+**Recording**:
+A clip a camera's own system recorded by itself, on motion or any trigger of its own, with a thumbnail and what triggered it. Kept by that system, never by Oiko, which lists them and plays them for a Member or an Admin; one deleted there is gone.
+_Avoid_: clip, event, video, library, capture
+
 **Command**:
 Request to set one or more Capabilities of a single Function or Device, or of an Aggregate, optionally with a transition: the duration over which the device fades to the new values. Pending until a reported Value confirms it; otherwise failed or timed out. A newer Command on the same target supersedes a pending one. A binary Capability may be asked to toggle: the Command turns it off if the pending Command or, failing one, the current Value has it on, otherwise it turns it on with the other requested values. Values outside a Capability's bounds are refused, never clamped. A Command on an Aggregate is relayed as one Command per counted member, refused as a whole if any member would refuse it; it is confirmed once all of them are, and failed, timed out or superseded as soon as one of them is. Every Command records its Origin; a relayed Command inherits the Origin of the Aggregate Command that relayed it. Accepted Commands are kept with their outcome indefinitely, alongside the History.
 _Avoid_: Service call, action
