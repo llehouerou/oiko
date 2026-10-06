@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,93 +17,26 @@ import (
 	"github.com/llehouerou/oiko/internal/home"
 )
 
-// recorder is a Bridge with cameras whose system keeps Recordings, served by
-// media as a vendor's storage would: at a path per id and part, ranges
-// included.
-type recorder struct {
-	cameratest.Bridge
-	list  []bridge.Recording
-	media *httptest.Server
-	err   error
-}
-
-func (r *recorder) Recordings(_ context.Context, address, function string, from, to time.Time) ([]bridge.Recording, error) {
-	var in []bridge.Recording
-	for _, x := range r.list {
-		if !x.Start.Before(from) && !x.Start.After(to) {
-			in = append(in, x)
-		}
-	}
-	return in, r.err
-}
-
-func (r *recorder) RecordingMedia(ctx context.Context, address, function, id string, part bridge.RecordingPart, header http.Header) (*http.Response, error) {
-	if r.err != nil {
-		return nil, r.err
-	}
-	if id == "gone" {
-		return nil, fmt.Errorf("%w: https://media.example/secret", bridge.ErrNotFound)
-	}
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, r.media.URL+"/"+id+"/"+string(part)+"?sig=secret", nil)
-	req.Header = header
-	return http.DefaultClient.Do(req)
-}
-
-// video is the content of every Recording's video, made up.
-var video = bytes.Repeat([]byte("0123456789"), 1000)
-
-func newRecorder(t *testing.T, list []bridge.Recording) *recorder {
-	media := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasPrefix(r.URL.Path, "/expired/"):
-			http.Error(w, "expired", http.StatusForbidden)
-		case strings.HasSuffix(r.URL.Path, "/video"):
-			w.Header().Set("Content-Type", "video/mp4")
-			http.ServeContent(w, r, "", cameratest.Taken, bytes.NewReader(video))
-		default:
-			w.Header().Set("Content-Type", "image/jpeg")
-			w.Write([]byte("jpeg of " + r.URL.Path))
-		}
-	}))
-	t.Cleanup(media.Close)
-	return &recorder{list: list, media: media}
-}
-
-func TestRecordingsAreListedNewestFirstWithinTheRange(t *testing.T) {
+func TestRecordingsAreListedWithinTheRange(t *testing.T) {
 	h, do := server(t)
 	at := func(m int) time.Time { return cameratest.Taken.Add(time.Duration(m) * time.Minute) }
-	cam, _ := cameratest.Attach(t, h, "arlo", newRecorder(t, []bridge.Recording{
+	cam, _ := cameratest.Attach(t, h, "arlo", cameratest.NewRecorder(t, []bridge.Recording{
 		{ID: "a", Start: at(0), Duration: 12 * time.Second, Trigger: "motion"},
-		{ID: "c", Start: at(20), Duration: 30 * time.Second},
-		{ID: "b", Start: at(10), Duration: time.Minute, Trigger: "person"},
+		{ID: "b", Start: at(10), Duration: time.Minute},
 		{ID: "late", Start: at(120)},
 	}))
 
 	resp := do("GET", fmt.Sprintf("/api/recordings?target=%s&from=%d&to=%d", cam.Key(), at(0).UnixMilli(), at(60).UnixMilli()), "")
 	var got []map[string]any
 	json.NewDecoder(resp.Body).Decode(&got)
-	if resp.StatusCode != http.StatusOK || len(got) != 3 || got[0]["id"] != "c" || got[1]["id"] != "b" || got[2]["id"] != "a" {
-		t.Fatalf("%d %v, want c, b, a", resp.StatusCode, got)
+	if resp.StatusCode != http.StatusOK || len(got) != 2 || got[0]["id"] != "b" || got[1]["id"] != "a" {
+		t.Fatalf("%d %v, want b, a", resp.StatusCode, got)
 	}
-	if got[1]["duration"] != 60000.0 || got[1]["trigger"] != "person" || got[0]["trigger"] != nil {
-		t.Errorf("b and c: %v, %v", got[1], got[0])
+	if got[1]["duration"] != 12000.0 || got[1]["trigger"] != "motion" || got[0]["trigger"] != nil {
+		t.Errorf("a and b: %v, %v", got[1], got[0])
 	}
-	if start, _ := time.Parse(time.RFC3339, got[2]["start"].(string)); !start.Equal(at(0)) {
-		t.Errorf("a starts %v, want %v", got[2]["start"], at(0))
-	}
-}
-
-func TestAListingKeepsTheNewestRecordings(t *testing.T) {
-	h, do := server(t)
-	var list []bridge.Recording
-	for i := range maxRecordings + 5 {
-		list = append(list, bridge.Recording{ID: fmt.Sprint(i), Start: cameratest.Taken.Add(time.Duration(i) * time.Second)})
-	}
-	cam, _ := cameratest.Attach(t, h, "arlo", newRecorder(t, list))
-	var got []struct{ ID string }
-	json.NewDecoder(do("GET", fmt.Sprintf("/api/recordings?target=%s&from=0&to=%d", cam.Key(), cameratest.Taken.Add(time.Hour).UnixMilli()), "").Body).Decode(&got)
-	if len(got) != maxRecordings || got[0].ID != fmt.Sprint(maxRecordings+4) {
-		t.Errorf("%d Recordings from %+v, want the %d newest", len(got), got[0], maxRecordings)
+	if start, _ := time.Parse(time.RFC3339, got[1]["start"].(string)); !start.Equal(at(0)) {
+		t.Errorf("a starts %v, want %v", got[1]["start"], at(0))
 	}
 }
 
@@ -113,7 +45,7 @@ func TestARecordingsVideoIsRelayedRangesIncluded(t *testing.T) {
 	srv := httptest.NewServer(hdl)
 	t.Cleanup(srv.Close)
 	cookie, _ := signedIn(t, acc)
-	cam, _ := cameratest.Attach(t, h, "arlo", newRecorder(t, nil))
+	cam, _ := cameratest.Attach(t, h, "arlo", cameratest.NewRecorder(t, nil))
 	get := func(path, rng string) (*http.Response, []byte) {
 		req, _ := http.NewRequest("GET", srv.URL+path, nil)
 		req.AddCookie(cookie)
@@ -129,6 +61,7 @@ func TestARecordingsVideoIsRelayedRangesIncluded(t *testing.T) {
 		return resp, body
 	}
 
+	video := cameratest.Video
 	resp, body := get("/api/recordings/video?id=r1&target="+cam.Key(), "")
 	if resp.StatusCode != http.StatusOK || !bytes.Equal(body, video) || resp.Header.Get("Content-Type") != "video/mp4" ||
 		resp.Header.Get("Accept-Ranges") != "bytes" || resp.Header.Get("Cache-Control") != "no-store" {
@@ -147,12 +80,12 @@ func TestARecordingsVideoIsRelayedRangesIncluded(t *testing.T) {
 
 func TestARecordingIsRefusedWhenThereIsNone(t *testing.T) {
 	h, do := server(t)
-	cam, _ := cameratest.Attach(t, h, "arlo", newRecorder(t, nil))
+	cam, _ := cameratest.Attach(t, h, "arlo", cameratest.NewRecorder(t, nil))
 	plain, _ := cameratest.Attach(t, h, "cams", &cameratest.Bridge{})
-	failing := newRecorder(t, nil)
-	failing.err = errors.New(`Get "https://media.example/secret": timeout`)
+	failing := cameratest.NewRecorder(t, nil)
+	failing.Err = errors.New(`Get "https://media.example/secret": timeout`)
 	broken, _ := cameratest.Attach(t, h, "cloud", failing)
-	off, port := cameratest.Attach(t, h, "away", newRecorder(t, nil))
+	off, port := cameratest.Attach(t, h, "away", cameratest.NewRecorder(t, nil))
 	port.SetOnline(false)
 
 	for path, want := range map[string]int{

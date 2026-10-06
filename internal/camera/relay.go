@@ -1,7 +1,9 @@
-// Package camera is what Oiko does with its cameras (ADR 0036-0039): their
-// Live views, relayed through one connection to each camera's RTSP URL, read
-// by go2rtc and shared by everyone watching it, its media muxed into
-// fragmented MP4 for each viewer, without transcoding.
+// Package camera is what Oiko does with its cameras (ADR 0036-0039), whoever
+// asks: their Pictures, kept a minute; their Recordings, listed and read
+// through their Bridge; and their Live views, relayed through one connection
+// to each camera's RTSP URL, read by go2rtc and shared by everyone watching
+// it, its media muxed into fragmented MP4 for each viewer, without
+// transcoding.
 package camera
 
 import (

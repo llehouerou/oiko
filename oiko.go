@@ -354,8 +354,9 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 		},
 		hist.Record)
 	h.Follow(hist.Follow)
+	cams := camera.New(h, hist.LiveView)
 	if c.Telegram != nil {
-		bot, err := telegram.New(*c.Telegram, h)
+		bot, err := telegram.New(*c.Telegram, cams)
 		if err != nil {
 			log.Fatalf("%s: %v", configFile, err)
 		}
@@ -396,7 +397,6 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 	built := build.Current()
 	releases := release.New(built)
 	go releases.Run(ctx)
-	cams := camera.New(h, hist.LiveView)
 	srv := api.Server(listen, api.Handler(h, engine, hist, cams, acc, built, install, releases, types, public, web.Dist()))
 	srv.BaseContext = func(net.Listener) context.Context { return ctx } // ends SSE streams on shutdown
 	served := make(chan struct{})

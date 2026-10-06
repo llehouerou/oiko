@@ -1,12 +1,17 @@
 package camera
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/llehouerou/oiko/bridge"
 	"github.com/llehouerou/oiko/internal/camera/cameratest"
 	"github.com/llehouerou/oiko/internal/history"
 	"github.com/llehouerou/oiko/internal/home"
@@ -166,5 +171,98 @@ func TestAPictureIsRefusedWhenThereIsNone(t *testing.T) {
 	c.Picture(context.Background(), asleep)
 	if n := failing.Pictures.Load(); n != 2 {
 		t.Errorf("a failure was kept: the Bridge was asked %d times, want twice", n)
+	}
+}
+
+func TestRecordingsAreListedNewestFirstWithinTheRange(t *testing.T) {
+	h, c, _ := cameras(t)
+	at := func(m int) time.Time { return cameratest.Taken.Add(time.Duration(m) * time.Minute) }
+	cam, _ := cameratest.Attach(t, h, "arlo", cameratest.NewRecorder(t, []bridge.Recording{
+		{ID: "a", Start: at(0)}, {ID: "c", Start: at(20)}, {ID: "b", Start: at(10)}, {ID: "late", Start: at(120)},
+	}))
+
+	rs, err := c.Recordings(context.Background(), cam, at(0), at(60))
+	if err != nil || len(rs) != 3 || rs[0].ID != "c" || rs[1].ID != "b" || rs[2].ID != "a" {
+		t.Errorf("%+v, %v; want c, b, a", rs, err)
+	}
+}
+
+func TestAListingKeepsTheNewestRecordings(t *testing.T) {
+	h, c, _ := cameras(t)
+	var list []bridge.Recording
+	for i := range maxRecordings + 5 {
+		list = append(list, bridge.Recording{ID: fmt.Sprint(i), Start: cameratest.Taken.Add(time.Duration(i) * time.Second)})
+	}
+	cam, _ := cameratest.Attach(t, h, "arlo", cameratest.NewRecorder(t, list))
+	rs, err := c.Recordings(context.Background(), cam, cameratest.Taken, cameratest.Taken.Add(time.Hour))
+	if err != nil || len(rs) != maxRecordings || rs[0].ID != fmt.Sprint(maxRecordings+4) {
+		t.Errorf("%d Recordings from %+v, %v; want the %d newest", len(rs), rs[0], err, maxRecordings)
+	}
+}
+
+func TestARecordingIsReadAsItsBridgeAnswers(t *testing.T) {
+	h, c, _ := cameras(t)
+	cam, _ := cameratest.Attach(t, h, "arlo", cameratest.NewRecorder(t, nil))
+
+	resp, err := c.RecordingMedia(context.Background(), cam, "r1", bridge.Video, http.Header{"Range": {"bytes=100-199"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusPartialContent || !bytes.Equal(body, cameratest.Video[100:200]) {
+		t.Errorf("range: %d %q", resp.StatusCode, body)
+	}
+	for id, want := range map[string]error{"gone": home.ErrNotFound, "expired": ErrNoAnswer} {
+		if _, err := c.RecordingMedia(context.Background(), cam, id, bridge.Video, http.Header{}); !errors.Is(err, want) || strings.Contains(err.Error(), "secret") {
+			t.Errorf("%s: %v, want %v", id, err, want)
+		}
+	}
+}
+
+func TestRecordingsAreRefusedWhenThereAreNone(t *testing.T) {
+	h, c, _ := cameras(t)
+	cam, _ := cameratest.Attach(t, h, "arlo", cameratest.NewRecorder(t, nil))
+	other, _ := cameratest.Attach(t, h, "cams", &cameratest.Bridge{})
+	failing := cameratest.NewRecorder(t, nil)
+	failing.Err = errors.New(`Get "https://media.example/secret": timeout`)
+	asleep, _ := cameratest.Attach(t, h, "cloud", failing)
+	away, port := cameratest.Attach(t, h, "away", cameratest.NewRecorder(t, nil))
+	port.SetOnline(false)
+
+	for target, want := range map[home.Target]error{
+		home.TargetDevice(cam.Device(), "occupancy"): home.ErrNotFound,
+		other:  home.ErrNotFound,
+		away:   home.ErrBridgeOffline,
+		asleep: ErrNoAnswer,
+	} {
+		_, err := c.Recordings(context.Background(), target, time.Time{}, time.Now())
+		_, errMedia := c.RecordingMedia(context.Background(), target, "r1", bridge.Thumbnail, http.Header{})
+		for _, err := range []error{err, errMedia} {
+			if !errors.Is(err, want) || strings.Contains(err.Error(), "secret") {
+				t.Errorf("%s: %v, want %v", target, err, want)
+			}
+		}
+	}
+}
+
+func TestTheVideoIsTheRecordingStartedAtItsEvent(t *testing.T) {
+	h, c, _ := cameras(t)
+	start := cameratest.Taken
+	cam, _ := cameratest.Attach(t, h, "arlo", cameratest.NewRecorder(t, []bridge.Recording{
+		{ID: "early", Start: start.Add(-time.Minute)}, {ID: "near", Start: start.Add(-3 * time.Second)}, {ID: "this", Start: start.Add(time.Second)},
+	}))
+
+	resp, err := c.Video(context.Background(), cam, start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.Request.URL.Path != "/this/video" {
+		t.Errorf("read %s, want this Recording's video", resp.Request.URL.Path)
+	}
+	// None started at its time: the minute-old one is not taken for it.
+	if _, err := c.Video(context.Background(), cam, start.Add(-30*time.Second)); !errors.Is(err, home.ErrNotFound) {
+		t.Errorf("no Recording at its time: %v, want ErrNotFound", err)
 	}
 }

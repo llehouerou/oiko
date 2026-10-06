@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/llehouerou/oiko/bridge"
 	"github.com/llehouerou/oiko/internal/automation"
 	"github.com/llehouerou/oiko/internal/home"
 )
@@ -27,10 +26,11 @@ type Config struct {
 	ChatIDFile string `json:"chatIdFile"`
 }
 
-// Recordings is where the Recording a Notification carries is found: Home.
-type Recordings interface {
-	Recordings(ctx context.Context, t home.Target, from, to time.Time) ([]bridge.Recording, error)
-	RecordingMedia(ctx context.Context, t home.Target, id string, part bridge.RecordingPart, header http.Header) (*http.Response, error)
+// Videos is where the video of the Recording a Notification carries is
+// found: the home's cameras.
+type Videos interface {
+	// Video fetches the video of the Recording of camera t that started at.
+	Video(ctx context.Context, t home.Target, at time.Time) (*http.Response, error)
 }
 
 const (
@@ -40,8 +40,6 @@ const (
 	maxVideo = 50 << 20
 	// maxCaption is the longest caption Telegram takes, in characters.
 	maxCaption = 1024
-	// within is how far from the Event's time the Recording's start may be.
-	within = 5 * time.Second
 	// ponytail: Notifications beyond this many waiting are dropped, logged;
 	// a few per day are expected.
 	queued = 64
@@ -51,13 +49,13 @@ const (
 // engine's goroutine. One that fails is logged, never retried; one whose
 // video cannot be sent goes as text.
 type Bot struct {
-	api        string // the Bot API's base URL, with the token
-	chatID     string
-	recordings Recordings
-	queue      chan automation.Notification
+	api    string // the Bot API's base URL, with the token
+	chatID string
+	videos Videos
+	queue  chan automation.Notification
 }
 
-func New(c Config, recordings Recordings) (*Bot, error) {
+func New(c Config, videos Videos) (*Bot, error) {
 	token, err := readSecret(c.TokenFile)
 	if err != nil {
 		return nil, err
@@ -66,7 +64,7 @@ func New(c Config, recordings Recordings) (*Bot, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Bot{api: "https://api.telegram.org/bot" + token, chatID: chatID, recordings: recordings,
+	return &Bot{api: "https://api.telegram.org/bot" + token, chatID: chatID, videos: videos,
 		queue: make(chan automation.Notification, queued)}, nil
 }
 
@@ -124,28 +122,15 @@ func (b *Bot) send(ctx context.Context, n automation.Notification) error {
 	return do(req)
 }
 
-// sendVideo finds Recording r among its camera's, and uploads its video
-// with caption as it reads it, without keeping it.
+// sendVideo uploads the video of Recording r with caption as it reads it,
+// without keeping it.
 func (b *Bot) sendVideo(ctx context.Context, r automation.RecordingAt, caption string) error {
-	if b.recordings == nil {
+	if b.videos == nil {
 		return errors.New("no Recordings to read")
 	}
 	ctx, cancel := context.WithTimeout(ctx, videoTimeout)
 	defer cancel()
-	rs, err := b.recordings.Recordings(ctx, r.Camera, r.Start.Add(-within), r.Start.Add(within))
-	if err != nil {
-		return err
-	}
-	var found *bridge.Recording
-	for i, x := range rs {
-		if found == nil || x.Start.Sub(r.Start).Abs() < found.Start.Sub(r.Start).Abs() {
-			found = &rs[i]
-		}
-	}
-	if found == nil {
-		return fmt.Errorf("no Recording of %s started at %s", r.Camera, r.Start.Format(time.RFC3339))
-	}
-	video, err := b.recordings.RecordingMedia(ctx, r.Camera, found.ID, bridge.Video, http.Header{})
+	video, err := b.videos.Video(ctx, r.Camera, r.Start)
 	if err != nil {
 		return err
 	}

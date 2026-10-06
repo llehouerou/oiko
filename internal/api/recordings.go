@@ -1,20 +1,15 @@
 package api
 
 import (
-	"errors"
 	"io"
-	"log/slog"
 	"net/http"
-	"slices"
 	"strconv"
 	"time"
 
 	"github.com/llehouerou/oiko/bridge"
+	"github.com/llehouerou/oiko/internal/camera"
 	"github.com/llehouerou/oiko/internal/home"
 )
-
-// maxRecordings bounds what a listing answers (ADR 0034): the newest.
-const maxRecordings = 1000
 
 // recording is a bridge.Recording as the API tells it.
 type recording struct {
@@ -25,9 +20,8 @@ type recording struct {
 }
 
 // recordings lists a camera's Recordings, ?target=<key>&from=&to= in Unix
-// ms, the newest first (ADR 0038). What a Bridge's error says is logged,
-// never answered.
-func recordings(h *home.Home) http.HandlerFunc {
+// ms, the newest first (ADR 0038).
+func recordings(cams *camera.Cameras) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		t, err := home.ParseTarget(q.Get("target"))
@@ -41,22 +35,14 @@ func recordings(h *home.Home) http.HandlerFunc {
 			http.Error(w, "from and to are Unix ms, from first", http.StatusBadRequest)
 			return
 		}
-		rs, err := h.Recordings(r.Context(), t, time.UnixMilli(from), time.UnixMilli(to))
-		switch {
-		case errors.Is(err, home.ErrNotFound), errors.Is(err, home.ErrBridgeOffline):
+		rs, err := cams.Recordings(r.Context(), t, time.UnixMilli(from), time.UnixMilli(to))
+		if err != nil {
 			reply(w, err)
 			return
-		case r.Context().Err() != nil: // the client left
-			return
-		case err != nil:
-			slog.Error("api: listing Recordings", "target", t, "err", err)
-			http.Error(w, "the camera's Bridge listed no Recordings", http.StatusBadGateway)
-			return
 		}
-		slices.SortStableFunc(rs, func(a, b bridge.Recording) int { return b.Start.Compare(a.Start) })
-		answer := make([]recording, 0, min(len(rs), maxRecordings))
-		for _, x := range rs[:min(len(rs), maxRecordings)] {
-			answer = append(answer, recording{x.ID, x.Start, x.Duration.Milliseconds(), x.Trigger})
+		answer := make([]recording, len(rs))
+		for i, x := range rs {
+			answer[i] = recording{x.ID, x.Start, x.Duration.Milliseconds(), x.Trigger}
 		}
 		writeJSON(w, http.StatusOK, answer)
 	}
@@ -71,7 +57,7 @@ var (
 
 // recordingMedia relays part of a Recording, ?target=<key>&id=, as its
 // Bridge answers it, ranges included, so that a browser seeks in a video.
-func recordingMedia(h *home.Home, part bridge.RecordingPart) http.HandlerFunc {
+func recordingMedia(cams *camera.Cameras, part bridge.RecordingPart) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		t, err := home.ParseTarget(q.Get("target"))
@@ -85,32 +71,12 @@ func recordingMedia(h *home.Home, part bridge.RecordingPart) http.HandlerFunc {
 				header.Set(k, v)
 			}
 		}
-		resp, err := h.RecordingMedia(r.Context(), t, q.Get("id"), part, header)
-		switch {
-		case errors.Is(err, home.ErrNotFound), errors.Is(err, home.ErrBridgeOffline):
+		resp, err := cams.RecordingMedia(r.Context(), t, q.Get("id"), part, header)
+		if err != nil {
 			reply(w, err)
-			return
-		case errors.Is(err, bridge.ErrNotFound):
-			http.Error(w, "no such Recording", http.StatusNotFound)
-			return
-		case r.Context().Err() != nil: // the client left
-			return
-		case err != nil:
-			slog.Error("api: reading a Recording", "target", t, "part", part, "err", err)
-			http.Error(w, "the camera's Bridge gave no Recording", http.StatusBadGateway)
 			return
 		}
 		defer resp.Body.Close()
-		switch resp.StatusCode {
-		case http.StatusOK, http.StatusPartialContent, http.StatusRequestedRangeNotSatisfiable:
-		case http.StatusNotFound, http.StatusGone:
-			http.Error(w, "no such Recording", http.StatusNotFound)
-			return
-		default:
-			slog.Error("api: reading a Recording", "target", t, "part", part, "status", resp.StatusCode)
-			http.Error(w, "the camera's Bridge gave no Recording", http.StatusBadGateway)
-			return
-		}
 		for _, k := range relayed {
 			if v := resp.Header.Get(k); v != "" {
 				w.Header().Set(k, v)

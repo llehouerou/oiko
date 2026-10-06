@@ -86,9 +86,9 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	handle(member, "POST /api/history", readHistory(h, hist))
 	handle(member, "POST /api/history/periods", readPeriods(h, hist))
 	// A camera's Recordings, kept by its own system (ADR 0038).
-	handle(member, "GET /api/recordings", recordings(h))
-	handle(member, "GET /api/recordings/video", recordingMedia(h, bridge.Video))
-	handle(member, "GET /api/recordings/thumbnail", recordingMedia(h, bridge.Thumbnail))
+	handle(member, "GET /api/recordings", recordings(cams))
+	handle(member, "GET /api/recordings/video", recordingMedia(cams, bridge.Video))
+	handle(member, "GET /api/recordings/thumbnail", recordingMedia(cams, bridge.Thumbnail))
 	handle(member, "GET /api/lost-entries", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]uint64{"lost": hist.Lost()})
 	})

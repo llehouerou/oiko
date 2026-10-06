@@ -1,38 +1,9 @@
 package home
 
-import (
-	"context"
-	"fmt"
-	"net/http"
-	"time"
-
-	"github.com/llehouerou/oiko/bridge"
-)
+import "fmt"
 
 // Camera is the kind of a camera Function (ADR 0036).
 const Camera = "camera"
-
-// Recordings asks the Bridge of camera Function t for its Recordings that
-// started within [from, to] (ADR 0038): ErrNotFound when t is no camera
-// Function or its Bridge has no Recordings, ErrBridgeOffline while that
-// Bridge is offline.
-func (h *Home) Recordings(ctx context.Context, t Target, from, to time.Time) ([]bridge.Recording, error) {
-	recordings, address, err := CameraBridge[bridge.Recordings](h, t)
-	if err != nil {
-		return nil, err
-	}
-	return recordings.Recordings(ctx, address, t.Function(), from, to)
-}
-
-// RecordingMedia asks the Bridge of camera Function t for part of its
-// Recording id, refused as Recordings is.
-func (h *Home) RecordingMedia(ctx context.Context, t Target, id string, part bridge.RecordingPart, header http.Header) (*http.Response, error) {
-	recordings, address, err := CameraBridge[bridge.Recordings](h, t)
-	if err != nil {
-		return nil, err
-	}
-	return recordings.RecordingMedia(ctx, address, t.Function(), id, part, header)
-}
 
 // CameraBridge is the Bridge of camera Function t, as I, an optional
 // interface of the contract (bridge.Cameras, bridge.Recordings), and its

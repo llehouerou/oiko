@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/llehouerou/oiko/bridge"
 	"github.com/llehouerou/oiko/internal/automation"
 	"github.com/llehouerou/oiko/internal/home"
 )
@@ -36,26 +35,25 @@ func TestSendPostsToTheChatAndHidesTheToken(t *testing.T) {
 	}
 }
 
-// camera keeps two Recordings, a minute apart, whose videos are their ids.
-type camera struct{ err error }
+// videos serve the video of every Recording, size bytes long if size is
+// set, told by their Content-Length, or else "mp4 of <camera> at <time>";
+// unless err.
+type videos struct {
+	err  error
+	size int64
+}
 
 var start = time.Date(2026, 10, 1, 8, 30, 0, 0, time.UTC)
 
-func (c camera) Recordings(_ context.Context, _ home.Target, from, to time.Time) ([]bridge.Recording, error) {
-	var rs []bridge.Recording
-	for _, r := range []bridge.Recording{{ID: "early", Start: start.Add(-time.Minute)}, {ID: "this", Start: start.Add(time.Second)}} {
-		if !r.Start.Before(from) && !r.Start.After(to) {
-			rs = append(rs, r)
-		}
+func (v videos) Video(_ context.Context, t home.Target, at time.Time) (*http.Response, error) {
+	switch {
+	case v.err != nil:
+		return nil, v.err
+	case v.size > 0:
+		return &http.Response{StatusCode: http.StatusOK, ContentLength: v.size, Body: io.NopCloser(bytes.NewReader(nil))}, nil
 	}
-	return rs, nil
-}
-
-func (c camera) RecordingMedia(_ context.Context, _ home.Target, id string, part bridge.RecordingPart, _ http.Header) (*http.Response, error) {
-	if c.err != nil {
-		return nil, c.err
-	}
-	return &http.Response{StatusCode: http.StatusOK, ContentLength: -1, Body: io.NopCloser(strings.NewReader("mp4 of " + id + " " + string(part)))}, nil
+	body := "mp4 of " + t.Key() + " at " + at.Format(time.RFC3339)
+	return &http.Response{StatusCode: http.StatusOK, ContentLength: -1, Body: io.NopCloser(strings.NewReader(body))}, nil
 }
 
 // telegram records what each method of the Bot API was sent.
@@ -85,21 +83,24 @@ func telegram(t *testing.T) (*httptest.Server, map[string]map[string]string) {
 
 func TestANotificationWithARecordingIsSentAsItsVideo(t *testing.T) {
 	srv, got := telegram(t)
-	b := &Bot{api: srv.URL + "/botSECRET", chatID: "42", recordings: camera{}}
-	n := automation.Notification{Title: "Garden", Message: "Someone", Recording: &automation.RecordingAt{Camera: home.TargetDevice("garden", "camera"), Start: start}}
+	b := &Bot{api: srv.URL + "/botSECRET", chatID: "42", videos: videos{}}
+	garden := home.TargetDevice("garden", "camera")
+	n := automation.Notification{Title: "Garden", Message: "Someone", Recording: &automation.RecordingAt{Camera: garden, Start: start}}
 	if err := b.send(context.Background(), n); err != nil {
 		t.Fatal(err)
 	}
 	v := got["sendVideo"]
-	if v["chat_id"] != "42" || v["caption"] != "Garden\nSomeone" || v["video"] != "mp4 of this video" || v["filename"] != "recording.mp4" || got["sendMessage"] != nil {
+	if v["chat_id"] != "42" || v["caption"] != "Garden\nSomeone" || v["video"] != "mp4 of "+garden.Key()+" at 2026-10-01T08:30:00Z" ||
+		v["filename"] != "recording.mp4" || got["sendMessage"] != nil {
 		t.Errorf("sent %v", got)
 	}
 }
 
 func TestANotificationWhoseVideoFailsIsSentAsText(t *testing.T) {
 	for name, b := range map[string]*Bot{
-		"a failing fetch": {recordings: camera{err: errors.New("unreachable")}},
-		"no Recordings":   {},
+		"a failing fetch":      {videos: videos{err: errors.New("unreachable")}},
+		"no Recordings":        {},
+		"over the bot's limit": {videos: videos{size: maxVideo + 1}},
 	} {
 		srv, got := telegram(t)
 		b.api, b.chatID = srv.URL+"/botSECRET", "42"
@@ -111,35 +112,4 @@ func TestANotificationWhoseVideoFailsIsSentAsText(t *testing.T) {
 			t.Errorf("%s: sent %v", name, got)
 		}
 	}
-	// None started at its time: the minute-old one is not taken for it.
-	srv, got := telegram(t)
-	b := &Bot{api: srv.URL + "/botSECRET", chatID: "42", recordings: camera{}}
-	n := automation.Notification{Title: "Garden", Recording: &automation.RecordingAt{Camera: home.TargetDevice("garden", "camera"), Start: start.Add(-30 * time.Second)}}
-	b.send(context.Background(), n)
-	if got["sendVideo"] != nil || got["sendMessage"] == nil {
-		t.Errorf("no Recording at its time: sent %v", got)
-	}
-}
-
-func TestAVideoOverTheBotsLimitIsSentAsText(t *testing.T) {
-	srv, got := telegram(t)
-	big := camera{}
-	b := &Bot{api: srv.URL + "/botSECRET", chatID: "42", recordings: sized{big, maxVideo + 1}}
-	n := automation.Notification{Title: "Garden", Recording: &automation.RecordingAt{Camera: home.TargetDevice("garden", "camera"), Start: start}}
-	if err := b.send(context.Background(), n); err != nil {
-		t.Fatal(err)
-	}
-	if got["sendVideo"] != nil || got["sendMessage"] == nil {
-		t.Errorf("sent %v", got)
-	}
-}
-
-// sized is a camera whose videos are n bytes, told by their Content-Length.
-type sized struct {
-	camera
-	n int64
-}
-
-func (s sized) RecordingMedia(context.Context, home.Target, string, bridge.RecordingPart, http.Header) (*http.Response, error) {
-	return &http.Response{StatusCode: http.StatusOK, ContentLength: s.n, Body: io.NopCloser(bytes.NewReader(nil))}, nil
 }

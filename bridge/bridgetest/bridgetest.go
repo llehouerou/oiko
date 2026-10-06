@@ -202,11 +202,11 @@ func (h *Home) Recordings(address, function string, from, to time.Time) ([]bridg
 	if !ok {
 		return nil, fmt.Errorf("%w: no Device at %s", ErrRefused, address)
 	}
-	rs, err := h.h.Recordings(context.Background(), home.TargetDevice(id, function), from, to)
-	if errors.Is(err, home.ErrNotFound) || errors.Is(err, home.ErrBridgeOffline) {
-		return rs, fmt.Errorf("%w: %w", ErrRefused, err)
+	recordings, native, err := home.CameraBridge[bridge.Recordings](h.h, home.TargetDevice(id, function))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrRefused, err)
 	}
-	return rs, err
+	return recordings.Recordings(context.Background(), native, function, from, to)
 }
 
 // RecordingMedia fetches part of Recording id as Oiko does, passing header
@@ -217,11 +217,11 @@ func (h *Home) RecordingMedia(address, function, id string, part bridge.Recordin
 	if !ok {
 		return nil, fmt.Errorf("%w: no Device at %s", ErrRefused, address)
 	}
-	resp, err := h.h.RecordingMedia(context.Background(), home.TargetDevice(dev, function), id, part, header)
-	if errors.Is(err, home.ErrNotFound) || errors.Is(err, home.ErrBridgeOffline) {
-		return resp, fmt.Errorf("%w: %w", ErrRefused, err)
+	recordings, native, err := home.CameraBridge[bridge.Recordings](h.h, home.TargetDevice(dev, function))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrRefused, err)
 	}
-	return resp, err
+	return recordings.RecordingMedia(context.Background(), native, function, id, part, header)
 }
 
 func (h *Home) snapshot() home.Snapshot {
