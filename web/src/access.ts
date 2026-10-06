@@ -96,7 +96,7 @@ export async function signOut() {
   await loadMe()
 }
 
-export type View = 'home' | 'history' | 'automations' | 'persons' | 'programs' | 'account'
+export type View = 'home' | 'history' | 'automations' | 'persons' | 'programs' | 'audit' | 'account'
 
 // What the page shows: nothing until it knows who is signed in, sign-in while nobody is, or else the
 // view hash names, if their Access level shows it, the dashboard otherwise. Sign-in leaves the hash
@@ -107,6 +107,7 @@ export function screen(me: Me | null, hash: string): View | 'sign-in' | null {
   const person = 'person' in me.identity
   if (hash.startsWith('#persons') && person && allows(me, 'admin')) return 'persons'
   if (hash.startsWith('#programs') && person && allows(me, 'admin')) return 'programs'
+  if (hash.startsWith('#audit') && person && allows(me, 'admin')) return 'audit'
   if (hash.startsWith('#account') && person) return 'account'
   if (hash.startsWith('#automations') && allows(me, 'member')) return 'automations'
   if (hash.startsWith('#history') && allows(me, 'member')) return 'history'

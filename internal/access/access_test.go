@@ -12,17 +12,22 @@ import (
 	"github.com/llehouerou/oiko/internal/home"
 )
 
-// clock is a time a test moves forward.
-type clock struct{ t time.Time }
+// clock is a time a test moves forward, and the Audit log of the stores
+// opened on it.
+type clock struct {
+	t   time.Time
+	log []Entry
+}
 
 func (c *clock) now() time.Time          { return c.t }
 func (c *clock) advance(d time.Duration) { c.t = c.t.Add(d) }
+func (c *clock) audit(e Entry)           { c.log = append(c.log, e) }
 
-func newClock() *clock { return &clock{time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)} }
+func newClock() *clock { return &clock{t: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)} }
 
 func open(t *testing.T, dir string, c *clock) *Store {
 	t.Helper()
-	s, err := Open(dir, c.now)
+	s, err := Open(dir, c.now, c.audit)
 	if err != nil {
 		t.Fatal(err)
 	}

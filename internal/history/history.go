@@ -1,11 +1,12 @@
 // Package history keeps, in SQLite (ADR 0006, ADR 0011), the History of every
-// Target indefinitely, the history of Commands indefinitely, and the Traces
-// of Automation Runs for 30 days. Home and the engine hand entries over
-// without ever waiting: one writer goroutine inserts them in batched
-// transactions, and an entry that finds the queue full is dropped and
-// counted. Where the History is incomplete, because Oiko was stopped or
-// points were lost, it records a Gap. A Replace or a Delete Home announces is
-// never dropped (ADR 0016): the History follows the Targets' lifecycle.
+// Target indefinitely, the history of Commands indefinitely, the Traces of
+// Automation Runs for 30 days, and the Audit log for a year (ADR 0033). Home,
+// the engine and access hand entries over without ever waiting: one writer
+// goroutine inserts them in batched transactions, and an entry that finds
+// the queue full is dropped and counted. Where the History is incomplete,
+// because Oiko was stopped or points were lost, it records a Gap. A Replace
+// or a Delete Home announces is never dropped (ADR 0016): the History follows
+// the Targets' lifecycle; nor is an Audit log entry.
 package history
 
 import (
@@ -25,6 +26,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/llehouerou/oiko/bridge/store"
+	"github.com/llehouerou/oiko/internal/access"
 	"github.com/llehouerou/oiko/internal/automation"
 	"github.com/llehouerou/oiko/internal/home"
 )
@@ -128,7 +130,7 @@ func toFormat2(tx *sql.Tx) error {
 	return err
 }
 
-// Store keeps the History, Commands and Traces.
+// Store keeps the History, Commands, Traces and the Audit log.
 type Store struct {
 	db     *sql.DB
 	ready  chan struct{} // signalled once entries are queued
@@ -136,9 +138,10 @@ type Store struct {
 	series map[seriesKey]*series // owned by the writer
 	opened map[seriesKey]series  // each series' last point as Open found it, for Recall
 
-	mu    sync.Mutex
-	queue []entry // awaiting the writer
-	drops drops   // points lost since the last Gap was recorded
+	mu     sync.Mutex
+	queue  []entry // awaiting the writer
+	drops  drops   // points lost since the last Gap was recorded
+	budget budget  // anonymous refusals this hour
 }
 
 // drops are points lost from first to last.
@@ -147,14 +150,18 @@ type drops struct {
 	n           int64
 }
 
-// entry is a Trace, a Command record, a point, or a Replace or Delete,
-// awaiting the writer.
+// entry is a Trace, a Command record, a point, a Replace or Delete, or an
+// Audit log entry, awaiting the writer.
 type entry struct {
 	trace     *automation.Trace
 	command   *home.CommandRecord
 	point     *point
 	lifecycle func(*sql.Tx) error
+	audit     *access.Entry
 }
+
+// kept reports whether e is never dropped.
+func (e entry) kept() bool { return e.lifecycle != nil || e.audit != nil }
 
 type seriesKey struct{ target, capability string }
 
@@ -423,10 +430,11 @@ func deleteSeries(tx *sql.Tx, id int64) error {
 }
 
 // hand queues e for the writer, never waiting. Past buffered entries it
-// drops a point, a Trace or a Command, but never a Replace or a Delete.
+// drops a point, a Trace or a Command, but never a Replace, a Delete or an
+// Audit log entry.
 func (s *Store) hand(e entry) bool {
 	s.mu.Lock()
-	if e.lifecycle == nil && len(s.queue) >= buffered {
+	if !e.kept() && len(s.queue) >= buffered {
 		s.mu.Unlock()
 		s.lose(e)
 		return false
@@ -503,7 +511,8 @@ func (s *Store) alive() {
 func (s *Store) Lost() uint64 { return s.lost.Load() }
 
 // Run writes entries as they arrive until ctx is done, then writes those
-// still queued. It marks Oiko alive every minute and when it stops.
+// still queued. It marks Oiko alive every minute and when it stops, and then
+// writes the counts of anonymous refusals of an hour that is over.
 func (s *Store) Run(ctx context.Context) {
 	batch := make([]entry, 0, maxBatch)
 	tick := time.NewTicker(aliveEach)
@@ -511,6 +520,7 @@ func (s *Store) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			s.count(time.Now(), true)
 			for batch = s.take(batch[:0]); len(batch) > 0; batch = s.take(batch[:0]) {
 				s.write(batch)
 			}
@@ -518,6 +528,7 @@ func (s *Store) Run(ctx context.Context) {
 			return
 		case <-tick.C:
 			s.alive()
+			s.count(time.Now(), false)
 		case <-s.ready:
 			s.write(s.take(batch[:0]))
 		}
@@ -540,10 +551,10 @@ func (s *Store) take(batch []entry) []entry {
 	return batch
 }
 
-// write inserts batch in one transaction, then purges Traces past
-// retention. Entries it fails to write count as lost, and lost points are
-// recorded as a Gap. If the batch fails as a whole, each Replace or Delete
-// in it is retried alone: it is not lost for the others' sake.
+// write inserts batch in one transaction, then purges Traces and Audit log
+// entries past retention. Entries it fails to write count as lost, and lost
+// points are recorded as a Gap. If the batch fails as a whole, each entry
+// never dropped is retried alone: it is not lost for the others' sake.
 func (s *Store) write(batch []entry) {
 	failed, err := s.insert(batch)
 	if err != nil {
@@ -551,10 +562,10 @@ func (s *Store) write(batch []entry) {
 		s.reload()
 		failed = nil
 		for _, e := range batch {
-			if e.lifecycle == nil {
+			if !e.kept() {
 				failed = append(failed, e)
 			} else if _, err := s.insert([]entry{e}); err != nil {
-				log.Printf("history: replacing or deleting: %v", err)
+				log.Printf("history: replacing, deleting or auditing: %v", err)
 				s.reload()
 				failed = append(failed, e)
 			}
@@ -580,7 +591,7 @@ func (s *Store) reload() {
 }
 
 // insert writes batch, reporting the entries that failed on their own. A
-// Replace or Delete that fails fails the whole batch.
+// Replace, a Delete or an Audit log entry that fails fails the whole batch.
 func (s *Store) insert(batch []entry) (failed []entry, err error) {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -593,6 +604,10 @@ func (s *Store) insert(batch []entry) (failed []entry, err error) {
 		case e.lifecycle != nil:
 			// Half applied, it would leave series that are no Target's.
 			if err := e.lifecycle(tx); err != nil {
+				return nil, err
+			}
+		case e.audit != nil:
+			if err := insertAudit(tx, e.audit); err != nil {
 				return nil, err
 			}
 		case e.point != nil:
@@ -609,7 +624,11 @@ func (s *Store) insert(batch []entry) (failed []entry, err error) {
 			log.Printf("history: %v", err)
 		}
 	}
-	if _, err := tx.Exec(`DELETE FROM runs WHERE time < ?`, time.Now().Add(-retention).UnixNano()); err != nil {
+	now := time.Now()
+	if _, err := tx.Exec(`DELETE FROM runs WHERE time < ?`, now.Add(-retention).UnixNano()); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(`DELETE FROM audit WHERE time < ?`, now.Add(-auditRetention).UnixNano()); err != nil {
 		return nil, err
 	}
 	return failed, tx.Commit()

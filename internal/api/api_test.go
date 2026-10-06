@@ -49,7 +49,7 @@ func handlerIn(t *testing.T, dir string, public *url.URL, now func() time.Time) 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Close() })
-	acc, err := access.Open(dir, now)
+	acc, err := access.Open(dir, now, store.Audit)
 	if err != nil {
 		t.Fatal(err)
 	}

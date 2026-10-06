@@ -200,14 +200,26 @@ func (s *Store) FinishSignIn(origin string, response []byte, browser string) (st
 	}, c.data, parsed)
 	switch {
 	case unknown:
-		return "", fmt.Errorf("%w: this Passkey belongs to no one in this Oiko; ask an Admin for a Sign-in link", ErrRefused)
+		err = fmt.Errorf("%w: this Passkey belongs to no one in this Oiko; ask an Admin for a Sign-in link", ErrRefused)
 	case err != nil:
-		return "", passkeyRefused(err)
+		err = passkeyRefused(err)
+	default:
+		err = s.signedWith(who, credential)
 	}
-	if err := s.signedWith(who, credential); err != nil {
+	if err != nil {
+		subject := nobody
+		if who >= 0 {
+			subject = personParty(s.persons[who])
+		}
+		s.record(Entry{Event: PasskeyRefused, Actor: nobody, Subject: subject, Browser: browser, Detail: map[string]any{"reason": err.Error()}})
 		return "", err
 	}
-	return s.signIn(s.persons[who].ID, browser, "passkey", "")
+	p := s.persons[who]
+	session, err := s.signIn(p.ID, browser, "passkey", "")
+	if err == nil {
+		s.recordSignIn(p, browser, "passkey", "")
+	}
+	return session, err
 }
 
 // signedWith records a sign-in or a step-up with Person i's Passkey credential: its
@@ -287,9 +299,13 @@ func (s *Store) FinishStepUp(secret, origin string, response []byte) error {
 	}
 	credential, err := rp.ValidateLogin(user{&s.persons[i]}, c.data, parsed)
 	if err != nil {
-		return passkeyRefused(err)
+		err = passkeyRefused(err)
+	} else {
+		err = s.signedWith(i, credential)
 	}
-	if err := s.signedWith(i, credential); err != nil {
+	if err != nil {
+		p := personParty(s.persons[i])
+		s.record(Entry{Event: StepUpRefused, Actor: p, Subject: p, Browser: x.Browser, Detail: map[string]any{"reason": err.Error()}})
 		return err
 	}
 	x.Confirmed = s.now()
@@ -396,6 +412,8 @@ func (s *Store) FinishPasskey(by Identity, origin string, response []byte) (stri
 	if err := s.changePasskeys(i, func(ks []Passkey) []Passkey { return append(ks, k) }); err != nil {
 		return "", err
 	}
+	p := personParty(s.persons[i])
+	s.record(Entry{Event: PasskeyAdded, Actor: p, Subject: p, Detail: provider(k)})
 	return k.ID.String(), nil
 }
 
@@ -411,5 +429,19 @@ func (s *Store) RemovePasskey(by Identity, id string) error {
 	if j < 0 {
 		return fmt.Errorf("passkey %q: %w", id, home.ErrNotFound)
 	}
-	return s.changePasskeys(i, func(ks []Passkey) []Passkey { return slices.Delete(ks, j, j+1) })
+	k := s.persons[i].Passkeys[j]
+	if err := s.changePasskeys(i, func(ks []Passkey) []Passkey { return slices.Delete(ks, j, j+1) }); err != nil {
+		return err
+	}
+	p := personParty(s.persons[i])
+	s.record(Entry{Event: PasskeyRemoved, Actor: p, Subject: p, Detail: provider(k)})
+	return nil
+}
+
+// provider is the detail naming k's provider in the Audit log, if known.
+func provider(k Passkey) map[string]any {
+	if name := Provider(k.AAGUID); name != "" {
+		return map[string]any{"provider": name}
+	}
+	return nil
 }

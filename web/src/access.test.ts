@@ -45,14 +45,14 @@ test('each view has its hash; any other is the dashboard', () => {
 })
 
 test('each Access level sees its views, and the dashboard for any other', () => {
-  const hashes = ['#', '#history', '#automations/a1', '#persons', '#programs', '#account']
+  const hashes = ['#', '#history', '#automations/a1', '#persons', '#programs', '#audit', '#account']
   const views = (me: Me) => hashes.map((h) => screen(me, h))
   const as = (level: Level): Me => ({ ...alice, level })
-  expect(views(as('guest'))).toEqual(['home', 'home', 'home', 'home', 'home', 'account'])
-  expect(views(as('member'))).toEqual(['home', 'history', 'automations', 'home', 'home', 'account'])
-  expect(views(as('admin'))).toEqual(['home', 'history', 'automations', 'persons', 'programs', 'account'])
+  expect(views(as('guest'))).toEqual(['home', 'home', 'home', 'home', 'home', 'home', 'account'])
+  expect(views(as('member'))).toEqual(['home', 'history', 'automations', 'home', 'home', 'home', 'account'])
+  expect(views(as('admin'))).toEqual(['home', 'history', 'automations', 'persons', 'programs', 'audit', 'account'])
   // A Program has no account, and manages no access, whatever its level.
-  expect(views({ ...alice, identity: { program: 'x1' } })).toEqual(['home', 'history', 'automations', 'home', 'home', 'home'])
+  expect(views({ ...alice, identity: { program: 'x1' } })).toEqual(['home', 'history', 'automations', 'home', 'home', 'home', 'home'])
 })
 
 test('each Access level allows what those below it do', () => {

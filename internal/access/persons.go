@@ -69,6 +69,7 @@ func (s *Store) CreatePerson(by Identity, name string, level Level) (Person, err
 	if err := s.savePersons(append(slices.Clone(s.persons), p)); err != nil {
 		return Person{}, err
 	}
+	s.record(Entry{Event: PersonCreated, Actor: party(by), Subject: personParty(p), Detail: map[string]any{"level": level}})
 	return p, nil
 }
 
@@ -98,12 +99,17 @@ func (s *Store) EditPerson(by Identity, id, name string, level Level) error {
 			return fmt.Errorf("%w: your own Access level is for another Admin to change", ErrRefused)
 		}
 	}
+	was := s.persons[i]
 	ps := slices.Clone(s.persons)
 	ps[i].Name, ps[i].Level = name, level
 	if err := s.savePersons(ps); err != nil {
 		return err
 	}
+	if name != was.Name {
+		s.record(Entry{Event: PersonRenamed, Actor: party(by), Subject: personParty(ps[i]), Detail: map[string]any{"from": was.Name}})
+	}
 	if changed {
+		s.record(Entry{Event: LevelChanged, Actor: party(by), Subject: personParty(ps[i]), Detail: map[string]any{"from": was.Level, "to": level}})
 		for h, x := range s.sessions {
 			if x.Person == id {
 				s.finish(h)
@@ -128,13 +134,16 @@ func (s *Store) RemovePerson(by Identity, id string) error {
 	if err := s.lastAdmin(i); err != nil {
 		return err
 	}
+	p := s.persons[i]
 	if err := s.savePersons(slices.Delete(slices.Clone(s.persons), i, i+1)); err != nil {
 		return err
 	}
+	s.record(Entry{Event: PersonRemoved, Actor: party(by), Subject: personParty(p)})
 	for h, x := range s.sessions {
 		if x.Person == id {
 			delete(s.sessions, h)
 			s.finish(h)
+			s.record(Entry{Event: SessionEnded, Actor: party(by), Subject: personParty(p), Browser: x.Browser, Detail: map[string]any{"reason": "removed"}})
 		}
 	}
 	// The Person is gone: Sessions left on disk without them are dropped on load.
@@ -155,9 +164,16 @@ func (s *Store) Rename(by Identity, name string) error {
 	if name, err = home.ValidName(name); err != nil {
 		return err
 	}
+	was := s.persons[i].Name
 	ps := slices.Clone(s.persons)
 	ps[i].Name = name
-	return s.savePersons(ps)
+	if err := s.savePersons(ps); err != nil {
+		return err
+	}
+	if name != was {
+		s.record(Entry{Event: PersonRenamed, Actor: personParty(ps[i]), Subject: personParty(ps[i]), Detail: map[string]any{"from": was}})
+	}
+	return nil
 }
 
 // CreateLink answers the secret of a new Sign-in link for Person id, and
@@ -186,6 +202,7 @@ func (s *Store) CreateLink(by Identity, id string) (string, time.Time, error) {
 	if err := s.savePersons(ps); err != nil {
 		return "", time.Time{}, err
 	}
+	s.record(Entry{Event: LinkCreated, Actor: party(by), Subject: personParty(ps[i]), Detail: map[string]any{"expires": now.Add(life)}})
 	return secret, now.Add(life), nil
 }
 
@@ -206,18 +223,23 @@ func (s *Store) RevokeLink(by Identity, id string) error {
 	}
 	ps := slices.Clone(s.persons)
 	ps[i].Link = nil
-	return s.savePersons(ps)
+	if err := s.savePersons(ps); err != nil {
+		return err
+	}
+	s.record(Entry{Event: LinkRevoked, Actor: party(by), Subject: personParty(ps[i])})
+	return nil
 }
 
 // LinkedName answers the Name of the Person the Sign-in link of secret signs
-// in, for its welcome page, without spending it.
-func (s *Store) LinkedName(secret string) (string, error) {
+// in, for its welcome page in browser, without spending it.
+func (s *Store) LinkedName(secret, browser string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if i := s.linked(secret); i >= 0 {
-		return s.persons[i].Name, nil
+	i, err := s.linked(secret, browser)
+	if err != nil {
+		return "", err
 	}
-	return "", errLinkEnded
+	return s.persons[i].Name, nil
 }
 
 // SignInWithLink spends the Sign-in link of secret: it answers the secret of
@@ -226,9 +248,9 @@ func (s *Store) LinkedName(secret string) (string, error) {
 func (s *Store) SignInWithLink(secret, browser string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	i := s.linked(secret)
-	if i < 0 {
-		return "", errLinkEnded
+	i, err := s.linked(secret, browser)
+	if err != nil {
+		return "", err
 	}
 	p := s.persons[i]
 	// Spent first: a failure after it costs a new link, never a second use.
@@ -241,14 +263,23 @@ func (s *Store) SignInWithLink(secret, browser string) (string, error) {
 	if by == p.ID {
 		by = ""
 	}
-	return s.signIn(p.ID, browser, "link", by)
+	session, err := s.signIn(p.ID, browser, "link", by)
+	if err == nil {
+		s.recordSignIn(p, browser, "link", by)
+	}
+	return session, err
 }
 
 // linked is the index of the Person whom the Sign-in link of secret signs
-// in now; -1 if none. Callers hold s.mu.
-func (s *Store) linked(secret string) int {
+// in now; refused, and recorded, if none. Callers hold s.mu.
+func (s *Store) linked(secret, browser string) (int, error) {
 	h := hash(secret)
-	return slices.IndexFunc(s.persons, func(p Person) bool { return live(p.Link, s.now()) && p.Link.Hash == h })
+	i := slices.IndexFunc(s.persons, func(p Person) bool { return live(p.Link, s.now()) && p.Link.Hash == h })
+	if i < 0 {
+		s.record(Entry{Event: LinkRefused, Actor: nobody, Subject: nobody, Browser: browser})
+		return 0, errLinkEnded
+	}
+	return i, nil
 }
 
 // found is the index of Person id. Callers hold s.mu.
@@ -276,10 +307,13 @@ func (s *Store) lastAdmin(i int) error {
 }
 
 // savePersons writes ps, without the links that expired, which are then the
-// Persons. Callers hold s.mu, and pass a copy of s.persons they may change.
+// Persons; it records those links expired. Callers hold s.mu, and pass a
+// copy of s.persons they may change.
 func (s *Store) savePersons(ps []Person) error {
+	var expired []Entry
 	for i := range ps {
-		if !live(ps[i].Link, s.now()) {
+		if l := ps[i].Link; l != nil && !live(l, s.now()) {
+			expired = append(expired, Entry{Time: l.Expires, Event: LinkExpired, Actor: oiko, Subject: personParty(ps[i])})
 			ps[i].Link = nil
 		}
 	}
@@ -287,5 +321,8 @@ func (s *Store) savePersons(ps []Person) error {
 		return err
 	}
 	s.persons = ps
+	for _, e := range expired {
+		s.record(e)
+	}
 	return nil
 }

@@ -71,6 +71,7 @@ import { Programs } from './Programs'
 import { Persons } from './Persons'
 import { SignInLink } from './SignInLink'
 import { Account } from './Account'
+import { AuditPage } from './Audit'
 import { screen, useAllows, useMe } from './access'
 import {
   DndContext,
@@ -108,6 +109,8 @@ export function App() {
       return <Persons />
     case 'programs':
       return <Programs />
+    case 'audit':
+      return <AuditPage />
     case 'account':
       return <Account />
     case 'automations':

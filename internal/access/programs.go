@@ -89,6 +89,7 @@ func (s *Store) CreateProgram(by Identity, name string, level Level) (Program, e
 		return Program{}, err
 	}
 	s.programs = ps
+	s.record(Entry{Event: ProgramCreated, Actor: party(by), Subject: programParty(p), Detail: map[string]any{"level": level}})
 	return p, nil
 }
 
@@ -102,17 +103,25 @@ func (s *Store) EditProgram(by Identity, id, name string, level Level) error {
 	if err != nil {
 		return err
 	}
-	return s.changeProgram(by, id, func(ps []Program, i int) ([]Program, bool) {
-		end := ps[i].Level != level
+	return s.changeProgram(by, id, func(ps []Program, i int) ([]Program, bool, []Entry) {
+		was := ps[i]
 		ps[i].Name, ps[i].Level = name, level
-		return ps, end
+		var events []Entry
+		if name != was.Name {
+			events = append(events, Entry{Event: ProgramRenamed, Actor: party(by), Subject: programParty(ps[i]), Detail: map[string]any{"from": was.Name}})
+		}
+		if level != was.Level {
+			events = append(events, Entry{Event: LevelChanged, Actor: party(by), Subject: programParty(ps[i]), Detail: map[string]any{"from": was.Level, "to": level}})
+		}
+		return ps, level != was.Level, events
 	})
 }
 
 // RemoveProgram removes Program id, ending its Token.
 func (s *Store) RemoveProgram(by Identity, id string) error {
-	return s.changeProgram(by, id, func(ps []Program, i int) ([]Program, bool) {
-		return slices.Delete(ps, i, i+1), true
+	return s.changeProgram(by, id, func(ps []Program, i int) ([]Program, bool, []Entry) {
+		gone := Entry{Event: ProgramRemoved, Actor: party(by), Subject: programParty(ps[i])}
+		return slices.Delete(ps, i, i+1), true, []Entry{gone}
 	})
 }
 
@@ -120,9 +129,9 @@ func (s *Store) RemoveProgram(by Identity, id string) error {
 // revokes the previous one.
 func (s *Store) GenerateToken(by Identity, id string) (string, error) {
 	token := "oiko_" + rand.Text()
-	err := s.changeProgram(by, id, func(ps []Program, i int) ([]Program, bool) {
+	err := s.changeProgram(by, id, func(ps []Program, i int) ([]Program, bool, []Entry) {
 		ps[i].Token = &Token{Hash: hash(token), Generated: s.now()}
-		return ps, true
+		return ps, true, []Entry{{Event: TokenGenerated, Actor: party(by), Subject: programParty(ps[i])}}
 	})
 	if err != nil {
 		return "", err
@@ -132,16 +141,19 @@ func (s *Store) GenerateToken(by Identity, id string) (string, error) {
 
 // RevokeToken leaves Program id without a Token.
 func (s *Store) RevokeToken(by Identity, id string) error {
-	return s.changeProgram(by, id, func(ps []Program, i int) ([]Program, bool) {
+	return s.changeProgram(by, id, func(ps []Program, i int) ([]Program, bool, []Entry) {
 		ps[i].Token = nil
-		return ps, true
+		return ps, true, []Entry{{Event: TokenRevoked, Actor: party(by), Subject: programParty(ps[i])}}
 	})
 }
 
+// programParty is Program p as the Audit log names it.
+func programParty(p Program) Party { return Party{ProgramKind, p.ID, p.Name} }
+
 // changeProgram has a fresh Admin Person change Program id: change edits a
-// copy of the Programs, where it is at i, and says whether the Program's open
-// event streams end.
-func (s *Store) changeProgram(by Identity, id string, change func(ps []Program, i int) ([]Program, bool)) error {
+// copy of the Programs, where it is at i, says whether the Program's open
+// event streams end, and what the Audit log records once it is done.
+func (s *Store) changeProgram(by Identity, id string, change func(ps []Program, i int) ([]Program, bool, []Entry)) error {
 	if err := mayManage(by, true); err != nil {
 		return err
 	}
@@ -151,13 +163,16 @@ func (s *Store) changeProgram(by Identity, id string, change func(ps []Program, 
 	if i < 0 {
 		return fmt.Errorf("program %q: %w", id, home.ErrNotFound)
 	}
-	ps, end := change(slices.Clone(s.programs), i)
+	ps, end, events := change(slices.Clone(s.programs), i)
 	if err := s.savePrograms(ps); err != nil {
 		return err
 	}
 	s.programs = ps
 	if end {
 		s.finish(id)
+	}
+	for _, e := range events {
+		s.record(e)
 	}
 	return nil
 }
@@ -170,6 +185,7 @@ func (s *Store) ResolveToken(token string) (Identity, bool) {
 	defer s.mu.Unlock()
 	i := slices.IndexFunc(s.programs, func(p Program) bool { return p.Token != nil && p.Token.Hash == h })
 	if i < 0 {
+		s.record(Entry{Event: TokenRefused, Actor: nobody, Subject: nobody})
 		return Identity{}, false
 	}
 	p := s.programs[i]
@@ -196,6 +212,19 @@ func (s *Store) Names(by Identity) (map[Kind]map[string]string, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.names(), nil
+}
+
+// CurrentNames answers the Name of every identity now, by kind then id, for
+// the Audit log to show beside the Names it recorded (ADR 0033).
+func (s *Store) CurrentNames() map[Kind]map[string]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.names()
+}
+
+// names is the Name of every identity, by kind then id. Callers hold s.mu.
+func (s *Store) names() map[Kind]map[string]string {
 	names := map[Kind]map[string]string{PersonKind: {}, ProgramKind: {}}
 	for _, p := range s.persons {
 		names[PersonKind][p.ID] = p.Name
@@ -203,7 +232,7 @@ func (s *Store) Names(by Identity) (map[Kind]map[string]string, error) {
 	for _, p := range s.programs {
 		names[ProgramKind][p.ID] = p.Name
 	}
-	return names, nil
+	return names
 }
 
 // savePrograms writes ps, last uses included. Callers hold s.mu.

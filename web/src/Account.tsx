@@ -1,5 +1,6 @@
 // The signed-in Person's own page (#account): their Name; their Passkeys, each named by its provider,
-// added and removed after step-up; and a Sign-in link to sign in another device of theirs.
+// added and removed after step-up; a Sign-in link to sign in another device of theirs; and what the
+// Audit log holds of them.
 
 import { useEffect, useState, type FormEvent } from 'react'
 import { AppBar } from './AppBar'
@@ -8,6 +9,7 @@ import { edit } from './store'
 import { api, levels, loadMe, signInLink, useMe } from './access'
 import { addPasskey, stepUp } from './passkeys'
 import { date, ShareLink } from './manage'
+import { AuditLog } from './Audit'
 
 type Passkey = { id: string; provider?: string; created: string; lastUse?: string }
 
@@ -97,6 +99,13 @@ export function Account() {
             </button>
           )}
         </section>
+        {me?.identity && 'person' in me.identity && (
+          <section className="space-y-3">
+            <h2 className="text-base font-medium">Your activity</h2>
+            <p className="text-neutral-400">Your sign-ins, and every change to your access, kept a year.</p>
+            <AuditLog party={{ kind: 'person', id: me.identity.person }} />
+          </section>
+        )}
       </main>
     </>
   )

@@ -63,7 +63,7 @@ func TestAnInvitedPersonSignsInWithTheirLink(t *testing.T) {
 	if len(secret) < 22 || !expires.Equal(c.t.Add(24*time.Hour)) { // 128 bits in base32
 		t.Errorf("CreateLink = %q, %v; want 128 bits, for 24 hours", secret, expires)
 	}
-	if name, err := s.LinkedName(secret); err != nil || name != "Bob" {
+	if name, err := s.LinkedName(secret, ""); err != nil || name != "Bob" {
 		t.Errorf("LinkedName = %q, %v; want Bob", name, err)
 	}
 	bobs, err := s.SignInWithLink(secret, "Safari on iPhone")
@@ -81,7 +81,7 @@ func TestAnInvitedPersonSignsInWithTheirLink(t *testing.T) {
 	if _, err := s.SignInWithLink(secret, ""); !errors.Is(err, ErrRefused) || !strings.Contains(err.Error(), "ask whoever sent it") {
 		t.Errorf("used again: %v, want refused, telling to ask whoever sent it", err)
 	}
-	if _, err := s.LinkedName(secret); !errors.Is(err, ErrRefused) {
+	if _, err := s.LinkedName(secret, ""); !errors.Is(err, ErrRefused) {
 		t.Error("a used link still names its Person")
 	}
 	if l := linkOf(t, s, alice, bob.ID); l != nil {
@@ -118,11 +118,11 @@ func TestALinkLasts24HoursFromAnAdminAnd15MinutesForOneself(t *testing.T) {
 				t.Errorf("expires %v after creation, want %v", expires.Sub(clk.t), c.life)
 			}
 			clk.advance(c.life)
-			if _, err := s.LinkedName(secret); err != nil {
+			if _, err := s.LinkedName(secret, ""); err != nil {
 				t.Error("refused at its last instant")
 			}
 			clk.advance(time.Nanosecond)
-			if _, err := s.LinkedName(secret); err == nil {
+			if _, err := s.LinkedName(secret, ""); err == nil {
 				t.Error("named its Person once expired")
 			}
 			if _, err := s.SignInWithLink(secret, ""); !errors.Is(err, ErrRefused) {
@@ -155,13 +155,13 @@ func TestAPersonHasOnePendingLinkWhichAnAdminRevokes(t *testing.T) {
 	first := link(t, s, alice, bob.ID)
 	c.advance(time.Minute)
 	bobID := signedInAs(t, s, alice, bob.ID) // Bob, signed in by a second link
-	if _, err := s.LinkedName(first); err == nil {
+	if _, err := s.LinkedName(first, ""); err == nil {
 		t.Error("a second link left the first one pending")
 	}
 	// Bob's own link replaces Alice's, whoever created it.
 	byAlice := link(t, s, alice, bob.ID)
 	byBob := link(t, s, bobID, bob.ID)
-	if _, err := s.LinkedName(byAlice); err == nil {
+	if _, err := s.LinkedName(byAlice, ""); err == nil {
 		t.Error("Bob's link left Alice's pending")
 	}
 	l := linkOf(t, s, alice, bob.ID)
@@ -379,7 +379,7 @@ func TestLinksSurviveARestartAndPersonsJSONHoldsNoSecret(t *testing.T) {
 	if strings.Contains(string(data), secret) {
 		t.Error("persons.json holds the link's secret")
 	}
-	if name, err := open(t, dir, c).LinkedName(secret); err != nil || name != "Bob" {
+	if name, err := open(t, dir, c).LinkedName(secret, ""); err != nil || name != "Bob" {
 		t.Errorf("after a restart: %q, %v", name, err)
 	}
 	// An expired link is dropped from the document.

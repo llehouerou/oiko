@@ -108,7 +108,7 @@ func handlePersons(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 	mux.HandleFunc("POST /api/sign-in/link/person", atSignInOrigin(public, func(w http.ResponseWriter, r *http.Request) {
 		var req secret
 		if decode(w, r, &req) {
-			name, err := acc.LinkedName(req.Secret)
+			name, err := acc.LinkedName(req.Secret, access.Browser(r.UserAgent()))
 			respond(w, map[string]string{"name": name}, err)
 		}
 	}))

@@ -372,7 +372,7 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 	for _, b := range bridges {
 		types[b.env.Name] = b.module.Type
 	}
-	acc, err := access.Open(dataDir, time.Now)
+	acc, err := access.Open(dataDir, time.Now, hist.Audit)
 	if err != nil {
 		log.Fatalf("access: %v", err)
 	}

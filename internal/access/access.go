@@ -98,12 +98,14 @@ func (x *session) fresh(now time.Time) bool {
 	return now.Sub(x.SignedIn) < freshFor || now.Sub(x.Confirmed) < freshFor
 }
 
-// Kind is what an identity is.
+// Kind is what an identity is, or, in the Audit log, who else acts.
 type Kind string
 
 const (
 	PersonKind  Kind = "person"
 	ProgramKind Kind = "program"
+	OikoKind    Kind = "oiko"    // Oiko itself: an expiry
+	UnknownKind Kind = "unknown" // no identity found
 )
 
 // Identity is who a request is, as they are now: a Person by their Session,
@@ -125,20 +127,21 @@ func (id Identity) StepUp() error {
 	return nil
 }
 
-// Store holds the Persons and their Sessions, and the Programs.
+// Store holds the Persons and their Sessions, and the Programs, and writes
+// every refusal and change to access to the Audit log.
 type Store struct {
 	personsFile, sessionsFile, programsFile string
 	now                                     func() time.Time
-
-	mu          sync.Mutex
-	persons     []Person
-	sessions    map[string]*session // by hash
-	programs    []Program
-	ends        map[string]chan struct{} // closed when an access ends or changes: a Session's by its hash, a Program's by its id
-	setup       string                   // the Setup link's hash; "" when there is none
-	sessionUses pending
-	programUses pending
-	ceremonies  ceremonies
+	audit                                   func(Entry)
+	mu                                      sync.Mutex
+	persons                                 []Person
+	sessions                                map[string]*session // by hash
+	programs                                []Program
+	ends                                    map[string]chan struct{} // closed when an access ends or changes: a Session's by its hash, a Program's by its id
+	setup                                   string                   // the Setup link's hash; "" when there is none
+	sessionUses                             pending
+	programUses                             pending
+	ceremonies                              ceremonies
 }
 
 // pending tells when a document was last written, and whether last uses held
@@ -150,13 +153,15 @@ type pending struct {
 
 // Open loads the Persons, their Sessions and the Programs from dir, dropping
 // the Sessions and Sign-in links that ended, and the Sessions whose Person
-// is gone. now is the clock.
-func Open(dir string, now func() time.Time) (*Store, error) {
+// is gone. now is the clock; audit writes an Entry to the Audit log, never
+// waiting.
+func Open(dir string, now func() time.Time, audit func(Entry)) (*Store, error) {
 	s := &Store{
 		personsFile:  filepath.Join(dir, "persons.json"),
 		sessionsFile: filepath.Join(dir, "sessions.json"),
 		programsFile: filepath.Join(dir, "programs.json"),
 		now:          now,
+		audit:        audit,
 		sessions:     map[string]*session{},
 		ends:         map[string]chan struct{}{},
 		sessionUses:  pending{written: now()},
@@ -174,7 +179,11 @@ func Open(dir string, now func() time.Time) (*Store, error) {
 		return nil, err
 	}
 	for _, x := range sessions {
-		if s.person(x.Person) >= 0 && !s.ended(x) {
+		switch {
+		case s.person(x.Person) < 0: // recorded with its Person's removal
+		case s.ended(x):
+			s.recordExpiry(x)
+		default:
 			s.sessions[x.Hash] = x
 		}
 	}
@@ -225,6 +234,7 @@ func (s *Store) Claim(secret, name, browser string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.setup == "" || s.claimed() || subtle.ConstantTimeCompare([]byte(hash(secret)), []byte(s.setup)) != 1 {
+		s.record(Entry{Event: SetupRefused, Actor: nobody, Subject: nobody, Browser: browser})
 		return "", fmt.Errorf("%w: this Setup link is no longer valid; Oiko's log has the current one, if Oiko has no Admin yet", ErrRefused)
 	}
 	// The Session first: written without its Person, it is dropped on load.
@@ -238,6 +248,8 @@ func (s *Store) Claim(secret, name, browser string) (string, error) {
 		return "", err
 	}
 	s.setup = ""
+	s.record(Entry{Event: PersonCreated, Actor: personParty(p), Subject: personParty(p), Detail: map[string]any{"level": p.Level}})
+	s.recordSignIn(p, browser, "setup", "")
 	return session, nil
 }
 
@@ -255,6 +267,28 @@ func (s *Store) signIn(person, browser, method, by string) (string, error) {
 	return secret, nil
 }
 
+// recordSignIn records that Person p signed in, by method, with a Sign-in
+// link by created if not "". Callers hold s.mu.
+func (s *Store) recordSignIn(p Person, browser, method, by string) {
+	detail := map[string]any{"method": method}
+	if by != "" {
+		detail["by"] = s.personParty(by)
+	}
+	s.record(Entry{Event: SignedIn, Actor: personParty(p), Subject: personParty(p), Browser: browser, Detail: detail})
+}
+
+// personParty is Person p as the Audit log names them.
+func personParty(p Person) Party { return Party{PersonKind, p.ID, p.Name} }
+
+// personParty is Person id as the Audit log names them: by id alone once
+// they are removed. Callers hold s.mu.
+func (s *Store) personParty(id string) Party {
+	if i := s.person(id); i >= 0 {
+		return personParty(s.persons[i])
+	}
+	return Party{Kind: PersonKind, ID: id}
+}
+
 // Resolve answers who holds the Session of secret, counting it as a use; false
 // if there is no such Session, or it has ended.
 func (s *Store) Resolve(secret string) (Identity, bool) {
@@ -265,8 +299,12 @@ func (s *Store) Resolve(secret string) (Identity, bool) {
 		return Identity{}, false
 	}
 	i := s.person(x.Person)
-	if i < 0 || s.ended(x) {
+	switch {
+	case i < 0: // recorded with its Person's removal
 		s.end(x)
+		return Identity{}, false
+	case s.ended(x):
+		s.saveSessions() // records it ended
 		return Identity{}, false
 	}
 	now := s.now()
@@ -301,6 +339,7 @@ func (s *Store) SignOut(secret string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if x := s.sessions[hash(secret)]; x != nil {
+		s.record(Entry{Event: SessionEnded, Actor: s.personParty(x.Person), Subject: s.personParty(x.Person), Browser: x.Browser, Detail: map[string]any{"reason": "signed out"}})
 		return s.end(x)
 	}
 	return nil
@@ -339,9 +378,21 @@ func (s *Store) end(x *session) error {
 }
 
 // ended reports whether Session x is past a lifetime.
-func (s *Store) ended(x *session) bool {
-	now := s.now()
-	return now.Sub(x.LastUse) > idleLimit || now.Sub(x.SignedIn) > SessionLimit
+func (s *Store) ended(x *session) bool { return s.now().After(s.endOf(x)) }
+
+// endOf is when Session x ends unless used again.
+func (s *Store) endOf(x *session) time.Time {
+	idle, limit := x.LastUse.Add(idleLimit), x.SignedIn.Add(SessionLimit)
+	if idle.Before(limit) {
+		return idle
+	}
+	return limit
+}
+
+// recordExpiry records that Session x ended by itself, dated when it did.
+// Callers hold s.mu.
+func (s *Store) recordExpiry(x *session) {
+	s.record(Entry{Time: s.endOf(x), Event: SessionEnded, Actor: oiko, Subject: s.personParty(x.Person), Browser: x.Browser, Detail: map[string]any{"reason": "expired"}})
 }
 
 // person is the index of Person id; -1 if there is none.
@@ -349,14 +400,15 @@ func (s *Store) person(id string) int {
 	return slices.IndexFunc(s.persons, func(p Person) bool { return p.ID == id })
 }
 
-// saveSessions writes every Session, deleting those that ended unnoticed.
-// Callers hold s.mu.
+// saveSessions writes every Session, deleting, and recording, those that
+// ended unnoticed. Callers hold s.mu.
 func (s *Store) saveSessions() error {
 	all := make([]*session, 0, len(s.sessions))
 	for h, x := range s.sessions {
 		if s.ended(x) {
 			delete(s.sessions, h)
 			s.finish(h)
+			s.recordExpiry(x)
 		} else {
 			all = append(all, x)
 		}

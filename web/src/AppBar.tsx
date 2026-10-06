@@ -8,6 +8,7 @@ import {
   mdiAccountMultipleOutline,
   mdiApi,
   mdiChartLine,
+  mdiClipboardTextClockOutline,
   mdiClose,
   mdiCogOutline,
   mdiFlagPlusOutline,
@@ -100,7 +101,8 @@ function ConnectionBadge() {
   )
 }
 
-// Who is signed in, with a menu to their own page, an Admin's pages (Persons, Programs), and signing out.
+// Who is signed in, with a menu to their own page, an Admin's pages (Persons, Programs, the Audit log), and
+// signing out.
 function Account() {
   const me = useMe()
   if (!me?.identity) return null
@@ -149,6 +151,16 @@ function Account() {
           >
             <Svg path={mdiApi} className="size-5 text-neutral-400" />
             Programs
+          </a>
+        )}
+        {me.level === 'admin' && 'person' in me.identity && (
+          <a
+            href="#audit"
+            onClick={() => document.getElementById('account')?.hidePopover()}
+            className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-neutral-800"
+          >
+            <Svg path={mdiClipboardTextClockOutline} className="size-5 text-neutral-400" />
+            Audit log
           </a>
         )}
         <button
