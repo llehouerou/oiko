@@ -47,6 +47,7 @@ in
       ../go.sum
       ../oiko.go
       ../upgrade.go
+      ../signinlink.go
       ../bridge
       ../cmd
       ../internal
@@ -56,7 +57,8 @@ in
   inherit vendorHash;
   # With other Bridges, go.mod gains their modules while fetching them, which
   # has the network, and again while building, from what was fetched: the
-  # module cache is what gets vendored.
+  # module cache is what gets vendored. Getting cmd/oiko with them records in
+  # go.sum the modules whose versions they raise.
   proxyVendor = added;
   postPatch = lib.optionalString added ''
     cat > bridges.go <<EOF
@@ -66,7 +68,7 @@ in
     ${lib.concatMapStrings (p: "\t_ \"${p}\"\n") (lib.attrNames bridges)})
     EOF
   '';
-  preBuild = lib.optionalString added "go get ${lib.escapeShellArgs (lib.mapAttrsToList (p: v: "${p}@${v}") bridges)}";
+  preBuild = lib.optionalString added "go get ${lib.escapeShellArgs (lib.mapAttrsToList (p: v: "${p}@${v}") bridges)} ./cmd/oiko";
   subPackages = [ "cmd/oiko" ];
   env.CGO_ENABLED = 0;
   postConfigure = "cp -r ${web} web/dist"; # not while fetching the modules

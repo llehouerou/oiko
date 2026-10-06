@@ -49,6 +49,7 @@ if ! verdict=$(gorelease -base="$base" -version="$version" 2>&1); then
 fi
 
 make test
+nix build --no-link # the flake's package lists its sources: a new root file must be in it
 (cd web && npm run build)
 
 stamp=internal/build/release.go
