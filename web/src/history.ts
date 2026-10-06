@@ -9,6 +9,7 @@
 import { useSyncExternalStore } from 'react'
 import { presses, roles, turns } from './roles'
 import { current, follow } from './store'
+import { api } from './access'
 import { owner, targetKind, type Catalogue, type Entry } from './targets'
 import type { CommandKind } from './origin'
 import type { Capability, CommandRecord, CommandState, Ref, RunEnd, Snapshot, Target, Update } from './types'
@@ -95,7 +96,7 @@ export class HistoryView {
     const n = ++this.loads
     let a: Answer
     try {
-      const res = await fetch('/api/history', {
+      const res = await api('/api/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ from, to, points, markers: markers || undefined, refs }),
@@ -526,7 +527,7 @@ export function periodsSpan(per: Per, at: number | null, now: number) {
 
 // loadPeriods reads items per period, or over the span as one period.
 export async function loadPeriods(from: number, to: number, per: Per | 'span', items: { ref: Ref; measure: Measure }[]) {
-  const res = await fetch('/api/history/periods', {
+  const res = await api('/api/history/periods', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ from, to, per, items: items.map(({ ref, measure }) => ({ ref, measure })) }),

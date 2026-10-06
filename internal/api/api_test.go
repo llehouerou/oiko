@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
-	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -29,14 +28,9 @@ var static = fstest.MapFS{
 	"assets/index-abc.js": {Data: []byte("console.log(1)")},
 }
 
-// handler is Oiko's API over a Home without Devices, with its engine and
-// history running, serving static, without a Public URL.
-func handler(t *testing.T) (*home.Home, http.Handler) {
-	h, _, hdl := handlerAt(t, nil)
-	return h, hdl
-}
-
-// handlerAt is handler with Public URL public, and its access store.
+// handlerAt is Oiko's API over a Home without Devices, with its engine and
+// history running, serving static, with Public URL public, and its access
+// store.
 func handlerAt(t *testing.T, public *url.URL) (*home.Home, *access.Store, http.Handler) {
 	return handlerWith(t, public, time.Now)
 }
@@ -63,21 +57,18 @@ func handlerWith(t *testing.T, public *url.URL, now func() time.Time) (*home.Hom
 	return h, acc, Handler(h, e, store, acc, build.Build{}, "binary", release.New(build.Build{}), nil, public, static)
 }
 
-// server serves handler(t), and does requests on it.
+// server serves handlerAt(t, nil), and does requests on it as Alice, its
+// Admin, signed in.
 func server(t *testing.T) (*home.Home, func(method, path, body string) *http.Response) {
 	t.Helper()
-	h, hdl := handler(t)
+	h, acc, hdl := handlerAt(t, nil)
 	srv := httptest.NewServer(hdl)
 	t.Cleanup(srv.Close)
+	cookie, _ := signedIn(t, acc)
+	do := browser(t, srv, "")
 	return h, func(method, path, body string) *http.Response {
 		t.Helper()
-		req, _ := http.NewRequest(method, srv.URL+path, strings.NewReader(body))
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { resp.Body.Close() })
-		return resp
+		return do(method, path, body, cookie)
 	}
 }
 
@@ -173,8 +164,8 @@ func TestTraceAndCommandHistoryEndpoints(t *testing.T) {
 			return cs, len(cs) == 1 && cs[0].Status == home.Confirmed
 		}
 	}
-	if c := eventually(t, "commands on X", commands(x)); c[0].Origin != (home.Origin{}) || c[0].Values["on"] != true {
-		t.Errorf("command on X = %+v, want of unknown origin", c[0])
+	if c := eventually(t, "commands on X", commands(x)); c[0].Origin.Person == "" || c[0].Values["on"] != true {
+		t.Errorf("command on X = %+v, want Alice's", c[0])
 	}
 
 	runs := eventually(t, "runs", func() ([]home.RunEnd, bool) {
@@ -251,7 +242,10 @@ func TestHistoryEndpoint(t *testing.T) {
 		t.Errorf("answer = %v, want no markers unasked", plain)
 	}
 	var marked struct {
-		Commands []struct{ Origin, Status string }
+		Commands []struct {
+			Origin struct{ Person string }
+			Status string
+		}
 	}
 	eventually(t, "the flag's commands", func() (any, bool) {
 		resp := do("POST", "/api/history", fmt.Sprintf(`{"from": %d, "to": %d, "points": 100, "markers": true, "refs": [{"target": %q, "capability": "on"}]}`,
@@ -259,8 +253,8 @@ func TestHistoryEndpoint(t *testing.T) {
 		json.NewDecoder(resp.Body).Decode(&marked)
 		return marked, len(marked.Commands) == 1 && marked.Commands[0].Status == "confirmed"
 	})
-	if marked.Commands[0].Origin != "unknown" {
-		t.Errorf("commands = %+v, want of unknown origin", marked.Commands)
+	if marked.Commands[0].Origin.Person == "" {
+		t.Errorf("commands = %+v, want Alice's", marked.Commands)
 	}
 
 	for _, c := range []struct {

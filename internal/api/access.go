@@ -17,22 +17,43 @@ const sessionCookie = "__Host-oiko-session"
 
 type identityKey struct{}
 
+// openEndpoints are those of the API a request without credentials
+// reaches: who am I and the Setup link.
+var openEndpoints = map[string]bool{"/api/me": true, "/api/setup": true}
+
 // identify resolves each request, by its Token or else its Session, to its
-// identity, which the request then carries. A request without either goes
-// on anonymous; one with a Token that is not valid is refused.
-func identify(acc *access.Store, next http.Handler) http.Handler {
+// identity, which the request then carries. Without either, it reaches the
+// web client and the open endpoints only; with a Token that is not valid,
+// nothing. The network never stands for credentials (ADR 0027).
+func identify(acc *access.Store, public *url.URL, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id, ok := resolve(acc, r)
-		if _, isBearer := bearer(r); isBearer && !ok {
+		_, isBearer := bearer(r)
+		switch {
+		case ok:
+			r = r.WithContext(context.WithValue(r.Context(), identityKey{}, id))
+		case isBearer:
 			w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
 			http.Error(w, "this Token is not valid: it was revoked, replaced or never existed", http.StatusUnauthorized)
 			return
-		}
-		if ok {
-			r = r.WithContext(context.WithValue(r.Context(), identityKey{}, id))
+		case strings.HasPrefix(r.URL.Path, "/api/") && !openEndpoints[r.URL.Path]:
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			http.Error(w, refusal(public, r), http.StatusUnauthorized)
+			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// refusal says why r, without credentials, is refused: without a Public URL,
+// only http://localhost offers sign-in (ADR 0027). Its address decides
+// nothing but these words.
+func refusal(public *url.URL, r *http.Request) string {
+	const token = "a Program sends its Token as Authorization: Bearer"
+	if public == nil && (&url.URL{Host: r.Host}).Hostname() != "localhost" {
+		return "a Public URL must be configured: until then, only http://localhost offers sign-in; " + token
+	}
+	return "sign in first; " + token
 }
 
 // identity is who r is; false when it is anonymous.
@@ -42,7 +63,7 @@ func identity(r *http.Request) (access.Identity, bool) {
 }
 
 // origin is the Origin of a Command or a Manual trigger r asks for (ADR
-// 0031): r's identity, or unknown when it is anonymous.
+// 0031): r's identity.
 func origin(r *http.Request) home.Origin {
 	id, _ := identity(r)
 	switch id.Kind {

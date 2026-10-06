@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type PointerEvent, type ReactNode } from 'react'
 import {
+  connect,
   edit,
   runManual,
   sendCommand,
@@ -66,7 +67,9 @@ import { maxColumns, maxRows, move, placements, reflow, resize, rows, stored, ty
 import { AppBar, ArrangeSetting, ChartsSetting, CreateButton } from './AppBar'
 import { ReleaseBanner } from './About'
 import { Setup } from './Setup'
+import { SignIn } from './SignIn'
 import { Programs } from './Programs'
+import { api, screen, useMe } from './access'
 import {
   DndContext,
   PointerSensor,
@@ -80,6 +83,7 @@ import {
 } from '@dnd-kit/core'
 
 export function App() {
+  const me = useMe()
   const [page, setPage] = useState(location.hash)
   const [setup, setSetup] = useState(location.pathname === '/setup') // a Setup link, its secret as the hash
   useEffect(() => {
@@ -87,13 +91,27 @@ export function App() {
     addEventListener('hashchange', follow)
     return () => removeEventListener('hashchange', follow)
   }, [])
+  const signedIn = !!me?.identity
+  useEffect(() => (signedIn ? connect() : undefined), [signedIn])
   if (setup) {
     // Done: the dashboard, the secret out of the address and the browser's history.
     const done = () => (history.replaceState(null, '', '/'), setPage(''), setSetup(false))
     return <Setup onDone={done} />
   }
-  if (page.startsWith('#programs')) return <Programs />
-  return page.startsWith('#automations') ? <Automations /> : page.startsWith('#history') ? <Timeline /> : <Home />
+  switch (screen(me, page)) {
+    case null:
+      return null
+    case 'sign-in':
+      return <SignIn me={me!} />
+    case 'programs':
+      return <Programs />
+    case 'automations':
+      return <Automations />
+    case 'history':
+      return <Timeline />
+    case 'home':
+      return <Home />
+  }
 }
 
 function Home() {
@@ -105,7 +123,7 @@ function Home() {
   // The Automations with a Manual trigger, fetched again as Automations come, go or change status.
   const [manual, setManual] = useState<Document[]>([])
   useEffect(() => {
-    fetch('/api/automations')
+    api('/api/automations')
       .then((r) => (r.ok ? r.json() : []))
       .then(
         (docs: Document[]) => setManual(docs.filter((d) => d.steps.some((s) => s.kind === 'manualTrigger'))),

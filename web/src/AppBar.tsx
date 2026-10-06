@@ -93,19 +93,9 @@ function ConnectionBadge() {
   )
 }
 
-// Who is signed in, with a menu to sign out, and an Admin's pages; while Oiko has no Admin, where
-// its Setup link is.
+// Who is signed in, with a menu to sign out, and an Admin's pages.
 function Account() {
   const me = useMe()
-  if (me && !me.claimed)
-    return (
-      <span
-        title="Oiko has no Admin yet: open the Setup link in Oiko's log to claim it"
-        className="rounded-full bg-amber-400/15 px-3 py-1.5 text-xs text-amber-300"
-      >
-        Setup link in Oiko's log
-      </span>
-    )
   if (!me?.identity) return null
   return (
     <>

@@ -104,7 +104,7 @@ func Main() {
 		return
 	}
 	if public == nil {
-		log.Printf("oiko: no publicUrl in %s: sign-in will need one", configFile)
+		log.Printf("oiko: no publicUrl in %s: only http://localhost offers sign-in; anywhere else, only a Program's Token is served", configFile)
 	}
 	serve(*listen, *dataDir, configFile, inst, c, public, bridges)
 }

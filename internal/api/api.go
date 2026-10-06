@@ -25,12 +25,11 @@ import (
 	"github.com/llehouerou/oiko/internal/release"
 )
 
-// ponytail: nothing enforced yet: a request without a Session keeps full
-// access until sign-in is required (#40).
-// acc keeps who signs in, b is what Oiko is built from, install its Install
-// (see CONTEXT.md), releases what is newer, bridges the type of each Bridge of
-// the configuration, by name, public the Public URL, nil when the
-// configuration has none: the origin sign-in checks.
+// Handler serves the API to a Session or a Token, and the web client to
+// anyone (ADR 0027, 0034). acc keeps who signs in, b is what Oiko is built
+// from, install its Install (see CONTEXT.md), releases what is newer, bridges
+// the type of each Bridge of the configuration, by name, public the Public
+// URL, nil when the configuration has none: the origin sign-in checks.
 func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, acc *access.Store, b build.Build, install string, releases *release.Checker, bridges map[string]string, public *url.URL, static fs.FS) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/updates", updates(h, acc, releases))
@@ -150,7 +149,7 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 		r.URL.Path = "/"
 		client.ServeHTTP(w, r)
 	})
-	return secure(http.NewCrossOriginProtection().Handler(identify(acc, mux)))
+	return secure(http.NewCrossOriginProtection().Handler(identify(acc, public, mux)))
 }
 
 // Bounds on the HTTP server and the event stream (ADR 0034); variables so
@@ -258,12 +257,12 @@ func respond(w http.ResponseWriter, v any, err error) {
 // "releases" message, each time it changes. Updates available at once are
 // written together and flushed once. A client that stops reading ends the
 // stream, at the first write that does not go through within
-// streamWriteLimit. A stream opened in a Session or by a Token counts as its
-// use at each keepalive, and ends with it; a Program's ends at once when its
-// access ends or changes.
+// streamWriteLimit. It counts as a use of its Session or Token at each
+// keepalive, and ends at once when either ends, or a Program's access
+// changes.
 func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, signedIn := identity(r)
+		id, _ := identity(r)
 		snap, ch, cancel := h.Subscribe()
 		defer cancel()
 		statuses, changed := releases.Statuses()
@@ -303,17 +302,13 @@ func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.Ha
 					return
 				}
 			case <-keepalive.C:
-				// ponytail: an ended Session's stream closes at the next keepalive;
-				// an Ended for Sessions, like a Program's, would close it at once.
-				if signedIn {
-					if _, ok := resolve(acc, r); !ok {
-						return
-					}
+				if _, ok := resolve(acc, r); !ok {
+					return
 				}
 				if !send(func() bool { _, err := w.Write([]byte(": keepalive\n\n")); return err == nil }) {
 					return
 				}
-			case <-id.Ended: // nil, never ready, but for a Program
+			case <-id.Ended:
 				return
 			case <-r.Context().Done():
 				return

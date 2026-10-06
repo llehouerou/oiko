@@ -5,7 +5,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { AppBar } from './AppBar'
 import { confirm } from './confirm'
 import { edit } from './store'
-import { levels, type Level } from './access'
+import { api, levels, type Level } from './access'
 
 type Program = {
   id: string
@@ -23,7 +23,7 @@ export function Programs() {
   const [error, setError] = useState<string | null>(null)
   const [shown, setShown] = useState<{ program: string; token: string } | null>(null) // a Token just generated
   const load = async () => {
-    const res = await fetch('/api/programs')
+    const res = await api('/api/programs')
     if (res.ok) setPrograms(await res.json())
     else setError((await res.text()).trim())
   }
@@ -40,7 +40,7 @@ export function Programs() {
   }
   const generate = async (p: Program) => {
     if (p.token && !(await confirm(`A new Token for ${p.name} stops the current one at once.`, 'Generate'))) return
-    const res = await fetch(`/api/programs/${p.id}/token`, { method: 'POST' })
+    const res = await api(`/api/programs/${p.id}/token`, { method: 'POST' })
     if (res.ok) setShown({ program: p.id, token: (await res.json()).token })
     change(res.ok ? null : (await res.text()).trim())
   }

@@ -156,9 +156,8 @@ func (s *Store) changeProgram(by Identity, id string, change func(ps []Program, 
 		return err
 	}
 	s.programs = ps
-	if ch, ok := s.ends[id]; ok && end {
-		close(ch)
-		delete(s.ends, id)
+	if end {
+		s.finish(id)
 	}
 	return nil
 }
@@ -176,12 +175,7 @@ func (s *Store) ResolveToken(token string) (Identity, bool) {
 	p := s.programs[i]
 	s.programs[i].Token.LastUse = s.now()
 	s.used(&s.programUses, func() error { return s.savePrograms(s.programs) })
-	ended, ok := s.ends[p.ID]
-	if !ok {
-		ended = make(chan struct{})
-		s.ends[p.ID] = ended
-	}
-	return Identity{Kind: ProgramKind, ID: p.ID, Name: p.Name, Level: p.Level, Ended: ended}, true
+	return Identity{Kind: ProgramKind, ID: p.ID, Name: p.Name, Level: p.Level, Ended: s.ending(p.ID)}, true
 }
 
 // PersonName is the Name of Person id; "" once they are removed.

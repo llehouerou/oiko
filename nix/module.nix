@@ -39,7 +39,7 @@ in
     listen = lib.mkOption {
       type = lib.types.str;
       default = ":8080";
-      description = "HTTP listen address. There is no authentication: keep it off untrusted networks.";
+      description = "HTTP listen address. Put a reverse proxy that terminates TLS in front of it: a Token sent over plain HTTP on the LAN can be read by anyone on it.";
     };
 
     publicUrl = lib.mkOption {

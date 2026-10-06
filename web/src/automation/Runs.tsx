@@ -11,6 +11,7 @@ import type { Params } from './model'
 import { clock, evidence, mergeCommands, mergeRuns, runSummary, type Path } from './runtime'
 import { titleIfTruncated } from '../truncated'
 import { byWhom, runOf, useNames } from '../origin'
+import { api } from '../access'
 
 export interface Inspection {
   trace?: Trace // of the picked Run
@@ -42,12 +43,12 @@ export function RunsDrawer({
   const [fetched, setFetched] = useState<RunEnd[]>([])
   const [lost, setLost] = useState(0)
   useEffect(() => {
-    fetch(`/api/automations/${automation}/runs`)
+    api(`/api/automations/${automation}/runs`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setFetched, () => {})
   }, [automation])
   useEffect(() => {
-    fetch('/api/lost-entries')
+    api('/api/lost-entries')
       .then((r) => (r.ok ? r.json() : { lost: 0 }))
       .then(
         (b: { lost: number }) => setLost(b.lost),
@@ -240,7 +241,7 @@ export function CommandHistory({ target }: { target: Target }) {
   useEffect(() => {
     if (!target) return
     let stale = false
-    fetch(`/api/commands?target=${encodeURIComponent(target)}`)
+    api(`/api/commands?target=${encodeURIComponent(target)}`)
       .then((r) => (r.ok ? r.json() : []))
       .then(
         (cs: CommandRecord[]) => stale || setKept(cs),

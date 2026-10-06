@@ -26,6 +26,7 @@ import { onPath, pathOf } from './runtime'
 import { BrokenStep, OpenStep, StepNode } from './StepNode'
 import { titleIfTruncated } from '../truncated'
 import { AppBar } from '../AppBar'
+import { api } from '../access'
 
 const nodeTypes = { step: StepNode }
 
@@ -41,7 +42,7 @@ export function Automations() {
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    fetch('/api/automations')
+    api('/api/automations')
       .then((r) => r.json())
       .then(setDocs, (e) => setError(String(e)))
   }, [])
@@ -57,7 +58,7 @@ export function Automations() {
     const name = prompt('Name of the new automation')
     if (!name || !(await leave())) return
     const doc = { id: '', name, enabled: false, steps: [], edges: [] }
-    const res = await fetch('/api/automations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(doc) })
+    const res = await api('/api/automations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(doc) })
     if (!res.ok) return setError((await res.text()).trim())
     const { id } = await res.json()
     setDocs([...docs, { ...doc, id }])
@@ -167,7 +168,7 @@ function Editor({
   const liveRuns = useLiveRuns(doc.id)
   const [states, setStates] = useState<StepState[]>([])
   useEffect(() => {
-    fetch(`/api/automations/${doc.id}/state`)
+    api(`/api/automations/${doc.id}/state`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setStates, () => {})
   }, [doc.id, liveRuns, saved])
@@ -176,7 +177,7 @@ function Editor({
   useEffect(() => {
     if (!run) return
     let stale = false
-    fetch(`/api/runs/${run}`).then(async (r) => {
+    api(`/api/runs/${run}`).then(async (r) => {
       const body = r.ok ? await r.json() : (await r.text()).trim()
       if (stale) return
       if (r.ok) setTrace(body)

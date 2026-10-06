@@ -7,13 +7,14 @@ import { useEffect, useRef, useState } from 'react'
 import { mdiUpdate } from '@mdi/js'
 import { Svg } from './icons'
 import { useBridges, useReleases } from './store'
+import { api } from './access'
 import type { Build, ReleaseStatus } from './types'
 import { oiko, upgrade } from './upgrade'
 
 function useBuild() {
   const [build, setBuild] = useState<Build | null>(null)
   useEffect(() => {
-    fetch('/api/build')
+    api('/api/build')
       .then((r) => (r.ok ? r.json() : null))
       .then(setBuild, () => {})
   }, [])

@@ -51,6 +51,7 @@ import {
 } from './history'
 import { Periods } from './Periods'
 import { useCatalogue, useNow } from './store'
+import { api } from './access'
 import type { Capability, CommandRecord, Ref, RunEnd, Target } from './types'
 import type { Document } from './automation/model'
 import { runSummary, setting } from './automation/runtime'
@@ -384,7 +385,7 @@ function useDescribe() {
   const targets = useCatalogue()
   const [names, setNames] = useState<Record<string, string> | null>(null)
   useEffect(() => {
-    fetch('/api/automations')
+    api('/api/automations')
       .then((r) => (r.ok ? r.json() : []))
       .then(
         (docs: Document[]) => setNames(Object.fromEntries(docs.map((d) => [d.id, d.name]))),

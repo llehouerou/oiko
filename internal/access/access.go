@@ -92,7 +92,7 @@ type Identity struct {
 	Name  string
 	Level Level
 	Fresh bool            // a Session that proved itself lately enough for step-up
-	Ended <-chan struct{} // closed once this access ends or changes; nil if never
+	Ended <-chan struct{} // closed once this Session or Token ends, or the Program's access changes
 }
 
 // StepUp refuses an action needing step-up unless the Session is fresh.
@@ -112,7 +112,7 @@ type Store struct {
 	persons     []Person
 	sessions    map[string]*session // by hash
 	programs    []Program
-	ends        map[string]chan struct{} // closed when a Program's access ends or changes, by id
+	ends        map[string]chan struct{} // closed when an access ends or changes: a Session's by its hash, a Program's by its id
 	setup       string                   // the Setup link's hash; "" when there is none
 	sessionUses pending
 	programUses pending
@@ -243,7 +243,27 @@ func (s *Store) Resolve(secret string) (Identity, bool) {
 	x.LastUse = now
 	s.used(&s.sessionUses, s.saveSessions)
 	p := s.persons[i]
-	return Identity{Kind: PersonKind, ID: p.ID, Name: p.Name, Level: p.Level, Fresh: now.Sub(x.SignedIn) < freshFor}, true
+	return Identity{Kind: PersonKind, ID: p.ID, Name: p.Name, Level: p.Level, Fresh: now.Sub(x.SignedIn) < freshFor, Ended: s.ending(x.Hash)}, true
+}
+
+// ending is what closes when the access of key ends or changes, made on
+// first use. Callers hold s.mu.
+func (s *Store) ending(key string) <-chan struct{} {
+	ch, ok := s.ends[key]
+	if !ok {
+		ch = make(chan struct{})
+		s.ends[key] = ch
+	}
+	return ch
+}
+
+// finish ends the access of key: it closes what ending made for it. Callers
+// hold s.mu.
+func (s *Store) finish(key string) {
+	if ch, ok := s.ends[key]; ok {
+		close(ch)
+		delete(s.ends, key)
+	}
 }
 
 // SignOut ends the Session of secret, if there is one.
@@ -281,9 +301,10 @@ func (s *Store) used(p *pending, save func() error) {
 	}
 }
 
-// end deletes Session x. Callers hold s.mu.
+// end deletes Session x, ending its streams. Callers hold s.mu.
 func (s *Store) end(x *session) error {
 	delete(s.sessions, x.Hash)
+	s.finish(x.Hash)
 	return s.saveSessions()
 }
 
@@ -305,6 +326,7 @@ func (s *Store) saveSessions() error {
 	for h, x := range s.sessions {
 		if s.ended(x) {
 			delete(s.sessions, h)
+			s.finish(h)
 		} else {
 			all = append(all, x)
 		}

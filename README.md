@@ -52,7 +52,8 @@ Then open http://localhost:8080. Flags: `-listen`, `-data` (directory holding Oi
 `upgrade` (below) and `sign-in-link` are reserved for Oiko's own commands, never Bridge names.
 
 The Public URL, where users reach Oiko, goes in `data/config.json`: `{"publicUrl": "https://oiko.example.org"}`,
-an HTTPS origin with no path. Sign-in will need it; Oiko starts without it.
+an HTTPS origin with no path. Sign-in needs it: Oiko starts without it, but then only http://localhost
+offers sign-in, and anywhere else only a Program's Token is served.
 
 Sun triggers need the home's location, written by hand in `data/config.json`:
 `{"location": {"latitude": 48.86, "longitude": 2.35}}`. Times of day follow the host timezone.
@@ -79,7 +80,9 @@ what Code Steps see and the configuration may break in a minor release while Oik
 only in a major one from v1.0.0; a v0 patch neither breaks nor adds anything. A type of Bridge's
 versions are read the same way.
 
-There is no authentication yet: only run Oiko on a trusted network.
+Every API request needs a Session, signed in on the dashboard, or a Program's Token, sent as
+`Authorization: Bearer`; the dashboard's page itself is served to anyone. While Oiko has no Admin,
+its log prints at each start a Setup link that claims it.
 
 ## Deploy
 

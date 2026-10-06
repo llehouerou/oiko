@@ -148,6 +148,30 @@ func TestSigningOutEndsTheSession(t *testing.T) {
 	}
 }
 
+func TestASessionsStreamsEndWithIt(t *testing.T) {
+	c := newClock()
+	s, session := claimed(t, t.TempDir(), c)
+	id, _ := s.Resolve(session)
+	again, _ := s.Resolve(session)
+	if closed(id.Ended) || closed(again.Ended) {
+		t.Fatal("ended while the Session lasts")
+	}
+	if err := s.SignOut(session); err != nil {
+		t.Fatal(err)
+	}
+	if !closed(id.Ended) || !closed(again.Ended) {
+		t.Error("signed out, yet not ended")
+	}
+
+	s, session = claimed(t, t.TempDir(), c)
+	id, _ = s.Resolve(session)
+	c.advance(30*24*time.Hour + time.Second)
+	s.Resolve(session)
+	if !closed(id.Ended) {
+		t.Error("expired, yet not ended")
+	}
+}
+
 func TestSessionsSurviveARestartAndTheDocumentsHoldNoSecret(t *testing.T) {
 	c, dir := newClock(), t.TempDir()
 	s := open(t, dir, c)

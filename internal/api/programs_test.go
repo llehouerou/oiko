@@ -130,7 +130,7 @@ func TestTheAuthorizationHeaderIsReadAsTheRFCSays(t *testing.T) {
 		"Bearer\t " + token:      http.StatusOK,
 		"Bearer":                 http.StatusUnauthorized, // a Token attempted, never anonymous
 		"Bearer " + token + " x": http.StatusUnauthorized,
-		"Basic " + token:         http.StatusOK, // not a Token: anonymous, until #40
+		"Basic " + token:         http.StatusOK, // not a Token: anonymous, which who am I serves
 	} {
 		req, _ := http.NewRequest("GET", srv.URL+"/api/me", nil)
 		req.Header.Set("Authorization", header)

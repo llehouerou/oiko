@@ -14,9 +14,7 @@ import (
 )
 
 func TestEveryResponseCarriesTheSecurityHeaders(t *testing.T) {
-	_, hdl := handler(t)
-	srv := httptest.NewServer(hdl)
-	t.Cleanup(srv.Close)
+	_, do := server(t)
 	want := map[string]string{
 		"Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; " +
 			"connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
@@ -33,11 +31,7 @@ func TestEveryResponseCarriesTheSecurityHeaders(t *testing.T) {
 		{"/api/build", "no-store"},
 		{"/api/updates", "no-store"},
 	} {
-		resp, err := http.Get(srv.URL + c.path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		resp.Body.Close()
+		resp := do("GET", c.path, "")
 		if resp.StatusCode != http.StatusOK {
 			t.Errorf("%s: %d", c.path, resp.StatusCode)
 		}
@@ -62,7 +56,7 @@ func TestEveryResponseCarriesTheSecurityHeaders(t *testing.T) {
 }
 
 func TestIndexIsRevalidatedAgainstAnETag(t *testing.T) {
-	_, hdl := handler(t)
+	_, _, hdl := handlerAt(t, nil)
 	srv := httptest.NewServer(hdl)
 	t.Cleanup(srv.Close)
 	get := func(etag string) *http.Response {
@@ -94,7 +88,8 @@ func TestTheEventStreamOutlivesTheReadTimeoutAndEndsOnAStalledClient(t *testing.
 	readTimeout, streamWriteLimit, keepaliveEvery = 100*time.Millisecond, 100*time.Millisecond, 20*time.Millisecond
 	t.Cleanup(func() { readTimeout, streamWriteLimit, keepaliveEvery = saved[0], saved[1], saved[2] })
 
-	_, hdl := handler(t)
+	_, acc, hdl := handlerAt(t, nil)
+	cookie, _ := signedIn(t, acc)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +100,9 @@ func TestTheEventStreamOutlivesTheReadTimeoutAndEndsOnAStalledClient(t *testing.
 	srv.Config = Server("", hdl)
 	srv.Start()
 	t.Cleanup(srv.Close)
-	resp, err := http.Get(srv.URL + "/api/updates")
+	req, _ := http.NewRequest("GET", srv.URL+"/api/updates", nil)
+	req.AddCookie(cookie)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}

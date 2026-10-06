@@ -1,4 +1,5 @@
-// Who is signed in to this browser, as /api/me tells, and signing in and out.
+// Who is signed in to this browser, as /api/me tells, signing in and out, and what the page shows
+// for it.
 
 import { useSyncExternalStore } from 'react'
 
@@ -18,18 +19,31 @@ export type Me = {
 let me: Me | null = null // null until known
 const listeners = new Set<() => void>()
 
+// Asks who is signed in; false if Oiko did not say.
 export async function loadMe() {
-  const res = await fetch('/api/me')
-  if (!res.ok) return
-  me = await res.json()
+  try {
+    const res = await fetch('/api/me')
+    if (!res.ok) return false
+    me = await res.json()
+  } catch {
+    return false
+  }
   listeners.forEach((l) => l())
+  return true
 }
 
-export const useMe = () =>
-  useSyncExternalStore(
-    (l) => (listeners.add(l), () => listeners.delete(l)),
-    () => me,
-  )
+// Who is signed in, as last known.
+export const meNow = () => me
+
+export const useMe = () => useSyncExternalStore((l) => (listeners.add(l), () => listeners.delete(l)), meNow)
+
+// api is fetch for Oiko's API. A refusal for want of credentials means this browser's Session
+// ended: who is signed in is asked again, which shows sign-in.
+export async function api(path: string, init?: RequestInit) {
+  const res = await fetch(path, init)
+  if (res.status === 401) void loadMe()
+  return res
+}
 
 // Claims a fresh Oiko with its Setup link's secret, as its first Admin, named name. Says why not, if refused.
 export async function claim(secret: string, name: string) {
@@ -44,6 +58,29 @@ export async function claim(secret: string, name: string) {
 }
 
 export async function signOut() {
-  await fetch('/api/sign-out', { method: 'POST' })
+  await api('/api/sign-out', { method: 'POST' })
   await loadMe()
+}
+
+export type View = 'home' | 'history' | 'automations' | 'programs'
+
+// What the page shows: nothing until it knows who is signed in, sign-in while nobody is, or else the
+// view hash names. Sign-in leaves the hash alone, so signing in again returns to the same view.
+export function screen(me: Me | null, hash: string): View | 'sign-in' | null {
+  if (!me) return null
+  if (!me.identity) return 'sign-in'
+  if (hash.startsWith('#programs')) return 'programs'
+  if (hash.startsWith('#automations')) return 'automations'
+  if (hash.startsWith('#history')) return 'history'
+  return 'home'
+}
+
+// Which sign-in page a browser at origin gets (ADR 0027): while Oiko has no Admin, a pointer to its
+// Setup link; on the Public URL or http://localhost, sign-in itself; elsewhere a pointer to the
+// Public URL, or the need for one.
+export function signInPage(me: Me, origin: string): 'unclaimed' | 'here' | 'elsewhere' | 'no-public-url' {
+  if (!me.claimed) return 'unclaimed'
+  const u = new URL(origin)
+  if (origin === me.publicUrl || (u.protocol === 'http:' && u.hostname === 'localhost')) return 'here'
+  return me.publicUrl ? 'elsewhere' : 'no-public-url'
 }

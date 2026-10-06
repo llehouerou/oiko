@@ -19,14 +19,23 @@ const port = await new Promise((resolve) => {
     s.close(() => resolve(port))
   })
 })
-const base = `http://127.0.0.1:${port}`
-const oiko = spawn(join(dir, 'oiko'), ['-listen', `127.0.0.1:${port}`, '-data', join(dir, 'data')], { stdio: 'ignore' })
+const base = `http://localhost:${port}` // where sign-in works without a Public URL
+const oiko = spawn(join(dir, 'oiko'), ['-listen', `127.0.0.1:${port}`, '-data', join(dir, 'data')], { stdio: ['ignore', 'ignore', 'pipe'] })
+// Oiko's log shows the Setup link that claims it.
+const setupLink = new Promise((resolve) => {
+  let log = ''
+  oiko.stderr.on('data', (d) => {
+    log += d
+    const m = log.match(/open (\S+\/setup#\S+)/)
+    if (m) resolve(m[1])
+  })
+})
 
 const problems = []
 let browser
 try {
   const up = () =>
-    fetch(`${base}/api/build`).then(
+    fetch(`http://127.0.0.1:${port}/api/me`).then(
       (r) => r.ok,
       () => false,
     )
@@ -34,8 +43,6 @@ try {
     if (tries === 100) throw new Error(`oiko does not answer on ${base}`)
     await new Promise((r) => setTimeout(r, 100))
   }
-  // An Automation, for its editor.
-  const { id } = await (await fetch(`${base}/api/automations`, { method: 'POST', body: '{"name": "Night"}' })).json()
 
   browser = await chromium.launch({ executablePath: process.env.CHROMIUM })
   const page = await browser.newPage()
@@ -46,6 +53,16 @@ try {
     )
   })
   page.on('pageerror', (e) => problems.push(`page error: ${e.message}`))
+  // Sign-in, then the Setup page, which signs in its first Admin.
+  await page.goto(base)
+  await page.getByText('no Admin yet').waitFor()
+  await page.goto(await setupLink)
+  await page.getByLabel('Your name').fill('Alice')
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.locator('nav a[href="#automations"]').waitFor()
+  // An Automation, for its editor.
+  const id = await page.evaluate(async () => (await (await fetch('/api/automations', { method: 'POST', body: '{"name": "Night"}' })).json()).id)
+
   for (const hash of ['', '#history', '#automations', `#automations/${id}`]) {
     await page.goto(`${base}/${hash}`)
     await page.locator('#root > *').first().waitFor()

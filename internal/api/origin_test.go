@@ -46,7 +46,6 @@ func TestACommandRecordsWhoIssuedIt(t *testing.T) {
 		resp *http.Response
 		want home.Origin
 	}{
-		{"no credentials", do("POST", "/api/commands", body, nil), home.Origin{}},
 		{"a Session", do("POST", "/api/commands", body, cookie), home.Origin{Person: alice.ID}},
 		{"a Token", bot("POST", "/api/commands", body), home.Origin{Program: p.ID}},
 	} {
@@ -124,12 +123,7 @@ func TestNamesAreReadFromMemberUp(t *testing.T) {
 			t.Errorf("names for %s = %v, want %v", who, got, want)
 		}
 	}
-	for who, resp := range map[string]*http.Response{
-		"no credentials":  do("GET", "/api/names", "", nil),
-		"a Guest Program": asProgram(t, srv, guestToken)("GET", "/api/names", ""),
-	} {
-		if resp.StatusCode != http.StatusForbidden {
-			t.Errorf("names for %s: %d, want 403", who, resp.StatusCode)
-		}
+	if resp := asProgram(t, srv, guestToken)("GET", "/api/names", ""); resp.StatusCode != http.StatusForbidden {
+		t.Errorf("names for a Guest Program: %d, want 403", resp.StatusCode)
 	}
 }

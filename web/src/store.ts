@@ -20,6 +20,7 @@ import type {
   Value,
 } from './types'
 import { catalogue, owner, type Catalogue } from './targets'
+import { api, loadMe } from './access'
 
 type Listener = () => void
 
@@ -157,36 +158,46 @@ export const current = {
   availability: (t: Target) => availability.get(t),
 }
 
+// connect follows /api/updates while this browser is signed in; the function it answers stops.
+// The browser retries a dropped stream by itself, but gives up on an error answer: a proxy's while
+// Oiko restarts, or a refusal once the Session ended. Each error asks who is signed in, so an ended
+// Session shows sign-in, which stops the stream; otherwise a new one opens 3 s after giving up.
 export function connect() {
-  stream()
-  setInterval(() => {
+  let source: EventSource
+  let retry: ReturnType<typeof setTimeout> | undefined
+  const open = () => {
+    source = new EventSource('/api/updates')
+    source.onopen = () => {
+      connected = true
+      notify('connection')
+    }
+    source.onerror = () => {
+      connected = false
+      notify('connection')
+      void loadMe()
+      if (source.readyState === EventSource.CLOSED) retry = setTimeout(open, 3000)
+    }
+    source.onmessage = (e) => {
+      const msg: Snapshot | Update | Releases = JSON.parse(e.data)
+      if (msg.kind === 'releases') {
+        releases = msg.releases
+        return notify('releases')
+      }
+      apply(msg)
+      followers.forEach((f) => f(msg))
+    }
+  }
+  open()
+  const tick = setInterval(() => {
     now = Date.now()
     notify('now')
   }, 10_000)
-}
-
-// stream follows /api/updates. The browser retries a dropped connection by
-// itself, but gives up on an error answer (a proxy's while Oiko restarts):
-// then a new stream opens 3 s later.
-function stream() {
-  const source = new EventSource('/api/updates')
-  source.onopen = () => {
-    connected = true
-    notify('connection')
-  }
-  source.onerror = () => {
+  return () => {
+    source.close()
+    clearTimeout(retry)
+    clearInterval(tick)
     connected = false
     notify('connection')
-    if (source.readyState === EventSource.CLOSED) setTimeout(stream, 3000)
-  }
-  source.onmessage = (e) => {
-    const msg: Snapshot | Update | Releases = JSON.parse(e.data)
-    if (msg.kind === 'releases') {
-      releases = msg.releases
-      return notify('releases')
-    }
-    apply(msg)
-    followers.forEach((f) => f(msg))
   }
 }
 
@@ -212,7 +223,7 @@ export function sendCommand(target: Target, values: Record<string, unknown>, { t
 }
 
 async function post(target: Target, values: Record<string, unknown>, transition?: number) {
-  const res = await fetch('/api/commands', {
+  const res = await api('/api/commands', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ target, values, transition }),
@@ -247,7 +258,7 @@ export function useControl<T>(target: Target, key: string, { fade = false } = {}
 // Changes Oiko's configuration: path is under /api, e.g. devices/{id}/replace, aggregates or flags/{id}.
 // The change itself arrives through the stream; this only reports a refusal.
 export async function edit(method: 'PATCH' | 'PUT' | 'DELETE' | 'POST', path: string, body?: unknown) {
-  const res = await fetch(`/api/${path}`, {
+  const res = await api(`/api/${path}`, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -258,7 +269,7 @@ export async function edit(method: 'PATCH' | 'PUT' | 'DELETE' | 'POST', path: st
 // Runs Automation automation from its Manual trigger step, at once. Says what
 // the Run did, or why it could not run; run is the Run's id, to see its Trace.
 export async function runManual(automation: string, step: string): Promise<{ text: string; error?: boolean; run?: string }> {
-  const res = await fetch(`/api/automations/${automation}/steps/${step}/run`, { method: 'POST' })
+  const res = await api(`/api/automations/${automation}/steps/${step}/run`, { method: 'POST' })
   if (!res.ok) return { text: (await res.text()).trim(), error: true }
   const end: RunEnd = await res.json()
   const did = { acted: `${end.commands} command${end.commands > 1 ? 's' : ''}`, nothing: 'nothing to do', error: 'error, see its Trace' }

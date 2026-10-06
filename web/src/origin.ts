@@ -3,6 +3,7 @@
 
 import { useEffect, useSyncExternalStore } from 'react'
 import type { CommandState, Origin } from './types'
+import { api } from './access'
 
 type Kind = 'person' | 'kiosk' | 'program'
 
@@ -56,7 +57,7 @@ export function useNames() {
   useEffect(() => {
     if (loading) return
     loading = true
-    fetch('/api/names')
+    api('/api/names')
       .then((r) => (r.ok ? r.json() : null))
       .then(
         (n: Names | null) => {
