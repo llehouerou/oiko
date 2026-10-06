@@ -7,6 +7,7 @@
 //	…
 //	if v, _ := h.Value("0xbulb", "light", "state"); v.Data != true { … }
 //	if err := h.Command("0xbulb", "light", map[string]any{"state": false}); err != nil { … }
+//	if pic, err := h.Picture("cam1", "camera"); err != nil { … } // a Bridge with bridge.Cameras
 //
 // Env builds what Oiko hands a type's Module.New, to test its creation.
 //
@@ -15,6 +16,7 @@
 package bridgetest
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -171,6 +173,22 @@ func (h *Home) Command(address, function string, values map[string]any) error {
 		}
 	}
 	return fmt.Errorf("command %s: outcome lost", cmd) // its updates fell too far behind
+}
+
+// Picture reads the Picture of camera Function function of the Device at
+// address as Oiko does, through the Bridge's bridge.Cameras: refused
+// (ErrRefused) when the Device is not listed, the Function is no camera, the
+// Bridge has no cameras or is offline; else what Picture returned.
+func (h *Home) Picture(address, function string) (bridge.Picture, error) {
+	id, ok := device(h.snapshot(), address)
+	if !ok {
+		return bridge.Picture{}, fmt.Errorf("%w: no Device at %s", ErrRefused, address)
+	}
+	pic, err := h.h.Picture(context.Background(), home.TargetDevice(id, function))
+	if errors.Is(err, home.ErrNotFound) || errors.Is(err, home.ErrBridgeOffline) {
+		return pic, fmt.Errorf("%w: %w", ErrRefused, err)
+	}
+	return pic, err
 }
 
 func (h *Home) snapshot() home.Snapshot {

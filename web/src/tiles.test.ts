@@ -35,6 +35,7 @@ const shape = (...fns: Fn[]) => {
   if (s.kind === 'event') return `event ${s.event.cap.key}`
   if (s.kind === 'sensor') return `sensor ${s.state?.cap.key ?? '-'} ${keys(s.readings)}`
   if (s.kind === 'readings') return `readings ${keys(s.readings)}`
+  if (s.kind === 'camera') return `camera ${s.target} ${s.state?.cap.key ?? '-'}`
   return s.kind
 }
 
@@ -63,6 +64,11 @@ test('nothing to command: a bar for a state or a single reading, a cell per read
 test('readings beside Events, or nothing on the Tile at all, take controls', () => {
   expect(shape(fn('remote', num('temperature'), { ...cap('action', false), stateless: true }))).toBe('controls')
   expect(shape(fn('settings', cap('led', true, 'config')))).toBe('controls')
+})
+
+test("a camera's Tile is its Picture, with its Device's motion beside", () => {
+  expect(shape(fn('camera'))).toBe('camera device:x/camera -')
+  expect(shape(fn('occupancy', cap('occupancy', false)), fn('camera'))).toBe('camera device:x/camera occupancy')
 })
 
 test('health is wrong when low or on', () => {

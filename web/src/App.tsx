@@ -27,6 +27,7 @@ import { ColorPicker, display, format, RangeSlider, Switch, type HS } from './co
 import {
   mdiArrowExpandHorizontal,
   mdiArrowExpandVertical,
+  mdiCctv,
   mdiCheck,
   mdiChevronDown,
   mdiCogOutline,
@@ -1263,6 +1264,8 @@ function Tile({ tile, compact, onOpen }: { tile: TargetTile; compact?: boolean; 
         onSettings={onOpen}
       />
     )
+  if (shape.kind === 'camera')
+    return <CameraTile target={shape.target} state={shape.state} name={name} note={note} badges={badges} dimmed={dimmed} onOpen={onOpen && (() => onOpen())} />
   if (shape.kind !== 'controls') return <SensorTile shape={shape} name={name} note={note} badges={badges} dimmed={dimmed} onOpen={onOpen && (() => onOpen())} />
   const header = (command?: ReactNode) => (
     <div className="min-w-0">
@@ -1342,6 +1345,71 @@ function EventTile({ name, note, badges, item, dimmed, onOpen }: SensorProps & {
         <More onOpen={onOpen} />
       </div>
       {history && createPortal(<HistorySheet target={item.target} onClose={() => setHistory(false)} />, document.body)}
+    </section>
+  )
+}
+
+// How often a camera's Tile reads its Picture again while its page shows (ADR 0036).
+const PICTURE_EVERY = 5 * 60 * 1000
+
+// A camera's Picture: its URL, new each time it is read, so that its image loads again, and when
+// it was taken; undefined until first read, null when there is none. A HEAD tells when it was
+// taken, which an image cannot. Read when shown, when its page shows again, and every
+// PICTURE_EVERY while it shows.
+function usePicture(target: Target) {
+  const [picture, setPicture] = useState<{ src: string; taken: string | null } | null>()
+  useEffect(() => {
+    let gone = false
+    const read = async () => {
+      if (document.hidden) return
+      const src = `/api/picture?target=${encodeURIComponent(target)}&read=${Date.now()}`
+      const res = await fetch(src, { method: 'HEAD' }).catch(() => null)
+      if (!gone) setPicture(res?.ok ? { src, taken: res.headers.get('Last-Modified') } : null)
+    }
+    read()
+    const every = setInterval(read, PICTURE_EVERY)
+    document.addEventListener('visibilitychange', read)
+    return () => {
+      gone = true
+      clearInterval(every)
+      document.removeEventListener('visibilitychange', read)
+    }
+  }, [target])
+  return picture
+}
+
+// A camera's Tile: its Picture and how old it is, its Device's state beside its name; a camera
+// drawn instead until it has a Picture, or once it cannot load it.
+function CameraTile({ target, state, name, note, badges, dimmed, onOpen }: SensorProps & { target: Target; state?: Part }) {
+  const picture = usePicture(target)
+  const [broken, setBroken] = useState<string>() // the src that failed to load
+  const now = useNow()
+  const shown = picture && picture.src !== broken ? picture : undefined
+  const status = [shown ? shown.taken && age(shown.taken, now) : picture === undefined ? 'loading' : 'no picture', note].filter(Boolean).join(' · ')
+  return (
+    <section className={`space-y-1.5 rounded-xl bg-neutral-900 p-1.5 ${dimmed ? 'opacity-50' : ''}`}>
+      <div className="relative aspect-video overflow-hidden rounded-lg bg-neutral-800">
+        {shown ? (
+          <img src={shown.src} alt={`${name}, its latest picture`} onError={() => setBroken(shown.src)} className="size-full object-cover" />
+        ) : (
+          <Svg path={mdiCctv} className="absolute inset-0 m-auto size-10 text-neutral-600" />
+        )}
+      </div>
+      <div className="flex items-center gap-3 pl-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-xs">
+            <p className="truncate text-base font-medium" onMouseEnter={titleIfTruncated}>
+              {name}
+            </p>
+            {badges}
+          </div>
+          <div className="flex items-center gap-3 text-xs text-neutral-400">
+            <span className="truncate">{status}</span>
+            {state && <StateText {...state} />}
+          </div>
+        </div>
+        <More onOpen={onOpen} />
+      </div>
     </section>
   )
 }

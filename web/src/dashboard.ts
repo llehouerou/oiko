@@ -103,7 +103,7 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
       .map((a) => ({ key: aggregateTarget(a.id), label: a.name, kind: 'target' as const, ...aggregateTile(a) })),
     ...devices.flatMap((device) => {
       const fns = (device.functions ?? []).filter(
-        (fn) => (fn.area ?? device.area ?? '') === id && deviceTarget(device.id, fn.key) !== lone && tileCaps(fn).length > 0,
+        (fn) => (fn.area ?? device.area ?? '') === id && deviceTarget(device.id, fn.key) !== lone && (tileCaps(fn).length > 0 || fn.kind === 'camera'),
       )
       return fns.length ? [{ key: deviceTarget(device.id), label: device.name, kind: 'target' as const, ...deviceTile(device, fns) }] : []
     }),

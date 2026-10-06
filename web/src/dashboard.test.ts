@@ -62,6 +62,14 @@ test("a Device's tile in each Area gathers its Functions there; one with nothing
   expect(fns).toEqual([['l1'], ['l2']])
 })
 
+test('a camera has a Tile though it has no Capability', () => {
+  const camera: Fn = { key: 'camera', kind: 'camera', capabilities: [] }
+  expect(only(dashboard([device('garden', 'living', camera)], [], [], [area('living')], []).sections)).toMatchObject({
+    subject: 'device:garden',
+    shape: { kind: 'camera', target: 'device:garden/camera' },
+  })
+})
+
 const only = (sections: DashboardSection[]) => {
   const [t] = sections.flatMap((s) => s.tiles)
   if (t?.kind !== 'target') throw new Error('no Target tile')

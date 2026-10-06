@@ -46,6 +46,24 @@ type Bridge interface {
 	Send(ctx context.Context, address, function string, values map[string]any, transition time.Duration) error
 }
 
+// Cameras is implemented by a Bridge whose Devices have cameras: Functions
+// of kind "camera", which may have no Capability (ADR 0036). Oiko finds it
+// by a type assertion on the Bridge.
+type Cameras interface {
+	// Picture returns the latest still image of camera Function function of
+	// the Device at address, as its Bridge has it: it must never wake the
+	// camera, which a Picture is read for every few minutes. Oiko keeps it in
+	// memory only, for a minute at most.
+	Picture(ctx context.Context, address, function string) (Picture, error)
+}
+
+// Picture is a camera's latest still image.
+type Picture struct {
+	Data        []byte
+	ContentType string    // e.g. "image/jpeg"
+	Taken       time.Time // when the camera took it
+}
+
 // Port is how one Bridge feeds Oiko: what it describes and reports concerns
 // its own Devices only. Its methods are safe for concurrent use.
 type Port interface {

@@ -152,3 +152,33 @@ func TestEnvAsOikoHandsIt(t *testing.T) {
 	}
 	env.Log.Info("hello") // into the test's output
 }
+
+// camera is a Bridge with one camera, which has a Picture.
+type camera struct{ lamp }
+
+func (camera) Picture(_ context.Context, address, function string) (bridge.Picture, error) {
+	return bridge.Picture{Data: []byte(address + "/" + function), ContentType: "image/jpeg"}, nil
+}
+
+func TestAPictureIsReadThroughTheBridgesCameras(t *testing.T) {
+	cam := bridge.Device{NativeAddress: "cam1", Name: "Garden", Functions: []bridge.Function{{Key: "camera", Kind: "camera"}}}
+	h := bridgetest.New(&camera{})
+	h.Port().SyncDevices([]bridge.Device{cam})
+	if _, err := h.Picture("cam1", "camera"); !errors.Is(err, bridgetest.ErrRefused) {
+		t.Errorf("offline: %v, want refused", err)
+	}
+	h.Port().SetOnline(true)
+	if pic, err := h.Picture("cam1", "camera"); err != nil || string(pic.Data) != "cam1/camera" {
+		t.Errorf("Picture: %q, %v", pic.Data, err)
+	}
+	if _, err := h.Picture("cam2", "camera"); !errors.Is(err, bridgetest.ErrRefused) {
+		t.Errorf("an unlisted Device: %v, want refused", err)
+	}
+
+	plain := bridgetest.New(&lamp{})
+	plain.Port().SetOnline(true)
+	plain.Port().SyncDevices([]bridge.Device{cam})
+	if _, err := plain.Picture("cam1", "camera"); !errors.Is(err, bridgetest.ErrRefused) {
+		t.Errorf("a Bridge without cameras: %v, want refused", err)
+	}
+}

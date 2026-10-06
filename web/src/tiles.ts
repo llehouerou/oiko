@@ -37,8 +37,10 @@ export interface Part {
 // - sensor: nothing to command or press, with a state or a single reading: a bar
 //   leading with how long the state has held, the readings beside;
 // - readings: several readings and no state, a cell each;
+// - camera: a camera's Picture (ADR 0036), with the state of its Device's other Functions, if any;
 // - controls: anything else, each Function's controls.
 export type Shape =
+  | { kind: 'camera'; target: Target; state?: Part }
   | { kind: 'bar'; target: Target; fn: Fn; toggle: string }
   | { kind: 'event'; event: Part }
   | { kind: 'sensor'; state?: Part; readings: Part[] }
@@ -49,6 +51,8 @@ export function tileShape(fns: { target: Target; fn: Fn }[]): Shape {
   const all = fns.map(({ target, fn }) => ({ target, fn, r: roles(fn.kind, fn.capabilities) }))
   const parts = (pick: (r: Roles) => (Capability | undefined)[]) =>
     all.flatMap(({ target, fn, r }) => pick(r).flatMap((cap) => (cap ? [{ target, fn, cap }] : [])))
+  const camera = all.find(({ fn }) => fn.kind === 'camera')
+  if (camera) return { kind: 'camera', target: camera.target, state: parts((r) => [r.state])[0] }
   const [only] = all
   if (all.length === 1 && only?.r.control?.type === 'binary') return { kind: 'bar', target: only.target, fn: only.fn, toggle: only.r.control.key }
   const controls = parts((r) => [r.control, ...r.adjustments])

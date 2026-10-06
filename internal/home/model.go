@@ -83,6 +83,9 @@ func fromBridge(b bridge.Device) Device {
 		Capabilities: b.Capabilities, Functions: make([]Function, len(b.Functions))}
 	for i, f := range b.Functions {
 		d.Functions[i] = Function{Key: f.Key, Kind: f.Kind, Capabilities: f.Capabilities}
+		if f.Capabilities == nil { // a camera's may have none: [] in JSON
+			d.Functions[i].Capabilities = []Capability{}
+		}
 	}
 	return d
 }
