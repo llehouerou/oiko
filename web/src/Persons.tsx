@@ -7,7 +7,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { AppBar } from './AppBar'
 import { confirm } from './confirm'
 import { edit } from './store'
-import { api, levels, signInLink, useMe, type Level } from './access'
+import { api, levels, loadMe, signInLink, useMe, type Level } from './access'
 import { stepUp } from './passkeys'
 import { date, LevelSelect, ShareLink } from './manage'
 
@@ -30,8 +30,8 @@ export function Persons() {
     else setError((await res.text()).trim())
   }
   useEffect(() => void load(), [])
-  // After a change: shows why it was refused, if it was, and the Persons as they now are.
-  const change = async (err: string | null) => (setError(err), load())
+  // After a change: shows why it was refused, if it was, and the Persons as they now are, oneself too.
+  const change = async (err: string | null) => (setError(err), load(), loadMe())
   // A change, once step-up allows it.
   const fresh = async (method: 'PUT' | 'DELETE' | 'POST', path: string, body?: unknown) => (await stepUp()) && change(await edit(method, path, body))
   const create = async (e: FormEvent<HTMLFormElement>) => {
@@ -62,8 +62,8 @@ export function Persons() {
         <header>
           <h1 className="text-xl font-semibold">Persons</h1>
           <p className="text-neutral-400">
-            The household and its guests. Create a Person, then a Sign-in link to invite them: it signs them in once, within 24 hours, from a QR code or any
-            messenger.
+            The household and its guests. Create a Person, then a Sign-in link to invite them: it signs them in once, from a QR code or any messenger, within 24
+            hours (15 minutes for your own).
           </p>
         </header>
         {error && <p className="text-red-400">{error}</p>}

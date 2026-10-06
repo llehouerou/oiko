@@ -88,11 +88,10 @@ test('a Sign-in link points at the Public URL, its secret in the fragment', () =
   expect(signInLink({ ...alice, publicUrl: null }, 'http://localhost:8080', 's3cret')).toBe('http://localhost:8080/sign-in#s3cret')
 })
 
-test('a spent Sign-in link says so in plain words, naming no one', async () => {
-  const spent = 'refused: this Sign-in link has expired or was already used; ask whoever sent it for a new one'
-  oiko({ '/api/sign-in/link/person': [200, { name: 'Bob' }], '/api/sign-in/link': [403, spent] })
+test('a Sign-in link tells whom it signs in, or why it no longer does', async () => {
+  oiko({ '/api/sign-in/link/person': [200, { name: 'Bob' }], '/api/sign-in/link': [204, null] })
   expect(await linkPerson('s')).toEqual({ name: 'Bob' })
-  expect(await signInWithLink('s')).toBe('This Sign-in link has expired or was already used. Ask whoever sent it for a new one.')
-  oiko({ '/api/sign-in/link/person': [403, 'sign in at https://oiko.example'] })
-  expect(await linkPerson('s')).toEqual({ error: '"sign in at https://oiko.example"' })
+  oiko({ '/api/sign-in/link/person': [403, 'expired'], '/api/sign-in/link': [403, 'expired'] })
+  expect(await linkPerson('s')).toEqual({ error: '"expired"' })
+  expect(await signInWithLink('s')).toBe('"expired"')
 })

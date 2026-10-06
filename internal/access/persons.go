@@ -3,6 +3,7 @@ package access
 import (
 	"crypto/rand"
 	"fmt"
+	"log/slog"
 	"slices"
 	"time"
 	"uuid"
@@ -130,14 +131,17 @@ func (s *Store) RemovePerson(by Identity, id string) error {
 	if err := s.savePersons(slices.Delete(slices.Clone(s.persons), i, i+1)); err != nil {
 		return err
 	}
-	// Written without their Person, they would be dropped on load anyway.
 	for h, x := range s.sessions {
 		if x.Person == id {
 			delete(s.sessions, h)
 			s.finish(h)
 		}
 	}
-	return s.saveSessions()
+	// The Person is gone: Sessions left on disk without them are dropped on load.
+	if err := s.saveSessions(); err != nil {
+		slog.Error("access: writing the Sessions of a removed Person", "err", err)
+	}
+	return nil
 }
 
 // Rename renames Person by, who manages their own Name.
@@ -205,9 +209,9 @@ func (s *Store) RevokeLink(by Identity, id string) error {
 	return s.savePersons(ps)
 }
 
-// LinkFor answers the Name of the Person the Sign-in link of secret signs
+// LinkedName answers the Name of the Person the Sign-in link of secret signs
 // in, for its welcome page, without spending it.
-func (s *Store) LinkFor(secret string) (string, error) {
+func (s *Store) LinkedName(secret string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if i := s.linked(secret); i >= 0 {

@@ -74,24 +74,18 @@ export async function claim(secret: string, name: string) {
 // Whom the Sign-in link of secret signs in: their Name, or why it no longer works.
 export async function linkPerson(secret: string): Promise<{ name: string } | { error: string }> {
   const res = await post('/api/sign-in/link/person', { secret })
-  return res.ok ? res.json() : { error: await refusal(res) }
+  return res.ok ? res.json() : { error: (await res.text()).trim() }
 }
 
 // Signs in with the Sign-in link of secret, spending it. Says why not, if refused.
 export async function signInWithLink(secret: string) {
   const res = await post('/api/sign-in/link', { secret })
-  if (!res.ok) return refusal(res)
+  if (!res.ok) return (await res.text()).trim()
   await loadMe()
   return null
 }
 
 const post = (path: string, body: unknown) => fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-
-// Why a link was refused: a spent one says so in plain words, naming no one (ADR 0030).
-const refusal = async (res: Response) =>
-  res.status === 403 && (await res.clone().text()).includes('ask whoever sent it')
-    ? 'This Sign-in link has expired or was already used. Ask whoever sent it for a new one.'
-    : (await res.text()).trim()
 
 // The address of the Sign-in link of secret: on the Public URL, where sign-in works, or else origin's;
 // its secret in the fragment, which the browser never sends (ADR 0030).
