@@ -1,5 +1,6 @@
 // The Automation editor: the list of Automations, and the graph of the open
 // one. Edits stay in the editor until Save, which hot-reloads the Automation.
+// Only an Admin edits; a Member reads them, their Runs and their Traces.
 
 import '@xyflow/react/dist/style.css'
 import {
@@ -26,7 +27,7 @@ import { onPath, pathOf } from './runtime'
 import { BrokenStep, OpenStep, StepNode } from './StepNode'
 import { titleIfTruncated } from '../truncated'
 import { AppBar } from '../AppBar'
-import { api } from '../access'
+import { api, useAllows } from '../access'
 
 const nodeTypes = { step: StepNode }
 
@@ -34,6 +35,7 @@ const dot = { enabled: 'bg-emerald-400', disabled: 'bg-neutral-500', broken: 'bg
 
 export function Automations() {
   const statuses = useAutomationStatuses()
+  const admin = useAllows('admin')
   const [docs, setDocs] = useState<Document[]>([])
   // #automations/<id>/<run> opens with that Run picked: a History marker links to it.
   const [, linkedId, linkedRun] = location.hash.split('/')
@@ -87,9 +89,11 @@ export function Automations() {
               </span>
             </button>
           ))}
-          <button onClick={create} className="mt-2 text-left text-amber-400 hover:text-amber-300">
-            + New automation
-          </button>
+          {admin && (
+            <button onClick={create} className="mt-2 text-left text-amber-400 hover:text-amber-300">
+              + New automation
+            </button>
+          )}
           {error && <p className="text-red-400">{error}</p>}
         </aside>
         {open ? (
@@ -111,7 +115,7 @@ export function Automations() {
             />
           </ReactFlowProvider>
         ) : (
-          <p className="m-auto text-neutral-500">Pick an automation, or create one.</p>
+          <p className="m-auto text-neutral-500">{admin ? 'Pick an automation, or create one.' : 'Pick an automation.'}</p>
         )}
       </div>
     </div>
@@ -140,6 +144,7 @@ function Editor({
   onDeleted: () => void
 }) {
   const rf = useReactFlow()
+  const admin = useAllows('admin')
   const [saved, setSaved] = useState(() => spread(doc))
   const [name, setName] = useState(doc.name)
   const [nodes, setNodes] = useState(() => toFlow(saved).nodes)
@@ -267,32 +272,37 @@ function Editor({
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
+          readOnly={!admin}
           aria-label="Automation name"
           className="min-w-0 flex-1 rounded bg-transparent px-1 text-base font-medium hover:bg-neutral-900 focus:bg-neutral-900 focus:outline-none"
         />
-        <label className="flex items-center gap-1 text-neutral-400">
-          <input type="checkbox" checked={saved.enabled} onChange={(e) => setEnabled(e.target.checked)} className="accent-amber-400" />
-          enabled
-        </label>
-        <button onClick={remove} className="text-red-400 hover:text-red-300">
-          Delete
-        </button>
-        <button disabled={!dirty} onClick={revert} className="text-neutral-400 hover:text-white disabled:opacity-30">
-          Revert
-        </button>
-        <button
-          disabled={!dirty}
-          onClick={save}
-          className="rounded bg-amber-400 px-3 py-1 font-medium text-neutral-900 hover:bg-amber-300 disabled:bg-neutral-700 disabled:text-neutral-400"
-        >
-          {dirty ? 'Save' : 'Saved'}
-        </button>
+        {admin && (
+          <>
+            <label className="flex items-center gap-1 text-neutral-400">
+              <input type="checkbox" checked={saved.enabled} onChange={(e) => setEnabled(e.target.checked)} className="accent-amber-400" />
+              enabled
+            </label>
+            <button onClick={remove} className="text-red-400 hover:text-red-300">
+              Delete
+            </button>
+            <button disabled={!dirty} onClick={revert} className="text-neutral-400 hover:text-white disabled:opacity-30">
+              Revert
+            </button>
+            <button
+              disabled={!dirty}
+              onClick={save}
+              className="rounded bg-amber-400 px-3 py-1 font-medium text-neutral-900 hover:bg-amber-300 disabled:bg-neutral-700 disabled:text-neutral-400"
+            >
+              {dirty ? 'Save' : 'Saved'}
+            </button>
+          </>
+        )}
       </header>
-      <StatusBanner status={status} onEnable={() => setEnabled(true)} />
+      <StatusBanner status={status} onEnable={admin ? () => setEnabled(true) : undefined} />
       {/* The Runs sit beside the canvas when the screen is wide enough, below it otherwise. */}
       <div className="flex min-h-0 flex-1 flex-col 2xl:flex-row">
         <div className="flex min-h-0 min-w-0 flex-1">
-          <aside className="w-40 shrink-0 space-y-3 overflow-y-auto border-r border-neutral-800 p-2 text-xs">
+          <aside hidden={!admin} className="w-40 shrink-0 space-y-3 overflow-y-auto border-r border-neutral-800 p-2 text-xs">
             {groups.map((g) => (
               <div key={g}>
                 <div className="mb-1 font-semibold tracking-wide text-neutral-500 uppercase">{g}</div>
@@ -316,7 +326,7 @@ function Editor({
             className="relative min-w-0 flex-1"
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
-              const kind = e.dataTransfer.getData('application/x-oiko-step') as Kind
+              const kind = admin && (e.dataTransfer.getData('application/x-oiko-step') as Kind)
               if (!kind) return
               const position = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY })
               const step = newStep(
@@ -340,6 +350,9 @@ function Editor({
                       onEdgesChange={(changes) => setEdges((es) => applyEdgeChanges(changes, es))}
                       onConnect={(c) => setEdges((es) => [...es, flowEdge(c)])}
                       isValidConnection={(c) => !connectionError(c, nodes, edges)}
+                      nodesDraggable={admin}
+                      nodesConnectable={admin}
+                      deleteKeyCode={admin ? 'Backspace' : null}
                       onConnectEnd={onConnectEnd}
                       colorMode="dark"
                       minZoom={0.1}
@@ -368,13 +381,15 @@ function Editor({
   )
 }
 
-function StatusBanner({ status, onEnable }: { status?: AutomationStatus; onEnable: () => void }) {
+// Why the Automation does not run, if it does not; an Admin may enable it again.
+function StatusBanner({ status, onEnable }: { status?: AutomationStatus; onEnable?: () => void }) {
   if (!status || status.status === 'enabled') return null
-  const button = (label: string) => (
-    <button onClick={onEnable} className="rounded bg-neutral-700 px-2 py-0.5 text-xs text-white hover:bg-neutral-600">
-      {label}
-    </button>
-  )
+  const button = (label: string) =>
+    onEnable && (
+      <button onClick={onEnable} className="rounded bg-neutral-700 px-2 py-0.5 text-xs text-white hover:bg-neutral-600">
+        {label}
+      </button>
+    )
   const [text, action] = {
     broken: [`Broken: ${status.reason}. It won't run until it is edited.`, null],
     runaway: [`Runaway since ${new Date(status.since ?? '').toLocaleString()}: more than 20 Runs within 1 s. Stopped until re-enabled.`, button('Re-enable')],

@@ -185,6 +185,14 @@ export interface AutomationStatus {
   since?: string // when it became runaway
 }
 
+// Mirrors automation.Tile: what anyone signed in sees of an Automation, never how it is built.
+export interface AutomationTile {
+  id: string
+  name: string
+  status: AutomationStatus['status']
+  manualTriggers: { step: string; name: string }[]
+}
+
 // Mirrors build.Build, served with Oiko's Install and the type of each Bridge of the configuration.
 export interface Build {
   version?: string // Oiko's; none when unknown

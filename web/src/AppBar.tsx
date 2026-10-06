@@ -25,25 +25,28 @@ import { Switch } from './controls'
 import { Svg } from './icons'
 import { useConnection } from './store'
 import { About } from './About'
-import { levels, signOut, useMe } from './access'
+import { allows, levels, signOut, useMe } from './access'
 
 const pages = [
-  { href: '#', label: 'Home', icon: mdiViewDashboardOutline },
-  { href: '#history', label: 'Timeline', icon: mdiTimelineClockOutline },
-  { href: '#automations', label: 'Automations', icon: mdiRobotOutline },
+  { href: '#', label: 'Home', icon: mdiViewDashboardOutline, level: 'guest' },
+  { href: '#history', label: 'Timeline', icon: mdiTimelineClockOutline, level: 'member' },
+  { href: '#automations', label: 'Automations', icon: mdiRobotOutline, level: 'member' },
 ] as const
 
 export type Page = (typeof pages)[number]['href']
 
-// The pages as tabs in the middle, the current one lit, if it is one; a narrow screen keeps their
-// icons only. onLeave may hold the page, e.g. on unsaved changes; settings are the page's, under ⚙.
+// The pages its Access level shows as tabs in the middle, the current one lit, if it is one; a narrow
+// screen keeps their icons only. onLeave may hold the page, e.g. on unsaved changes; settings are the
+// page's, under ⚙. Only an Admin opens what Oiko is built from.
 export function AppBar({ page, onLeave, settings }: { page?: Page; onLeave?: () => Promise<boolean>; settings?: ReactNode }) {
   const [about, setAbout] = useState(false) // what Oiko is built from, opened from its logo
+  const me = useMe()
+  const admin = allows(me, 'admin')
   return (
     <header className="sticky top-0 z-10 shrink-0 border-b border-neutral-800/80 bg-neutral-950/80 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-[120rem] items-center gap-4 px-4 lg:px-8">
         <div className="flex flex-1 items-center">
-          <button onClick={() => setAbout(true)} title="About Oiko" className="flex items-center gap-3 rounded-xl">
+          <button onClick={() => setAbout(true)} disabled={!admin} title={admin ? 'About Oiko' : undefined} className="flex items-center gap-3 rounded-xl">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-linear-to-br from-amber-300 to-orange-500 text-neutral-950 shadow-lg shadow-amber-500/20">
               <Svg path={mdiHomeAutomation} className="size-[62%]" />
             </span>
@@ -52,23 +55,25 @@ export function AppBar({ page, onLeave, settings }: { page?: Page; onLeave?: () 
           {about && <About onClose={() => setAbout(false)} />}
         </div>
         <nav className="flex rounded-full bg-neutral-900 p-1">
-          {pages.map((p) => (
-            <a
-              key={p.href}
-              href={p.href}
-              title={p.label}
-              aria-current={p.href === page ? 'page' : undefined}
-              onClick={async (e) => {
-                if (!onLeave || p.href === page) return
-                e.preventDefault()
-                if (await onLeave()) location.hash = p.href
-              }}
-              className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm sm:px-4 ${p.href === page ? 'bg-neutral-700 text-white shadow' : 'text-neutral-400 hover:text-white'}`}
-            >
-              <Svg path={p.icon} className="size-5" />
-              <span className="hidden md:inline">{p.label}</span>
-            </a>
-          ))}
+          {pages
+            .filter((p) => allows(me, p.level))
+            .map((p) => (
+              <a
+                key={p.href}
+                href={p.href}
+                title={p.label}
+                aria-current={p.href === page ? 'page' : undefined}
+                onClick={async (e) => {
+                  if (!onLeave || p.href === page) return
+                  e.preventDefault()
+                  if (await onLeave()) location.hash = p.href
+                }}
+                className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm sm:px-4 ${p.href === page ? 'bg-neutral-700 text-white shadow' : 'text-neutral-400 hover:text-white'}`}
+              >
+                <Svg path={p.icon} className="size-5" />
+                <span className="hidden md:inline">{p.label}</span>
+              </a>
+            ))}
         </nav>
         <div className="flex flex-1 items-center justify-end gap-2">
           <ConnectionBadge />

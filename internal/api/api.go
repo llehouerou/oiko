@@ -25,37 +25,87 @@ import (
 	"github.com/llehouerou/oiko/internal/release"
 )
 
-// Handler serves the API to a Session or a Token, and the web client to
-// anyone (ADR 0027, 0034). acc keeps who signs in, b is what Oiko is built
-// from, install its Install (see CONTEXT.md), releases what is newer, bridges
-// the type of each Bridge of the configuration, by name, public the Public
-// URL, nil when the configuration has none: the origin sign-in checks.
+// Handler serves the API to a Session or a Token, each endpoint to the
+// Access levels it declares, and the web client to anyone (ADR 0023, 0027,
+// 0034). acc keeps who signs in, b is what Oiko is built from, install its
+// Install (see CONTEXT.md), releases what is newer, bridges the type of each
+// Bridge of the configuration, by name, public the Public URL, nil when the
+// configuration has none: the origin sign-in checks.
 func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, acc *access.Store, b build.Build, install string, releases *release.Checker, bridges map[string]string, public *url.URL, static fs.FS) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/updates", updates(h, acc, releases))
-	handleAccess(mux, acc, public)
-	handlePasskeys(mux, acc, public)
-	handlePrograms(mux, acc)
-	mux.HandleFunc("GET /api/build", func(w http.ResponseWriter, r *http.Request) {
+	handle := func(level access.Level, pattern string, serve http.HandlerFunc) {
+		mux.HandleFunc(pattern, needs(level, serve))
+	}
+	guest, member, admin := access.Guest, access.Member, access.Admin
+
+	// A Guest observes the home as it is now, commands it and starts Manual
+	// triggers.
+	handle(guest, "GET /api/updates", updates(h, acc, releases))
+	handle(guest, "POST /api/commands", command(h))
+	// Runs an Automation from its Manual trigger step, at once: how the Run ended.
+	handle(guest, "POST /api/automations/{id}/steps/{step}/run", func(w http.ResponseWriter, r *http.Request) {
+		end, err := automations.Trigger(r.PathValue("id"), r.PathValue("step"), origin(r))
+		if id, _ := identity(r); id.Level == access.Guest {
+			end.Trigger.By = nil // ADR 0031
+		}
+		respond(w, end, err)
+	})
+	handle(guest, "GET /api/automations/tiles", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, automations.Tiles())
+	})
+
+	// A Member also reads the home's past and how its Automations are built.
+	handle(member, "GET /api/automations", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, automations.Documents())
+	})
+	handle(member, "GET /api/automations/{id}/state", func(w http.ResponseWriter, r *http.Request) {
+		state, err := automations.State(r.PathValue("id"))
+		respond(w, state, err)
+	})
+	handle(member, "GET /api/automations/{id}/runs", func(w http.ResponseWriter, r *http.Request) {
+		runs, err := hist.Runs(r.PathValue("id"))
+		respond(w, runs, err)
+	})
+	handle(member, "GET /api/runs/{id}", func(w http.ResponseWriter, r *http.Request) {
+		trace, err := hist.Trace(r.PathValue("id"))
+		respond(w, trace, err)
+	})
+	// A Target's latest Commands: ?target=<key>.
+	handle(member, "GET /api/commands", func(w http.ResponseWriter, r *http.Request) {
+		t, err := home.ParseTarget(r.URL.Query().Get("target"))
+		if err != nil {
+			reply(w, err)
+			return
+		}
+		commands, err := hist.Commands(t)
+		respond(w, commands, err)
+	})
+	handle(member, "POST /api/history", readHistory(h, hist))
+	handle(member, "POST /api/history/periods", readPeriods(h, hist))
+	handle(member, "GET /api/lost-entries", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]uint64{"lost": hist.Lost()})
+	})
+
+	// An Admin also edits the home and sees what Oiko is built from.
+	handle(admin, "GET /api/build", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, struct {
 			build.Build
 			Install string            `json:"install"`
 			Bridges map[string]string `json:"bridges"`
 		}{b, install, bridges})
 	})
-	mux.HandleFunc("POST /api/commands", command(h))
-	mux.HandleFunc("PATCH /api/devices/{id}", rename(h))
-	mux.HandleFunc("PUT /api/icon", setIcon(h))
-	mux.HandleFunc("PUT /api/area", setArea(h))
-	mux.HandleFunc("POST /api/areas", defineArea(h))
-	mux.HandleFunc("PUT /api/areas/{id}", defineArea(h))
+	handle(admin, "PATCH /api/devices/{id}", rename(h))
+	handle(admin, "PUT /api/icon", setIcon(h))
+	handle(admin, "PUT /api/area", setArea(h))
+	handle(admin, "POST /api/areas", defineArea(h))
+	handle(admin, "PUT /api/areas/{id}", defineArea(h))
 	// Its Area Aggregates go with it, and their History: Home announces it.
-	mux.HandleFunc("DELETE /api/areas/{id}", func(w http.ResponseWriter, r *http.Request) {
+	handle(admin, "DELETE /api/areas/{id}", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, h.DeleteArea(home.AreaID(r.PathValue("id"))))
 	})
 	// How the dashboard shows Area {id}: the tiles it hides, the kinds of Area
 	// Aggregates its header leaves out.
-	mux.HandleFunc("PUT /api/areas/{id}/display", func(w http.ResponseWriter, r *http.Request) {
+	handle(admin, "PUT /api/areas/{id}/display", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Hidden           []home.Target `json:"hidden"`
 			HiddenAggregates []string      `json:"hiddenAggregates"`
@@ -65,7 +115,7 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 		}
 	})
 	// Area {id}'s grid on the dashboard: its columns and where its tiles sit.
-	mux.HandleFunc("PUT /api/areas/{id}/layout", func(w http.ResponseWriter, r *http.Request) {
+	handle(admin, "PUT /api/areas/{id}/layout", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Columns int              `json:"columns"`
 			Layout  []home.Placement `json:"layout"`
@@ -74,7 +124,7 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 			reply(w, h.SetAreaLayout(home.AreaID(r.PathValue("id")), req.Columns, req.Layout))
 		}
 	})
-	mux.HandleFunc("PUT /api/areas", func(w http.ResponseWriter, r *http.Request) {
+	handle(admin, "PUT /api/areas", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Order []home.AreaID `json:"order"`
 		}
@@ -82,66 +132,38 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 			reply(w, h.OrderAreas(req.Order))
 		}
 	})
-	mux.HandleFunc("DELETE /api/devices/{id}", func(w http.ResponseWriter, r *http.Request) {
+	handle(admin, "DELETE /api/devices/{id}", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, h.Delete(home.DeviceID(r.PathValue("id"))))
 	})
-	mux.HandleFunc("POST /api/devices/{id}/replace", replace(h))
-	mux.HandleFunc("POST /api/aggregates", defineAggregate(h))
-	mux.HandleFunc("PUT /api/aggregates/{id}", defineAggregate(h))
-	mux.HandleFunc("DELETE /api/aggregates/{id}", func(w http.ResponseWriter, r *http.Request) {
+	handle(admin, "POST /api/devices/{id}/replace", replace(h))
+	handle(admin, "POST /api/aggregates", defineAggregate(h))
+	handle(admin, "PUT /api/aggregates/{id}", defineAggregate(h))
+	handle(admin, "DELETE /api/aggregates/{id}", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, h.DeleteAggregate(home.AggregateID(r.PathValue("id"))))
 	})
-	mux.HandleFunc("POST /api/flags", defineFlag(h))
-	mux.HandleFunc("PUT /api/flags/{id}", defineFlag(h))
-	mux.HandleFunc("DELETE /api/flags/{id}", func(w http.ResponseWriter, r *http.Request) {
+	handle(admin, "POST /api/flags", defineFlag(h))
+	handle(admin, "PUT /api/flags/{id}", defineFlag(h))
+	handle(admin, "DELETE /api/flags/{id}", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, h.DeleteFlag(home.FlagID(r.PathValue("id"))))
 	})
-	mux.HandleFunc("GET /api/automations", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, automations.Documents())
-	})
-	mux.HandleFunc("POST /api/automations", defineAutomation(automations))
-	mux.HandleFunc("PUT /api/automations/{id}", defineAutomation(automations))
-	mux.HandleFunc("DELETE /api/automations/{id}", func(w http.ResponseWriter, r *http.Request) {
+	handle(admin, "POST /api/automations", defineAutomation(automations))
+	handle(admin, "PUT /api/automations/{id}", defineAutomation(automations))
+	handle(admin, "DELETE /api/automations/{id}", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, automations.Delete(r.PathValue("id")))
 	})
-	// Runs an Automation from its Manual trigger step, at once: how the Run ended.
-	mux.HandleFunc("POST /api/automations/{id}/steps/{step}/run", func(w http.ResponseWriter, r *http.Request) {
-		end, err := automations.Trigger(r.PathValue("id"), r.PathValue("step"), origin(r))
-		respond(w, end, err)
-	})
-	mux.HandleFunc("GET /api/automations/{id}/runs", func(w http.ResponseWriter, r *http.Request) {
-		runs, err := hist.Runs(r.PathValue("id"))
-		respond(w, runs, err)
-	})
-	mux.HandleFunc("DELETE /api/automations/{id}/runs", func(w http.ResponseWriter, r *http.Request) {
+	handle(admin, "DELETE /api/automations/{id}/runs", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, hist.ClearRuns(r.PathValue("id")))
 	})
-	mux.HandleFunc("GET /api/automations/{id}/state", func(w http.ResponseWriter, r *http.Request) {
-		state, err := automations.State(r.PathValue("id"))
-		respond(w, state, err)
-	})
-	mux.HandleFunc("GET /api/runs/{id}", func(w http.ResponseWriter, r *http.Request) {
-		trace, err := hist.Trace(r.PathValue("id"))
-		respond(w, trace, err)
-	})
-	mux.HandleFunc("DELETE /api/runs/{id}", func(w http.ResponseWriter, r *http.Request) {
+	handle(admin, "DELETE /api/runs/{id}", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, hist.DeleteRun(r.PathValue("id")))
 	})
-	// A Target's latest Commands: ?target=<key>.
-	mux.HandleFunc("GET /api/commands", func(w http.ResponseWriter, r *http.Request) {
-		t, err := home.ParseTarget(r.URL.Query().Get("target"))
-		if err != nil {
-			reply(w, err)
-			return
-		}
-		commands, err := hist.Commands(t)
-		respond(w, commands, err)
-	})
-	mux.HandleFunc("POST /api/history", readHistory(h, hist))
-	mux.HandleFunc("POST /api/history/periods", readPeriods(h, hist))
-	mux.HandleFunc("GET /api/lost-entries", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]uint64{"lost": hist.Lost()})
-	})
+
+	// Access rules its own endpoints: anyone signs in and manages their own
+	// credentials; only an Admin Person manages access (ADR 0023).
+	handleAccess(mux, acc, public)
+	handlePasskeys(mux, acc, public)
+	handlePrograms(mux, acc)
+
 	client := files(static)
 	mux.Handle("GET /", client)
 	// The page a Setup link opens, its secret in the fragment.
@@ -253,20 +275,29 @@ func respond(w http.ResponseWriter, v any, err error) {
 	writeJSON(w, http.StatusOK, v)
 }
 
-// updates streams a snapshot, then every Update, as Server-Sent Events; the
-// Status of each module's Releases comes with the snapshot, and again, as a
-// "releases" message, each time it changes. Updates available at once are
-// written together and flushed once. A client that stops reading ends the
-// stream, at the first write that does not go through within
-// streamWriteLimit. It counts as a use of its Session or Token at each
-// keepalive, and ends at once when either ends, or a Program's access
-// changes.
+// updates streams a snapshot, then every Update, as Server-Sent Events, as
+// the identity's Access level lets it see them: a Guest's Commands without
+// their Origin and Run ends without who started them (ADR 0031). The Status
+// of each module's Releases comes to an Admin with the snapshot, and again,
+// as a "releases" message, each time it changes (ADR 0023). Updates
+// available at once are written together and flushed once. A client that
+// stops reading ends the stream, at the first write that does not go through
+// within streamWriteLimit. It counts as a use of its Session or Token at each
+// keepalive, and ends at once when either ends, or the identity's access
+// changes: the client reconnects and gets what its level sees now.
 func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := identity(r)
+		see := func(u home.Update) any { return u }
+		if id.Level == access.Guest {
+			see = forGuest
+		}
 		snap, ch, cancel := h.Subscribe()
 		defer cancel()
-		statuses, changed := releases.Statuses()
+		statuses, changed := []release.Status{}, (<-chan struct{})(nil) // nil: never
+		if id.Level == access.Admin {
+			statuses, changed = releases.Statuses()
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		rc := http.NewResponseController(w)
 		defer rc.SetWriteDeadline(time.Time{}) // the connection may serve other requests
@@ -291,7 +322,7 @@ func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.Ha
 			case u, ok := <-ch:
 				// Closed: this observer fell too far behind. Ending the stream makes the
 				// browser reconnect and start over from a fresh snapshot.
-				if !ok || !send(func() bool { return writeBatch(w, u, ch) }) {
+				if !ok || !send(func() bool { return writeBatch(w, u, ch, see) }) {
 					return
 				}
 			case <-changed:
@@ -318,11 +349,11 @@ func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.Ha
 	}
 }
 
-// writeBatch writes u and every Update already queued behind it; it reports
-// false if the stream must end.
-func writeBatch(w http.ResponseWriter, u home.Update, ch <-chan home.Update) bool {
+// writeBatch writes u and every Update already queued behind it, each as see
+// shows it; it reports false if the stream must end.
+func writeBatch(w http.ResponseWriter, u home.Update, ch <-chan home.Update, see func(home.Update) any) bool {
 	for {
-		if writeEvent(w, u) != nil {
+		if writeEvent(w, see(u)) != nil {
 			return false
 		}
 		select {
@@ -337,6 +368,27 @@ func writeBatch(w http.ResponseWriter, u home.Update, ch <-chan home.Update) boo
 	}
 }
 
+// forGuest is u as a Guest sees it (ADR 0031): a Command without its Origin,
+// the end of a Run without who started it.
+func forGuest(u home.Update) any {
+	if u.Run != nil {
+		run := *u.Run
+		run.Trigger.By = nil
+		u.Run = &run
+	}
+	if u.Command == nil {
+		return u
+	}
+	type command struct {
+		home.CommandState
+		Origin *struct{} `json:"origin,omitempty"` // hides the Origin: never set
+	}
+	return struct {
+		home.Update
+		Command command `json:"command"`
+	}{u, command{CommandState: *u.Command}}
+}
+
 func writeEvent(w http.ResponseWriter, v any) error {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -346,7 +398,8 @@ func writeEvent(w http.ResponseWriter, v any) error {
 	return err
 }
 
-// command addresses a Target by its key.
+// command addresses a Target by its key. Setting a configuration Capability
+// is editing the home: an Admin's (ADR 0023).
 func command(h *home.Home) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
@@ -356,6 +409,14 @@ func command(h *home.Home) http.HandlerFunc {
 		}
 		if !decode(w, r, &req) {
 			return
+		}
+		if by, _ := identity(r); !by.Level.Allows(access.Admin) {
+			for k := range req.Values {
+				if c, err := h.Capability(req.Target.Ref(k)); err == nil && c.Category == home.Config {
+					http.Error(w, fmt.Sprintf("%v: %s is a setting: only an Admin changes it", access.ErrRefused, c.Label), http.StatusForbidden)
+					return
+				}
+			}
 		}
 		id, err := h.Command(req.Target, home.Request{Values: req.Values, Transition: time.Duration(req.Transition * float64(time.Second)), Origin: origin(r)})
 		if err != nil {

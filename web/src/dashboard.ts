@@ -1,9 +1,8 @@
-import type { Document } from './automation/model'
 import { roles } from './roles'
 import { aggregateTarget, catalogue, deviceTarget, flagTarget, fnOf } from './targets'
 import { aggregateSummary, memberLeaves, tileCaps, tileShape, titled, type Shape } from './tiles'
 import { arrange, defaultColumns, type Place } from './layout'
-import type { Aggregate, Area, Capability, Device, Flag, Fn, Target } from './types'
+import type { Aggregate, Area, AutomationTile, Capability, Device, Flag, Fn, Target } from './types'
 
 // A Target's Tile, resolved once: everything about it that does not change while it is shown.
 // Its Availability, Values and Commands are read live.
@@ -21,7 +20,7 @@ export interface TargetTile {
 
 // A Tile of the dashboard: key is its Target, which an Area may hide, or its Automation's id. In
 // an Area, it has a place in its Layout.
-export type DashboardTile = { key: string; label: string; place?: Place } & ({ kind: 'manual'; doc: Document } | ({ kind: 'target' } & TargetTile))
+export type DashboardTile = { key: string; label: string; place?: Place } & ({ kind: 'manual'; automation: AutomationTile } | ({ kind: 'target' } & TargetTile))
 
 // An Area's part of the dashboard, or Others (no area). Its header shows its status, from its
 // Area Aggregates (climate, doors, presence), and its light bar: its lone light's Tile, or its
@@ -47,9 +46,9 @@ function naturalRows(t: DashboardTile, width: number) {
 }
 
 // The dashboard: Flags without an Area as pills under its header, then a Section per Area in
-// their order, then Others, if it holds anything. manual is the Automations with a Manual
-// trigger; they open Others.
-export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Flag[], areas: Area[], manual: Document[]) {
+// their order, then Others, if it holds anything. manual is the Tiles of the Automations with a
+// Manual trigger; they open Others.
+export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Flag[], areas: Area[], manual: AutomationTile[]) {
   const targets = catalogue(devices, aggregates, flags)
   // Every Device, Aggregate and Flag here is in the catalogue: both come from the same lists.
   const entry = (t: Target) => targets.get(t)!
@@ -92,7 +91,7 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
   // The tiles of Area id, '' for Others: a Device's tile there gathers its Functions there. The
   // Area's own Aggregates and lone light are in its header instead.
   const tiles = (id: string, lone?: Target): DashboardTile[] => [
-    ...(id ? [] : manual.map((doc) => ({ key: doc.id, label: doc.name, kind: 'manual' as const, doc }))),
+    ...(id ? [] : manual.map((a) => ({ key: a.id, label: a.name, kind: 'manual' as const, automation: a }))),
     ...flags
       .filter((f) => id && f.area === id) // those without one are pills
       .map((f) => ({ key: flagTarget(f.id), label: f.name, kind: 'target' as const, ...flagTile(f) })),

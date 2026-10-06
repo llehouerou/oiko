@@ -2,7 +2,8 @@
 // handles on its edges. Only the open Step shows its form, one at a time; the
 // others collapse to their header and a summary of their params. Clicking a
 // collapsed Step, or the bare part of the open one's header, toggles it.
-// Zoomed out, a Step collapses to its Name.
+// Zoomed out, a Step collapses to its Name. Only an Admin edits it: anyone
+// else reads its form, every field disabled.
 
 import { Handle, Position, useReactFlow, useStore, useUpdateNodeInternals, type NodeProps } from '@xyflow/react'
 import { createContext, useContext, useEffect, type MouseEvent } from 'react'
@@ -11,6 +12,7 @@ import { patch, targetsOf, type Params, type StepNode as Node } from './model'
 import { Evidence, Inspect, StateBadge } from './Runs'
 import { useCatalogue } from '../store'
 import { titleIfTruncated } from '../truncated'
+import { useAllows } from '../access'
 
 // The Step the Automation is broken at, if any.
 export const BrokenStep = createContext<string | undefined>(undefined)
@@ -25,6 +27,7 @@ export function StepNode({ id, data }: NodeProps<Node>) {
   const { updateNodeData, deleteElements } = useReactFlow()
   const zoomedOut = useStore((s) => s.transform[2] < ZOOM_SUMMARY)
   const targets = useCatalogue()
+  const admin = useAllows('admin')
   const broken = useContext(BrokenStep) === id
   const { path } = useContext(Inspect)
   const { open, setOpen } = useContext(OpenStep)
@@ -78,6 +81,7 @@ export function StepNode({ id, data }: NodeProps<Node>) {
               placeholder="name"
               aria-label="Step name"
               onChange={(e) => updateNodeData(id, { name: e.target.value })}
+              readOnly={!admin}
               className="nodrag min-w-0 flex-1 bg-transparent font-medium focus:outline-none"
             />
           ) : (
@@ -86,9 +90,11 @@ export function StepNode({ id, data }: NodeProps<Node>) {
             </span>
           )}
           <StateBadge id={id} params={data.params} badge={c.badge} />
-          <button onClick={() => deleteElements({ nodes: [{ id }] })} aria-label="Delete step" className="text-neutral-500 hover:text-red-400">
-            ✕
-          </button>
+          {admin && (
+            <button onClick={() => deleteElements({ nodes: [{ id }] })} aria-label="Delete step" className="text-neutral-500 hover:text-red-400">
+              ✕
+            </button>
+          )}
         </header>
         {summary.length > 0 && (
           <div className="space-y-0.5 px-3 pb-2 text-neutral-400">
@@ -102,7 +108,9 @@ export function StepNode({ id, data }: NodeProps<Node>) {
       </div>
       {expanded && (
         <div className="nodrag nowheel cursor-default space-y-2 px-3 py-2">
-          <c.Form id={id} p={data.params} set={set} targets={targets} />
+          <fieldset disabled={!admin} className="contents">
+            <c.Form id={id} p={data.params} set={set} targets={targets} />
+          </fieldset>
         </div>
       )}
       <Evidence id={id} own={c.evidence} />

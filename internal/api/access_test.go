@@ -145,45 +145,6 @@ func TestWhoAmITellsThePublicURL(t *testing.T) {
 	}
 }
 
-// beforeSignIn are the endpoints Oiko served before sign-in existed, each
-// with a body it takes; ids that match nothing keep the home as it is.
-var beforeSignIn = []struct{ method, path, body string }{
-	{"GET", "/api/updates", ""},
-	{"GET", "/api/build", ""},
-	{"POST", "/api/commands", `{"target": "flag:unknown", "values": {"on": true}}`},
-	{"PATCH", "/api/devices/unknown", `{"name": "Lamp"}`},
-	{"PUT", "/api/icon", `{"target": "flag:unknown", "icon": ""}`},
-	{"PUT", "/api/area", `{"target": "flag:unknown", "area": ""}`},
-	{"POST", "/api/areas", `{"name": "Office"}`},
-	{"PUT", "/api/areas/unknown", `{"name": "Office"}`},
-	{"DELETE", "/api/areas/unknown", ""},
-	{"PUT", "/api/areas/unknown/display", `{}`},
-	{"PUT", "/api/areas/unknown/layout", `{"columns": 2, "layout": []}`},
-	{"PUT", "/api/areas", `{"order": []}`},
-	{"DELETE", "/api/devices/unknown", ""},
-	{"POST", "/api/devices/unknown/replace", `{"with": "other"}`},
-	{"POST", "/api/aggregates", `{"name": "Lights"}`},
-	{"PUT", "/api/aggregates/unknown", `{"name": "Lights"}`},
-	{"DELETE", "/api/aggregates/unknown", ""},
-	{"POST", "/api/flags", `{"name": "Away"}`},
-	{"PUT", "/api/flags/unknown", `{"name": "Away"}`},
-	{"DELETE", "/api/flags/unknown", ""},
-	{"GET", "/api/automations", ""},
-	{"POST", "/api/automations", `{"name": "Night"}`},
-	{"PUT", "/api/automations/unknown", `{"name": "Night"}`},
-	{"DELETE", "/api/automations/unknown", ""},
-	{"POST", "/api/automations/unknown/steps/go/run", ""},
-	{"GET", "/api/automations/unknown/runs", ""},
-	{"DELETE", "/api/automations/unknown/runs", ""},
-	{"GET", "/api/automations/unknown/state", ""},
-	{"GET", "/api/runs/unknown", ""},
-	{"DELETE", "/api/runs/unknown", ""},
-	{"GET", "/api/commands?target=flag:unknown", ""},
-	{"POST", "/api/history", `{"from": 0, "to": 1, "points": 1, "refs": []}`},
-	{"POST", "/api/history/periods", `{"from": 0, "to": 1, "per": "day", "items": []}`},
-	{"GET", "/api/lost-entries", ""},
-}
-
 func TestTodaysEndpointsNeedASessionOrAToken(t *testing.T) {
 	_, acc, hdl := handlerAt(t, &url.URL{Scheme: "https", Host: "oiko.example"})
 	srv := httptest.NewServer(hdl)
@@ -192,7 +153,7 @@ func TestTodaysEndpointsNeedASessionOrAToken(t *testing.T) {
 	_, token := withProgram(t, acc, alice, "Node-RED", access.Admin)
 	do, bot := browser(t, srv, "https://oiko.example"), asProgram(t, srv, token)
 	ended := &http.Cookie{Name: "__Host-oiko-session", Value: "ended"}
-	for _, e := range beforeSignIn {
+	for _, e := range homeEndpoints {
 		for who, cookie := range map[string]*http.Cookie{"no credentials": nil, "an ended Session": ended} {
 			resp := do(e.method, e.path, e.body, cookie)
 			b, _ := io.ReadAll(resp.Body)
@@ -200,7 +161,7 @@ func TestTodaysEndpointsNeedASessionOrAToken(t *testing.T) {
 				t.Errorf("%s %s with %s: %d %s, want 401 asking to sign in", e.method, e.path, who, resp.StatusCode, b)
 			}
 		}
-		for who, resp := range map[string]*http.Response{
+		for who, resp := range map[string]*http.Response{ // both an Admin's
 			"a Session": do(e.method, e.path, e.body, cookie),
 			"a Token":   bot(e.method, e.path, e.body),
 		} {

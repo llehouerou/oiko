@@ -43,3 +43,34 @@ func (e *Engine) Trigger(id, step string, by home.Origin) (home.RunEnd, error) {
 	}
 	return end, nil
 }
+
+// Tile is what a Guest sees of an Automation (ADR 0023): its Name, its
+// status and its Manual triggers, never how it is built.
+type Tile struct {
+	ID             string               `json:"id"`
+	Name           string               `json:"name"`
+	Status         home.AutomationState `json:"status"`
+	ManualTriggers []ManualTrigger      `json:"manualTriggers"`
+}
+
+// ManualTrigger is a Manual trigger Step, by its id and Name.
+type ManualTrigger struct {
+	Step string `json:"step"`
+	Name string `json:"name"`
+}
+
+// Tiles returns every Automation's Tile, in document order.
+func (e *Engine) Tiles() []Tile {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	tiles := make([]Tile, len(e.autos))
+	for i, a := range e.autos {
+		tiles[i] = Tile{ID: a.doc.ID, Name: a.doc.Name, Status: a.status().Status, ManualTriggers: []ManualTrigger{}}
+		for _, s := range a.doc.Steps {
+			if s.Kind == manualTrigger {
+				tiles[i].ManualTriggers = append(tiles[i].ManualTriggers, ManualTrigger{s.ID, s.Name})
+			}
+		}
+	}
+	return tiles
+}

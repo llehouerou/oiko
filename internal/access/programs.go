@@ -191,7 +191,7 @@ func (s *Store) PersonName(id string) string {
 // Names answers the Name of every Person and Program, by kind then id, to a
 // Member or an Admin: who reads Origins (ADR 0031).
 func (s *Store) Names(by Identity) (map[Kind]map[string]string, error) {
-	if by.Level != Member && by.Level != Admin {
+	if !by.Level.Allows(Member) {
 		return nil, fmt.Errorf("%w: only a Member or an Admin reads who did what", ErrRefused)
 	}
 	s.mu.Lock()

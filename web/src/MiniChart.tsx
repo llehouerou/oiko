@@ -2,7 +2,7 @@
 // sparkline with its min–max, an on/off as a state band, Events as ticks with
 // their count. Offline time is hatched grey and Gaps red; nothing is drawn
 // across either. Tapping it opens the Function's History sheet. ChartsShown
-// hides every one beneath it.
+// hides every one beneath it; a Guest, who reads no History, sees none.
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -16,6 +16,7 @@ import { useNow } from './store'
 import { presses, roles } from './roles'
 import { owner } from './targets'
 import type { Capability, Fn, Target } from './types'
+import { useAllows } from './access'
 
 const color = '#fbbf24'
 
@@ -24,9 +25,10 @@ export const ChartsShown = createContext(true)
 // It charts the Function's charted Role, the series the tiles load.
 export function MiniChart({ target, fn }: { target: Target; fn: Fn }) {
   const shown = useContext(ChartsShown)
+  const past = useAllows('member')
   const cap = roles(fn.kind, fn.capabilities).charted
   const [open, setOpen] = useState(false)
-  if (!cap || !shown) return null
+  if (!cap || !shown || !past) return null
   return (
     <>
       <button onClick={() => setOpen(true)} aria-label="History" className="-m-1 block w-[calc(100%+0.5rem)] rounded-md p-1 text-left hover:bg-neutral-800">

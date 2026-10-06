@@ -11,7 +11,7 @@ import type { Params } from './model'
 import { clock, evidence, mergeCommands, mergeRuns, runSummary, type Path } from './runtime'
 import { titleIfTruncated } from '../truncated'
 import { byWhom, runOf, useNames } from '../origin'
-import { api } from '../access'
+import { api, useAllows } from '../access'
 
 export interface Inspection {
   trace?: Trace // of the picked Run
@@ -40,6 +40,7 @@ export function RunsDrawer({
   const targets = useCatalogue()
   const names = useNames()
   const now = useNow() // Commands lose entries too: the counter follows the clock, not only Runs
+  const admin = useAllows('admin') // deletes Runs
   const [fetched, setFetched] = useState<RunEnd[]>([])
   const [lost, setLost] = useState(0)
   useEffect(() => {
@@ -123,6 +124,7 @@ export function RunsDrawer({
             </button>
           </>
         ) : (
+          admin &&
           runs.length > 0 && (
             <>
               <button onClick={() => setSelected(new Set())} className={action}>
@@ -159,7 +161,7 @@ export function RunsDrawer({
                 {r.trigger.catchUp && <span className="shrink-0 rounded bg-sky-900 px-1 text-sky-200">catch-up</span>}
                 <span className={`shrink-0 ${outcomeColor[r.outcome]}`}>→ {result}</span>
               </button>
-              {!selected && (
+              {admin && !selected && (
                 <button
                   onClick={() => remove([r.run])}
                   aria-label="Delete Run"

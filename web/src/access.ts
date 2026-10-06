@@ -46,6 +46,15 @@ export const meNow = () => me
 
 export const useMe = () => useSyncExternalStore((l) => (listeners.add(l), () => listeners.delete(l)), meNow)
 
+const ranks: Record<Level, number> = { guest: 0, member: 1, admin: 2 }
+
+// Whether whoever me is does what level does (ADR 0023): a Guest observes and commands the home as it
+// is now, a Member also reads its past and how its Automations are built, an Admin also edits it and
+// sees what Oiko is built from. Oiko refuses the rest; the page only hides it.
+export const allows = (me: Me | null, level: Level) => !!me?.level && ranks[me.level] >= ranks[level]
+
+export const useAllows = (level: Level) => allows(useMe(), level)
+
 // api is fetch for Oiko's API. A refusal for want of credentials means this browser's Session
 // ended: who is signed in is asked again, which shows sign-in.
 export async function api(path: string, init?: RequestInit) {
@@ -74,14 +83,16 @@ export async function signOut() {
 export type View = 'home' | 'history' | 'automations' | 'programs' | 'account'
 
 // What the page shows: nothing until it knows who is signed in, sign-in while nobody is, or else the
-// view hash names. Sign-in leaves the hash alone, so signing in again returns to the same view.
+// view hash names, if their Access level shows it, the dashboard otherwise. Sign-in leaves the hash
+// alone, so signing in again returns to the same view.
 export function screen(me: Me | null, hash: string): View | 'sign-in' | null {
   if (!me) return null
   if (!me.identity) return 'sign-in'
-  if (hash.startsWith('#programs')) return 'programs'
-  if (hash.startsWith('#account')) return 'account'
-  if (hash.startsWith('#automations')) return 'automations'
-  if (hash.startsWith('#history')) return 'history'
+  const person = 'person' in me.identity
+  if (hash.startsWith('#programs') && person && allows(me, 'admin')) return 'programs'
+  if (hash.startsWith('#account') && person) return 'account'
+  if (hash.startsWith('#automations') && allows(me, 'member')) return 'automations'
+  if (hash.startsWith('#history') && allows(me, 'member')) return 'history'
   return 'home'
 }
 

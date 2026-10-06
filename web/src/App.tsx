@@ -18,10 +18,9 @@ import {
   useValue,
   useOnCount,
 } from './store'
-import type { Aggregate, Area, AutomationStatus, Capability, CommandState, Device, Flag, Fn, Ref, Target } from './types'
+import type { Aggregate, Area, AutomationStatus, AutomationTile, Capability, CommandState, Device, Flag, Fn, Ref, Target } from './types'
 import { aggregateTarget, deviceTarget, flagTarget, parseTarget, targetKind } from './targets'
 import { Automations } from './automation/Automations'
-import type { Document } from './automation/model'
 import { confirm } from './confirm'
 import { titleIfTruncated } from './truncated'
 import { ColorPicker, display, format, RangeSlider, Switch, type HS } from './controls'
@@ -70,7 +69,7 @@ import { Setup } from './Setup'
 import { SignIn } from './SignIn'
 import { Programs } from './Programs'
 import { Account } from './Account'
-import { api, screen, useMe } from './access'
+import { api, screen, useAllows, useMe } from './access'
 import {
   DndContext,
   PointerSensor,
@@ -123,13 +122,15 @@ function Home() {
   const flags = useFlags()
   const areas = useAreas()
   const statuses = useAutomationStatuses()
-  // The Automations with a Manual trigger, fetched again as Automations come, go or change status.
-  const [manual, setManual] = useState<Document[]>([])
+  const member = useAllows('member') // reads the home's past: its tiles' charts
+  const admin = useAllows('admin') // edits the home: its panels, arranging it, creating in it
+  // The Tiles of the Automations with a Manual trigger, fetched again as Automations come, go or change status.
+  const [manual, setManual] = useState<AutomationTile[]>([])
   useEffect(() => {
-    api('/api/automations')
+    api('/api/automations/tiles')
       .then((r) => (r.ok ? r.json() : []))
       .then(
-        (docs: Document[]) => setManual(docs.filter((d) => d.steps.some((s) => s.kind === 'manualTrigger'))),
+        (tiles: AutomationTile[]) => setManual(tiles.filter((a) => a.manualTriggers.length)),
         () => {},
       )
   }, [statuses])
@@ -158,13 +159,13 @@ function Home() {
   const openFlag = flags.find((f) => f.id === openId)
   const openArea = areas.find((a) => a.id === openId)
   const { pills, sections } = dashboard(devices, aggregates, flags, areas, manual)
-  // A Tile's ⋯ opens its Device's, Aggregate's or Flag's panel.
-  const opener = (t: TargetTile) => (back?: () => void) => setOpenId(parseTarget(t.subject)!.id, back)
+  // A Tile's ⋯ opens its Device's, Aggregate's or Flag's panel, to an Admin.
+  const opener = (t: TargetTile) => (admin ? (back?: () => void) => setOpenId(parseTarget(t.subject)!.id, back) : undefined)
   const tile = (t: DashboardTile): TileNode => ({
     ...t,
     node:
       t.kind === 'manual' ? (
-        <ManualTile key={t.key} doc={t.doc} status={statuses.find((s) => s.id === t.doc.id)} onResult={setToast} />
+        <ManualTile key={t.key} automation={t.automation} status={statuses.find((s) => s.id === t.automation.id)} onResult={setToast} />
       ) : (
         <Tile key={t.key} tile={t} onOpen={opener(t)} />
       ),
@@ -202,18 +203,20 @@ function Home() {
       <AppBar
         page="#"
         settings={
-          <>
-            <ChartsSetting charts={charts} onCharts={toggleCharts} />
-            <ArrangeSetting onArrange={() => setArranging(true)} />
-          </>
+          member && (
+            <>
+              <ChartsSetting charts={charts} onCharts={toggleCharts} />
+              {admin && <ArrangeSetting onArrange={() => setArranging(true)} />}
+            </>
+          )
         }
       />
       <main className="mx-auto max-w-[120rem] space-y-6 p-4 pb-24 lg:px-8">
-        <ReleaseBanner />
+        {admin && <ReleaseBanner />}
         {pills.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {pills.map((f) => (
-              <FlagPill key={f.id} flag={f} onOpen={() => setOpenId(f.id)} />
+              <FlagPill key={f.id} flag={f} onOpen={admin ? () => setOpenId(f.id) : undefined} />
             ))}
           </div>
         )}
@@ -234,7 +237,7 @@ function Home() {
                             title={s.area?.name ?? (areas.length ? 'Others' : undefined)}
                             collapsed={collapsed.includes(id)}
                             onCollapse={() => collapse(id)}
-                            onSettings={s.area && (() => setOpenId(id))}
+                            onSettings={admin && s.area ? () => setOpenId(id) : undefined}
                             status={
                               <>
                                 <Climate aggregates={s.climate} />
@@ -267,7 +270,7 @@ function Home() {
           Done
         </button>
       ) : (
-        <CreateButton onCreate={(what) => setOpenId(what)} />
+        admin && <CreateButton onCreate={(what) => setOpenId(what)} />
       )}
       {openDevice && <DevicePanel key={openDevice.id} device={openDevice} devices={devices} onClose={close} onBack={back} />}
       {openAggregate && <AggregatePanel key={openAggregate.id} aggregate={openAggregate} aggregates={aggregates} onClose={close} onBack={back} />}
@@ -358,7 +361,7 @@ function BarTile({
   fn: Fn
   dimmed: boolean
   compact?: boolean // in an Area's header: the bar alone, its name only on its sheet
-  onSettings: (back: () => void) => void
+  onSettings?: (back: () => void) => void // an Admin's: its Device's or Aggregate's panel
 }) {
   const cap = fn.capabilities.find((c) => c.key === 'brightness' && c.access.settable && c.min != null && c.max != null)
   const on = useValue({ target, capability: key })?.data === true
@@ -498,23 +501,25 @@ function BarTile({
           onClose={() => setSheet(false)}
         >
           <FunctionControls target={target} fn={fn} />
-          <div className="mt-6 flex justify-end border-t border-neutral-800 pt-4">
-            <button
-              onClick={() => (setSheet(false), onSettings(() => setSheet(true)))}
-              className="flex items-center gap-1.5 rounded-full bg-neutral-800 py-1.5 pr-3.5 pl-2.5 text-sm text-neutral-300 hover:bg-neutral-700 hover:text-white"
-            >
-              <Svg path={mdiCogOutline} className="size-4" />
-              Settings
-            </button>
-          </div>
+          {onSettings && (
+            <div className="mt-6 flex justify-end border-t border-neutral-800 pt-4">
+              <button
+                onClick={() => (setSheet(false), onSettings(() => setSheet(true)))}
+                className="flex items-center gap-1.5 rounded-full bg-neutral-800 py-1.5 pr-3.5 pl-2.5 text-sm text-neutral-300 hover:bg-neutral-700 hover:text-white"
+              >
+                <Svg path={mdiCogOutline} className="size-4" />
+                Settings
+              </button>
+            </div>
+          )}
         </Panel>
       )}
     </>
   )
 }
 
-// A Flag without an Area, as a pill under the page header: a tap toggles it, ⋯ opens its panel.
-function FlagPill({ flag, onOpen }: { flag: Flag; onOpen: () => void }) {
+// A Flag without an Area, as a pill under the page header: a tap toggles it, ⋯ opens its panel, to an Admin.
+function FlagPill({ flag, onOpen }: { flag: Flag; onOpen?: () => void }) {
   const target = flagTarget(flag.id)
   const on = useValue({ target, capability: 'on' })?.data === true
   const command = useCommand(target)
@@ -530,41 +535,49 @@ function FlagPill({ flag, onOpen }: { flag: Flag; onOpen: () => void }) {
         {flag.name}
         <CommandNote command={command} />
       </button>
-      <button onClick={onOpen} aria-label={`${flag.name} settings`} className="self-stretch pr-3 pl-1 text-neutral-500 hover:text-white">
-        ⋯
-      </button>
+      {onOpen && (
+        <button onClick={onOpen} aria-label={`${flag.name} settings`} className="self-stretch pr-3 pl-1 text-neutral-500 hover:text-white">
+          ⋯
+        </button>
+      )}
     </div>
   )
 }
 
-// An Automation with Manual trigger Steps: a button for each, named after it.
+// An Automation's Tile with Manual triggers: a button for each, named after it.
 // Only an enabled Automation runs; otherwise the tile is dimmed and says why.
-function ManualTile({ doc, status, onResult }: { doc: Document; status?: AutomationStatus; onResult: (r: { text: string; error?: boolean }) => void }) {
+function ManualTile({
+  automation,
+  status,
+  onResult,
+}: {
+  automation: AutomationTile
+  status?: AutomationStatus
+  onResult: (r: { text: string; error?: boolean }) => void
+}) {
   const off = status && status.status !== 'enabled' ? status.status : null
   return (
     <section className={`space-y-3 rounded-xl bg-neutral-900 p-4 ${off ? 'opacity-50' : ''}`}>
       <div className="min-w-0">
         <p className="truncate font-medium" onMouseEnter={titleIfTruncated}>
-          {doc.name}
+          {automation.name}
         </p>
         <p className="text-xs text-neutral-500">{['automation', off].filter(Boolean).join(' · ')}</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        {doc.steps
-          .filter((s) => s.kind === 'manualTrigger')
-          .map((s) => (
-            <button
-              key={s.id}
-              disabled={!!off}
-              onClick={async () => {
-                const r = await runManual(doc.id, s.id)
-                onResult({ ...r, text: `${doc.name} · ${s.name || 'Run'}: ${r.text}` })
-              }}
-              className="rounded bg-neutral-800 px-3 py-1 hover:bg-neutral-700 disabled:cursor-not-allowed disabled:hover:bg-neutral-800"
-            >
-              {s.name || 'Run'}
-            </button>
-          ))}
+        {automation.manualTriggers.map((s) => (
+          <button
+            key={s.step}
+            disabled={!!off}
+            onClick={async () => {
+              const r = await runManual(automation.id, s.step)
+              onResult({ ...r, text: `${automation.name} · ${s.name || 'Run'}: ${r.text}` })
+            }}
+            className="rounded bg-neutral-800 px-3 py-1 hover:bg-neutral-700 disabled:cursor-not-allowed disabled:hover:bg-neutral-800"
+          >
+            {s.name || 'Run'}
+          </button>
+        ))}
       </div>
     </section>
   )
@@ -1234,7 +1247,7 @@ function deviceRoles(device: Device): { target: Target; fn?: Fn; r: Roles }[] {
 // A Target's Tile, as dashboard.ts resolves it, drawn as its shape says: a bar, a sensor's, or its
 // Functions' controls. A lone Function shares the Tile's header; a Function's kind or key shows as
 // a heading only where it adds something. Dimmed while its Device is detached or it is offline.
-function Tile({ tile, compact, onOpen }: { tile: TargetTile; compact?: boolean; onOpen: (back?: () => void) => void }) {
+function Tile({ tile, compact, onOpen }: { tile: TargetTile; compact?: boolean; onOpen?: (back?: () => void) => void }) {
   const offline = useAvailability(tile.subject) === 'offline'
   const { shape, name, fns } = tile
   const dimmed = tile.detached || offline
@@ -1256,12 +1269,18 @@ function Tile({ tile, compact, onOpen }: { tile: TargetTile; compact?: boolean; 
         onSettings={onOpen}
       />
     )
-  if (shape.kind !== 'controls') return <SensorTile shape={shape} name={name} note={note} badges={badges} dimmed={dimmed} onOpen={() => onOpen()} />
+  if (shape.kind !== 'controls') return <SensorTile shape={shape} name={name} note={note} badges={badges} dimmed={dimmed} onOpen={onOpen && (() => onOpen())} />
   const header = (command?: ReactNode) => (
     <div className="min-w-0">
-      <button onClick={() => onOpen()} onMouseEnter={titleIfTruncated} className="block max-w-full truncate text-left font-medium hover:underline">
-        {name}
-      </button>
+      {onOpen ? (
+        <button onClick={() => onOpen()} onMouseEnter={titleIfTruncated} className="block max-w-full truncate text-left font-medium hover:underline">
+          {name}
+        </button>
+      ) : (
+        <p onMouseEnter={titleIfTruncated} className="truncate font-medium">
+          {name}
+        </p>
+      )}
       <p className="flex items-center gap-2 text-xs text-neutral-500">
         <span>
           {[tile.summary, note].filter(Boolean).join(' · ')}
@@ -1326,14 +1345,7 @@ function EventTile({ name, note, badges, item, dimmed, onOpen }: SensorProps & {
             {[event ? `${String(event.data)} · ${age(event.at, now)}` : 'none yet', note].filter(Boolean).join(' · ')}
           </p>
         </div>
-        <button
-          onClick={(e) => (e.stopPropagation(), onOpen())}
-          onKeyDown={(e) => e.stopPropagation()}
-          aria-label="More"
-          className="self-stretch px-4 text-lg text-neutral-500 hover:text-white"
-        >
-          ⋯
-        </button>
+        <More onOpen={onOpen} />
       </div>
       {history && createPortal(<HistorySheet target={item.target} onClose={() => setHistory(false)} />, document.body)}
     </section>
@@ -1345,7 +1357,22 @@ interface SensorProps {
   note: string // detached, offline…
   badges?: ReactNode // its health, when wrong
   dimmed: boolean
-  onOpen: () => void
+  onOpen?: () => void // an Admin's: its Device's or Aggregate's panel
+}
+
+// A sensor bar's ⋯, opening its panel, if anything does.
+function More({ onOpen }: { onOpen?: () => void }) {
+  if (!onOpen) return null
+  return (
+    <button
+      onClick={(e) => (e.stopPropagation(), onOpen())}
+      onKeyDown={(e) => e.stopPropagation()}
+      aria-label="More"
+      className="self-stretch px-4 text-lg text-neutral-500 hover:text-white"
+    >
+      ⋯
+    </button>
+  )
 }
 
 // A Tile with nothing to command, drawn as its shape says: its last Event, a bar for its state or
@@ -1373,9 +1400,11 @@ function ReadingsTile({ name, note, badges, icon, readings, dimmed, onOpen }: Se
           {badges}
           {note && <span className="text-neutral-500">{note}</span>}
         </div>
-        <button onClick={onOpen} aria-label="More" className="px-2 text-lg text-neutral-500 hover:text-white">
-          ⋯
-        </button>
+        {onOpen && (
+          <button onClick={onOpen} aria-label="More" className="px-2 text-lg text-neutral-500 hover:text-white">
+            ⋯
+          </button>
+        )}
       </div>
       {/* three readings side by side only where its place is wide enough for them */}
       <div className={`grid grid-cols-2 gap-2 ${wide ? '@lg:grid-cols-3' : ''}`}>
@@ -1458,14 +1487,7 @@ function SensorBar({
           </div>
           <p className="truncate text-xs text-neutral-400">{status.flatMap((s, i) => (i ? [' · ', s] : [s]))}</p>
         </div>
-        <button
-          onClick={(e) => (e.stopPropagation(), onOpen())}
-          onKeyDown={(e) => e.stopPropagation()}
-          aria-label="More"
-          className="self-stretch px-4 text-lg text-neutral-500 hover:text-white"
-        >
-          ⋯
-        </button>
+        <More onOpen={onOpen} />
       </div>
       {charted && (
         <div className="mt-2 px-2.5 pb-1 empty:hidden">

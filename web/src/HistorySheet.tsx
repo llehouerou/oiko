@@ -51,7 +51,7 @@ import {
 } from './history'
 import { Periods } from './Periods'
 import { useCatalogue, useNow } from './store'
-import { api } from './access'
+import { api, useAllows } from './access'
 import type { Capability, CommandRecord, Ref, RunEnd, Target } from './types'
 import type { Document } from './automation/model'
 import { runSummary, setting } from './automation/runtime'
@@ -72,7 +72,12 @@ interface Range {
   end: number | null
 }
 
-export function HistorySheet({ target, onClose }: { target: Target; onClose: () => void }) {
+// A Guest reads no History: the sheet never opens for them.
+export function HistorySheet(props: { target: Target; onClose: () => void }) {
+  return useAllows('member') ? <Sheet {...props} /> : null
+}
+
+function Sheet({ target, onClose }: { target: Target; onClose: () => void }) {
   const targets = useCatalogue()
   const subject = targets.get(target)
   const dialog = useRef<HTMLDialogElement>(null)

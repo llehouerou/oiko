@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest'
-import { api, loadMe, meNow, screen, signInPage, type Me } from './access'
+import { allows, api, loadMe, meNow, screen, signInPage, type Level, type Me } from './access'
 
 const alice: Me = { identity: { person: 'p1' }, name: 'Alice', level: 'admin', fresh: false, claimed: true, publicUrl: 'https://oiko.example' }
 const nobody: Me = { identity: null, fresh: false, claimed: true, publicUrl: 'https://oiko.example' }
@@ -42,6 +42,29 @@ test('nothing shows until Oiko tells who is signed in', async () => {
 test('each view has its hash; any other is the dashboard', () => {
   const views = ['', '#', '#history', '#automations', '#automations/a1', '#programs', '#account', '#nonsense'].map((h) => screen(alice, h))
   expect(views).toEqual(['home', 'home', 'history', 'automations', 'automations', 'programs', 'account', 'home'])
+})
+
+test('each Access level sees its views, and the dashboard for any other', () => {
+  const hashes = ['#', '#history', '#automations/a1', '#programs', '#account']
+  const views = (me: Me) => hashes.map((h) => screen(me, h))
+  const as = (level: Level): Me => ({ ...alice, level })
+  expect(views(as('guest'))).toEqual(['home', 'home', 'home', 'home', 'account'])
+  expect(views(as('member'))).toEqual(['home', 'history', 'automations', 'home', 'account'])
+  expect(views(as('admin'))).toEqual(['home', 'history', 'automations', 'programs', 'account'])
+  // A Program has no account, and manages no access, whatever its level.
+  expect(views({ ...alice, identity: { program: 'x1' } })).toEqual(['home', 'history', 'automations', 'home', 'home'])
+})
+
+test('each Access level allows what those below it do', () => {
+  const levels: Level[] = ['guest', 'member', 'admin']
+  const table = levels.map((level) => levels.map((needed) => allows({ ...alice, level }, needed)))
+  expect(table).toEqual([
+    [true, false, false],
+    [true, true, false],
+    [true, true, true],
+  ])
+  expect(allows(nobody, 'guest')).toBe(false)
+  expect(allows(null, 'guest')).toBe(false)
 })
 
 test('sign-in is offered on the Public URL and http://localhost only', () => {

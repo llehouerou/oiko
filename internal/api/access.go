@@ -65,6 +65,19 @@ func identity(r *http.Request) (access.Identity, bool) {
 	return id, ok
 }
 
+// needs serves next only to an identity whose Access level allows level
+// (ADR 0023).
+func needs(level access.Level, next http.HandlerFunc) http.HandlerFunc {
+	who := map[access.Level]string{access.Guest: "anyone signed in", access.Member: "a Member or an Admin", access.Admin: "an Admin"}[level]
+	return func(w http.ResponseWriter, r *http.Request) {
+		if id, _ := identity(r); !id.Level.Allows(level) {
+			http.Error(w, fmt.Sprintf("%v: only %s may do this", access.ErrRefused, who), http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
+}
+
 // origin is the Origin of a Command or a Manual trigger r asks for (ADR
 // 0031): r's identity.
 func origin(r *http.Request) home.Origin {

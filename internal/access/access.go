@@ -58,7 +58,15 @@ const (
 	Admin  Level = "admin"
 )
 
-func (l Level) valid() bool { return l == Guest || l == Member || l == Admin }
+// levels are the Access levels, each allowing what those before it do.
+var levels = []Level{Guest, Member, Admin}
+
+func (l Level) valid() bool { return slices.Contains(levels, l) }
+
+// Allows reports whether l does what min does; no level allows anything.
+func (l Level) Allows(min Level) bool {
+	return l.valid() && slices.Index(levels, l) >= slices.Index(levels, min)
+}
 
 // Person is a human known to Oiko.
 type Person struct {
