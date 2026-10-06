@@ -71,7 +71,7 @@ export function evidence(r: Reached, t: Trace, targets: Catalogue, own: string[]
   const ref = new Date(t.time)
   const lines: string[] = []
   if (r.step === t.trigger.step)
-    lines.push(`${clock(t.trigger.time, ref, true)} ${happened(t.trigger, targets) ?? 'fired'}${by ? ` ${by}` : ''}${t.trigger.catchUp ? ', caught up' : ''}`)
+    lines.push(`${clock(t.trigger.time, ref, true)} ${happened(t.trigger, targets) ?? 'fired'}${by ? `, ${by}` : ''}${t.trigger.catchUp ? ', caught up' : ''}`)
   if (r.unknown) lines.push('read unknown')
   else if (r.read !== undefined)
     lines.push(r.at ? `read ${show(r.read)}, ${duration(Math.max(0, Math.round((ms(t.time) - ms(r.at)) / 1000)))} old` : `read ${show(r.read)}`)

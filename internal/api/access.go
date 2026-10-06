@@ -41,8 +41,8 @@ func identity(r *http.Request) (access.Identity, bool) {
 	return id, ok
 }
 
-// origin is what a Command or a Manual trigger r asks for records as its
-// issuer (ADR 0031): r's identity, or unknown when it is anonymous.
+// origin is the Origin of a Command or a Manual trigger r asks for (ADR
+// 0031): r's identity, or unknown when it is anonymous.
 func origin(r *http.Request) home.Origin {
 	id, _ := identity(r)
 	switch id.Kind {

@@ -10,7 +10,7 @@ import type { StepKind } from './kinds'
 import type { Params } from './model'
 import { clock, evidence, mergeCommands, mergeRuns, runSummary, type Path } from './runtime'
 import { titleIfTruncated } from '../truncated'
-import { issuer, useNames } from '../origin'
+import { byWhom, runOf, useNames } from '../origin'
 
 export interface Inspection {
   trace?: Trace // of the picked Run
@@ -153,7 +153,7 @@ export function RunsDrawer({
                 <span className="min-w-14 shrink-0 whitespace-nowrap text-neutral-400 tabular-nums">{clock(r.time, new Date(now), true)}</span>
                 <span className="truncate" onMouseEnter={titleIfTruncated}>
                   {trigger}
-                  {r.trigger.by && ` ${issuer(r.trigger.by, names, (id) => id)}`}
+                  {r.trigger.by && `, ${byWhom(r.trigger.by, names, (id) => id)}`}
                 </span>
                 {r.trigger.catchUp && <span className="shrink-0 rounded bg-sky-900 px-1 text-sky-200">catch-up</span>}
                 <span className={`shrink-0 ${outcomeColor[r.outcome]}`}>→ {result}</span>
@@ -210,7 +210,7 @@ export function Evidence({ id, own }: { id: string; own: StepKind['evidence'] })
   const { trace, automationName } = useContext(Inspect)
   const targets = useCatalogue()
   const names = useNames()
-  const by = trace?.trigger.by && issuer(trace.trigger.by, names, automationName)
+  const by = trace?.trigger.by && byWhom(trace.trigger.by, names, automationName)
   const lines = trace?.steps.filter((r) => r.step === id).flatMap((r) => evidence(r, trace, targets, own?.(r), by)) ?? []
   if (!lines.length) return null
   return (
@@ -256,21 +256,28 @@ export function CommandHistory({ target }: { target: Target }) {
     <details className="w-full text-[10px]">
       <summary className="cursor-pointer text-neutral-500">recent commands</summary>
       <ul>
-        {commands.map(({ id, time, status, origin: o }) => (
-          <li key={id} className="flex gap-2">
-            <span className="w-24 shrink-0 text-neutral-500">{time ? clock(time) : 'now'}</span>
-            <span className={`w-16 shrink-0 ${statusColor[status]}`}>{status}</span>
-            {!o || o === 'unknown' || !('automation' in o) ? (
-              <span onMouseEnter={titleIfTruncated} className="truncate text-neutral-400">
-                {issuer(o, names, automationName)}
-              </span>
-            ) : (
-              <button onClick={() => openRun(o.automation, o.run)} onMouseEnter={titleIfTruncated} className="truncate text-amber-400 hover:text-amber-300">
-                {automationName(o.automation)} ›
-              </button>
-            )}
-          </li>
-        ))}
+        {commands.map(({ id, time, status, origin }) => {
+          const run = runOf(origin)
+          return (
+            <li key={id} className="flex gap-2">
+              <span className="w-24 shrink-0 text-neutral-500">{time ? clock(time) : 'now'}</span>
+              <span className={`w-16 shrink-0 ${statusColor[status]}`}>{status}</span>
+              {run ? (
+                <button
+                  onClick={() => openRun(run.automation, run.run)}
+                  onMouseEnter={titleIfTruncated}
+                  className="truncate text-amber-400 hover:text-amber-300"
+                >
+                  {automationName(run.automation)} ›
+                </button>
+              ) : (
+                <span onMouseEnter={titleIfTruncated} className="truncate text-neutral-400">
+                  {byWhom(origin, names, automationName)}
+                </span>
+              )}
+            </li>
+          )
+        })}
       </ul>
     </details>
   )

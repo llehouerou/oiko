@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { commandKind, issuer, type Names } from './origin'
+import { byWhom, commandKind, type Names } from './origin'
 import type { CommandState, Origin } from './types'
 
 const names: Names = { person: { alice: 'Alice' }, kiosk: { hall: 'Kitchen tablet' }, program: { nr: 'Node-RED' } }
@@ -7,7 +7,7 @@ const automation = (id: string) => (id === 'movie' ? 'Movie night' : 'a deleted 
 const run: Origin = { automation: 'movie', step: 's', run: 'r' }
 
 test('a Command reads who issued it, by the Name it has now', () => {
-  const read = (o: Origin) => issuer(o, names, automation)
+  const read = (o: Origin) => byWhom(o, names, automation)
   expect([{ person: 'alice' }, { kiosk: 'hall' }, { program: 'nr' }, run, 'unknown'].map((o) => read(o as Origin))).toEqual([
     'by Alice',
     'by Kitchen tablet',
@@ -23,8 +23,8 @@ test('a Command reads who issued it, by the Name it has now', () => {
 })
 
 test('without the Names, only the kind shows', () => {
-  expect(issuer({ person: 'alice' }, null, automation)).toBe('by a Person')
-  expect(issuer(run, null, automation)).toBe('by Movie night')
+  expect(byWhom({ person: 'alice' }, null, automation)).toBe('by a Person')
+  expect(byWhom(run, null, automation)).toBe('by Movie night')
 })
 
 test('a Command marker is by hand, by a Program, by an Automation, or lost', () => {

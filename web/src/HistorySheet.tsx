@@ -29,7 +29,7 @@ import {
   type Line,
 } from './charts'
 import { format } from './controls'
-import { commandKind, issuer, useNames } from './origin'
+import { byWhom, commandKind, runOf, useNames } from './origin'
 import {
   DAY,
   HistoryView,
@@ -400,7 +400,7 @@ function useDescribe() {
         Object.entries(c.values ?? {})
           .map(([k, v]) => setting(targets, c.target, k, v))
           .join(', ') || 'Command',
-        issuer(c.origin, identities, automation),
+        byWhom(c.origin, identities, automation),
         ended[c.status],
       ]
         .filter(Boolean)
@@ -420,13 +420,10 @@ function markers(loaded: Loaded, series: { ref: Ref; cap: Capability }[], descri
   return [
     ...loaded.commands
       .filter((c) => ofSeries(c.target))
-      .map((c): Marker => ({
-        t: Date.parse(c.time),
-        n: 1,
-        kind: commandKind(c),
-        text: describe.command(c),
-        link: c.origin && c.origin !== 'unknown' && 'automation' in c.origin ? trace(c.origin.automation, c.origin.run) : undefined,
-      })),
+      .map((c): Marker => {
+        const run = runOf(c.origin)
+        return { t: Date.parse(c.time), n: 1, kind: commandKind(c), text: describe.command(c), link: run && trace(run.automation, run.run) }
+      }),
     ...loaded.runs
       .filter((r) => ofSeries(r.trigger.target))
       .map((r): Marker => ({ t: Date.parse(r.time), n: 1, kind: 'run', text: describe.run(r), link: trace(r.automation, r.run) })),

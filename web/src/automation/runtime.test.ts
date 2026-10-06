@@ -84,7 +84,7 @@ describe('a picked Run', () => {
 
   test('shows on a Manual trigger who started it', () => {
     const manual: Trace = { ...stoppedAtLux, trigger: { ...stoppedAtLux.trigger, target: '', capability: '', by: { person: 'alice' } } }
-    expect(evidence(manual.steps[0]!, manual, options, [], 'by Alice')[0]).toMatch(/ fired by Alice$/)
+    expect(evidence(manual.steps[0]!, manual, options, [], 'by Alice')[0]).toMatch(/ fired, by Alice$/)
   })
 
   test('a Step that fired nothing, as JSON has it, is reached', () => {
