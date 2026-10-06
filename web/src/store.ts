@@ -20,7 +20,7 @@ import type {
   Value,
 } from './types'
 import { catalogue, owner, type Catalogue } from './targets'
-import { api, loadMe } from './access'
+import { api, knowMe } from './access'
 
 type Listener = () => void
 
@@ -174,7 +174,7 @@ export function connect() {
     source.onerror = () => {
       connected = false
       notify('connection')
-      void loadMe()
+      void knowMe()
       if (source.readyState === EventSource.CLOSED) retry = setTimeout(open, 3000)
     }
     source.onmessage = (e) => {

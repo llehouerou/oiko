@@ -80,7 +80,7 @@ what Code Steps see and the configuration may break in a minor release while Oik
 only in a major one from v1.0.0; a v0 patch neither breaks nor adds anything. A type of Bridge's
 versions are read the same way.
 
-Every API request needs a Session, signed in on the dashboard, or a Program's Token, sent as
+Every API request but signing in needs a Session, signed in on the dashboard, or a Program's Token, sent as
 `Authorization: Bearer`; the dashboard's page itself is served to anyone. While Oiko has no Admin,
 its log prints at each start a Setup link that claims it.
 

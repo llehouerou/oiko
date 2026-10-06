@@ -32,6 +32,15 @@ export async function loadMe() {
   return true
 }
 
+// Asks who is signed in until Oiko says, once at a time.
+let asking = false
+export async function knowMe() {
+  if (asking) return
+  asking = true
+  while (!(await loadMe())) await new Promise((r) => setTimeout(r, 3000))
+  asking = false
+}
+
 // Who is signed in, as last known.
 export const meNow = () => me
 
@@ -41,7 +50,7 @@ export const useMe = () => useSyncExternalStore((l) => (listeners.add(l), () => 
 // ended: who is signed in is asked again, which shows sign-in.
 export async function api(path: string, init?: RequestInit) {
   const res = await fetch(path, init)
-  if (res.status === 401) void loadMe()
+  if (res.status === 401) void knowMe()
   return res
 }
 

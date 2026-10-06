@@ -98,6 +98,11 @@ func TestClaimingThroughTheSetupLink(t *testing.T) {
 	if m := whoAmI(t, do("GET", "/api/me", "", cookie)); m.Identity != nil || !m.Claimed {
 		t.Errorf("signed out: %+v", m)
 	}
+	// Signing out again, the Session ended, still clears its cookie.
+	resp = do("POST", "/api/sign-out", "", cookie)
+	if cleared := resp.Cookies(); resp.StatusCode != http.StatusNoContent || len(cleared) != 1 || cleared[0].MaxAge >= 0 {
+		t.Errorf("signing out an ended Session: %d %v, want its cookie cleared", resp.StatusCode, cleared)
+	}
 }
 
 func TestSignInEndpointsRefuseAnotherOrigin(t *testing.T) {
@@ -140,9 +145,9 @@ func TestWhoAmITellsThePublicURL(t *testing.T) {
 	}
 }
 
-// todays are the endpoints Oiko served before sign-in existed, each with a
-// body it takes; ids that match nothing keep the home as it is.
-var todays = []struct{ method, path, body string }{
+// beforeSignIn are the endpoints Oiko served before sign-in existed, each
+// with a body it takes; ids that match nothing keep the home as it is.
+var beforeSignIn = []struct{ method, path, body string }{
 	{"GET", "/api/updates", ""},
 	{"GET", "/api/build", ""},
 	{"POST", "/api/commands", `{"target": "flag:unknown", "values": {"on": true}}`},
@@ -187,7 +192,7 @@ func TestTodaysEndpointsNeedASessionOrAToken(t *testing.T) {
 	_, token := withProgram(t, acc, alice, "Node-RED", access.Admin)
 	do, bot := browser(t, srv, "https://oiko.example"), asProgram(t, srv, token)
 	ended := &http.Cookie{Name: "__Host-oiko-session", Value: "ended"}
-	for _, e := range todays {
+	for _, e := range beforeSignIn {
 		for who, cookie := range map[string]*http.Cookie{"no credentials": nil, "an ended Session": ended} {
 			resp := do(e.method, e.path, e.body, cookie)
 			b, _ := io.ReadAll(resp.Body)
