@@ -63,9 +63,10 @@ var levels = []Level{Guest, Member, Admin}
 
 func (l Level) valid() bool { return slices.Contains(levels, l) }
 
-// Allows reports whether l does what min does; no level allows anything.
-func (l Level) Allows(min Level) bool {
-	return l.valid() && slices.Index(levels, l) >= slices.Index(levels, min)
+// Allows reports whether l does what need does; no level allows anything,
+// and nothing allows a level that is none.
+func (l Level) Allows(need Level) bool {
+	return l.valid() && need.valid() && slices.Index(levels, l) >= slices.Index(levels, need)
 }
 
 // Person is a human known to Oiko.
@@ -111,7 +112,7 @@ type Identity struct {
 	Name  string
 	Level Level
 	Fresh bool            // a Session that proved itself lately enough for step-up
-	Ended <-chan struct{} // closed once this Session or Token ends, or the Program's access changes
+	Ended <-chan struct{} // closed once this Session or Token ends, or the identity's access changes
 }
 
 // StepUp refuses an action needing step-up unless the Session is fresh.

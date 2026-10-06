@@ -45,8 +45,8 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	// Runs an Automation from its Manual trigger step, at once: how the Run ended.
 	handle(guest, "POST /api/automations/{id}/steps/{step}/run", func(w http.ResponseWriter, r *http.Request) {
 		end, err := automations.Trigger(r.PathValue("id"), r.PathValue("step"), origin(r))
-		if id, _ := identity(r); id.Level == access.Guest {
-			end.Trigger.By = nil // ADR 0031
+		if id, _ := identity(r); !id.Level.Allows(access.Member) {
+			end = startedByNobody(end)
 		}
 		respond(w, end, err)
 	})
@@ -289,13 +289,13 @@ func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.Ha
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := identity(r)
 		see := func(u home.Update) any { return u }
-		if id.Level == access.Guest {
+		if !id.Level.Allows(access.Member) {
 			see = forGuest
 		}
 		snap, ch, cancel := h.Subscribe()
 		defer cancel()
 		statuses, changed := []release.Status{}, (<-chan struct{})(nil) // nil: never
-		if id.Level == access.Admin {
+		if id.Level.Allows(access.Admin) {
 			statuses, changed = releases.Statuses()
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -368,12 +368,18 @@ func writeBatch(w http.ResponseWriter, u home.Update, ch <-chan home.Update, see
 	}
 }
 
+// startedByNobody is the end of a Run as a Guest sees it (ADR 0031): without
+// who started it.
+func startedByNobody(end home.RunEnd) home.RunEnd {
+	end.Trigger.By = nil
+	return end
+}
+
 // forGuest is u as a Guest sees it (ADR 0031): a Command without its Origin,
 // the end of a Run without who started it.
 func forGuest(u home.Update) any {
 	if u.Run != nil {
-		run := *u.Run
-		run.Trigger.By = nil
+		run := startedByNobody(*u.Run)
 		u.Run = &run
 	}
 	if u.Command == nil {
@@ -413,7 +419,7 @@ func command(h *home.Home) http.HandlerFunc {
 		if by, _ := identity(r); !by.Level.Allows(access.Admin) {
 			for k := range req.Values {
 				if c, err := h.Capability(req.Target.Ref(k)); err == nil && c.Category == home.Config {
-					http.Error(w, fmt.Sprintf("%v: %s is a setting: only an Admin changes it", access.ErrRefused, c.Label), http.StatusForbidden)
+					http.Error(w, fmt.Sprintf("%v: %s is a configuration Capability: only an Admin changes it", access.ErrRefused, c.Label), http.StatusForbidden)
 					return
 				}
 			}

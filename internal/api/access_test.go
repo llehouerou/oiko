@@ -161,7 +161,8 @@ func TestTodaysEndpointsNeedASessionOrAToken(t *testing.T) {
 				t.Errorf("%s %s with %s: %d %s, want 401 asking to sign in", e.method, e.path, who, resp.StatusCode, b)
 			}
 		}
-		for who, resp := range map[string]*http.Response{ // both an Admin's
+		// Alice and her Program are Admins: every endpoint serves them.
+		for who, resp := range map[string]*http.Response{
 			"a Session": do(e.method, e.path, e.body, cookie),
 			"a Token":   bot(e.method, e.path, e.body),
 		} {
