@@ -89,7 +89,7 @@ A camera Function's video as it happens, opened on demand by a Person, a Kiosk o
 _Avoid_: stream, live feed, live stream, video
 
 **Recording**:
-A clip a camera's own system recorded by itself, on motion or any trigger of its own, with a thumbnail and what triggered it. Kept by that system, never by Oiko, which lists them and plays them for a Member or an Admin; one deleted there is gone.
+A clip a camera's own system recorded by itself, on motion or any trigger of its own, with a thumbnail and what triggered it. Kept by that system, never by Oiko, which lists them and plays them for a Member or an Admin; one deleted there is gone. Each new one is announced by an Event of its camera, telling what triggered it.
 _Avoid_: clip, event, video, library, capture
 
 **Command**:
@@ -143,7 +143,7 @@ Record of one Run: its trigger, each Step it went through with the evidence for 
 _Avoid_: Log, Execution, History (reserved for a Target's past)
 
 **Notification**:
-Message an Automation sends to the home's one Telegram chat, never to a Person: a title and a text, which may name the Target that started its Run. Sent once, never retried, after the Run: its Trace shows what was sent, and one Telegram refuses is only logged. Without Telegram configured, it fails its Run.
+Message an Automation sends to the home's one Telegram chat, never to a Person: a title and a text, which may name the Target that started its Run, and may carry the video of the Recording whose Event started it. Sent once, never retried, after the Run: its Trace shows what was sent, and one Telegram refuses is only logged. Without Telegram configured, it fails its Run.
 _Avoid_: alert, message, push
 
 ### Home

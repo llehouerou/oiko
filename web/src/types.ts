@@ -177,7 +177,7 @@ export interface Reached {
   commands?: { target: Target; id?: string; values?: Record<string, unknown>; refused?: string; status?: CommandStatus }[]
   error?: string
   print?: string
-  notification?: { title: string; message: string } // what a notify Step sent
+  notification?: { title: string; message: string; recording?: { camera: Target; start: string } } // what a notify Step sent
 }
 
 // Mirrors automation.StepState: what a Step remembers between Runs.

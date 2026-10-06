@@ -38,16 +38,16 @@ func TestAvailabilityTriggerHeldForNotifies(t *testing.T) {
 	c.advance(e, at(15, 20, 20))
 	availability(e, f, home.Offline) // known again, still not online: the deadline holds
 	c.advance(e, at(15, 20, 30))
-	want := []Notification{{"Camera down", "Gate silent for 15 min"}}
+	want := []Notification{{Title: "Camera down", Message: "Gate silent for 15 min"}}
 	if !slices.Equal(sent, want) {
-		t.Fatalf("sent %q, want %q", sent, want)
+		t.Fatalf("sent %+v, want %+v", sent, want)
 	}
 	if r := traces[0].Steps[1]; *r.Notification != want[0] || r.Error != "" || traces[0].Trigger.Value != "offline" {
 		t.Errorf("trace: %+v, triggered by %v", r, traces[0].Trigger.Value)
 	}
 	c.advance(e, at(15, 22, 0))
 	if len(sent) != 1 {
-		t.Errorf("reported again: %q", sent)
+		t.Errorf("reported again: %+v", sent)
 	}
 }
 

@@ -1,7 +1,8 @@
 import type { StepKind } from '.'
-import { field, Hint, Row } from './fields'
+import { Check, field, Hint, Row } from './fields'
 
-// Sends a Notification to the home's Telegram chat, then goes on.
+// Sends a Notification to the home's Telegram chat, then goes on; with video, as the video of the
+// Recording whose Event started the Run (ADR 0039).
 export const notify: StepKind = {
   label: 'Notify',
   group: 'Action',
@@ -27,9 +28,13 @@ export const notify: StepKind = {
         rows={2}
         className={`${field} w-full`}
       />
-      <Hint>{'{name}'} reads the Name of what started the Run.</Hint>
+      <Check checked={!!p.video} onChange={(video) => set({ video: video || undefined })}>
+        with the video of the Recording that started the Run
+      </Check>
+      <Hint>{'{name}'} reads the Name of what started the Run. A video needs a camera's recording Event as the trigger.</Hint>
     </>
   ),
-  summary: (p) => [p.title, p.message].filter(Boolean),
-  evidence: (r) => (r.notification ? [`sent: ${[r.notification.title, r.notification.message].filter(Boolean).join(' — ')}`] : []),
+  summary: (p) => [p.title, p.message, p.video && '+ video'].filter(Boolean),
+  evidence: (r) =>
+    r.notification ? [`sent: ${[r.notification.title, r.notification.message].filter(Boolean).join(' — ')}${r.notification.recording ? ' + video' : ''}`] : [],
 }

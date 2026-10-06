@@ -77,6 +77,12 @@ type Picture struct {
 // Recordings: the clips it recorded by itself (ADR 0038). Oiko keeps none of
 // them; it finds this interface by a type assertion on the Bridge, beside
 // Cameras.
+//
+// The Bridge announces each new Recording, as soon as its system has it,
+// with an Event of the camera Function's RecordingEvent Capability
+// (Stateless, Enum): its data is the Recording's Trigger, or "other" when it
+// has none, reported as of the Recording's Start, by which Oiko finds it
+// (ADR 0039).
 type Recordings interface {
 	// Recordings lists the Recordings of camera Function function of the
 	// Device at address that started within [from, to], the newest first.
@@ -100,6 +106,10 @@ type Recording struct {
 	Duration time.Duration
 	Trigger  string // what triggered it, a short lower-case word ("motion", "person"), or ""
 }
+
+// RecordingEvent is the key of the Capability of a camera Function whose
+// Events announce its new Recordings.
+const RecordingEvent = "recording"
 
 // RecordingPart is what RecordingMedia fetches of a Recording.
 type RecordingPart string

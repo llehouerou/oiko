@@ -354,7 +354,7 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 		hist.Record)
 	h.Follow(hist.Follow)
 	if c.Telegram != nil {
-		bot, err := telegram.New(*c.Telegram)
+		bot, err := telegram.New(*c.Telegram, h)
 		if err != nil {
 			log.Fatalf("%s: %v", configFile, err)
 		}
