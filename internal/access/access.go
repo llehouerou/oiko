@@ -1,10 +1,10 @@
 // Package access keeps who may use Oiko (ADR 0022, 0032): the Persons, their
-// Passkeys and their Sessions, in persons.json and sessions.json, the
-// Programs and their Tokens, in programs.json, all loaded at start and held
-// in memory, and, in memory only, the Setup link that claims a fresh Oiko
-// (ADR 0026) and the WebAuthn ceremonies in progress. Secrets are 128 random bits
-// or more, kept only as their SHA-256 hash; Oiko alone decides when a Session
-// ends (ADR 0025).
+// Passkeys, their pending Sign-in links and their Sessions, in persons.json
+// and sessions.json, the Programs and their Tokens, in programs.json, all
+// loaded at start and held in memory, and, in memory only, the Setup link
+// that claims a fresh Oiko (ADR 0026) and the WebAuthn ceremonies in
+// progress. Secrets are 128 random bits or more, kept only as their SHA-256
+// hash; Oiko alone decides when a Session ends (ADR 0025).
 package access
 
 import (
@@ -75,6 +75,7 @@ type Person struct {
 	Name     string    `json:"name"`
 	Level    Level     `json:"level"`
 	Passkeys []Passkey `json:"passkeys,omitempty"`
+	Link     *Link     `json:"link,omitempty"` // their unused Sign-in link, if any
 }
 
 // session is a Session as stored: its secret's hash, whose it is, the
@@ -84,7 +85,8 @@ type session struct {
 	Hash      string    `json:"hash"`
 	Person    string    `json:"person"`
 	Browser   string    `json:"browser"`
-	Method    string    `json:"method"` // how it signed in: "setup" or "passkey"
+	Method    string    `json:"method"`       // how it signed in: "setup", "passkey" or "link"
+	By        string    `json:"by,omitempty"` // the Person who created the link it signed in with, when not its own
 	SignedIn  time.Time `json:"signedIn"`
 	Confirmed time.Time `json:"confirmed,omitzero"`
 	LastUse   time.Time `json:"lastUse"`
@@ -147,7 +149,8 @@ type pending struct {
 }
 
 // Open loads the Persons, their Sessions and the Programs from dir, dropping
-// the Sessions that ended or whose Person is gone. now is the clock.
+// the Sessions and Sign-in links that ended, and the Sessions whose Person
+// is gone. now is the clock.
 func Open(dir string, now func() time.Time) (*Store, error) {
 	s := &Store{
 		personsFile:  filepath.Join(dir, "persons.json"),
@@ -177,6 +180,11 @@ func Open(dir string, now func() time.Time) (*Store, error) {
 	}
 	if len(s.sessions) < len(sessions) {
 		if err := s.saveSessions(); err != nil {
+			return nil, err
+		}
+	}
+	if slices.ContainsFunc(s.persons, func(p Person) bool { return p.Link != nil && !live(p.Link, now()) }) {
+		if err := s.savePersons(slices.Clone(s.persons)); err != nil {
 			return nil, err
 		}
 	}
@@ -221,24 +229,24 @@ func (s *Store) Claim(secret, name, browser string) (string, error) {
 	}
 	// The Session first: written without its Person, it is dropped on load.
 	p := Person{ID: uuid.NewV7().String(), Name: name, Level: Admin}
-	session, err := s.signIn(p.ID, browser, "setup")
+	session, err := s.signIn(p.ID, browser, "setup", "")
 	if err != nil {
 		return "", err
 	}
-	if err := store.Save(s.personsFile, PersonsFormat, append(s.persons, p)); err != nil {
+	if err := s.savePersons(append(slices.Clone(s.persons), p)); err != nil {
 		delete(s.sessions, hash(session))
 		return "", err
 	}
-	s.persons = append(s.persons, p)
 	s.setup = ""
 	return session, nil
 }
 
-// signIn opens a Session for Person person. Callers hold s.mu.
-func (s *Store) signIn(person, browser, method string) (string, error) {
+// signIn opens a Session for Person person, signed in by method, with a
+// Sign-in link by created if not "". Callers hold s.mu.
+func (s *Store) signIn(person, browser, method, by string) (string, error) {
 	secret := rand.Text()
 	now := s.now()
-	x := &session{Hash: hash(secret), Person: person, Browser: browser, Method: method, SignedIn: now, LastUse: now}
+	x := &session{Hash: hash(secret), Person: person, Browser: browser, Method: method, By: by, SignedIn: now, LastUse: now}
 	s.sessions[x.Hash] = x
 	if err := s.saveSessions(); err != nil {
 		delete(s.sessions, x.Hash)

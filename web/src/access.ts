@@ -65,22 +65,44 @@ export async function api(path: string, init?: RequestInit) {
 
 // Claims a fresh Oiko with its Setup link's secret, as its first Admin, named name. Says why not, if refused.
 export async function claim(secret: string, name: string) {
-  const res = await fetch('/api/setup', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ secret, name }),
-  })
+  const res = await post('/api/setup', { secret, name })
   if (!res.ok) return (await res.text()).trim()
   await loadMe()
   return null
 }
+
+// Whom the Sign-in link of secret signs in: their Name, or why it no longer works.
+export async function linkPerson(secret: string): Promise<{ name: string } | { error: string }> {
+  const res = await post('/api/sign-in/link/person', { secret })
+  return res.ok ? res.json() : { error: await refusal(res) }
+}
+
+// Signs in with the Sign-in link of secret, spending it. Says why not, if refused.
+export async function signInWithLink(secret: string) {
+  const res = await post('/api/sign-in/link', { secret })
+  if (!res.ok) return refusal(res)
+  await loadMe()
+  return null
+}
+
+const post = (path: string, body: unknown) => fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+
+// Why a link was refused: a spent one says so in plain words, naming no one (ADR 0030).
+const refusal = async (res: Response) =>
+  res.status === 403 && (await res.clone().text()).includes('ask whoever sent it')
+    ? 'This Sign-in link has expired or was already used. Ask whoever sent it for a new one.'
+    : (await res.text()).trim()
+
+// The address of the Sign-in link of secret: on the Public URL, where sign-in works, or else origin's;
+// its secret in the fragment, which the browser never sends (ADR 0030).
+export const signInLink = (me: Me, origin: string, secret: string) => `${me.publicUrl ?? origin}/sign-in#${secret}`
 
 export async function signOut() {
   await api('/api/sign-out', { method: 'POST' })
   await loadMe()
 }
 
-export type View = 'home' | 'history' | 'automations' | 'programs' | 'account'
+export type View = 'home' | 'history' | 'automations' | 'persons' | 'programs' | 'account'
 
 // What the page shows: nothing until it knows who is signed in, sign-in while nobody is, or else the
 // view hash names, if their Access level shows it, the dashboard otherwise. Sign-in leaves the hash
@@ -89,6 +111,7 @@ export function screen(me: Me | null, hash: string): View | 'sign-in' | null {
   if (!me) return null
   if (!me.identity) return 'sign-in'
   const person = 'person' in me.identity
+  if (hash.startsWith('#persons') && person && allows(me, 'admin')) return 'persons'
   if (hash.startsWith('#programs') && person && allows(me, 'admin')) return 'programs'
   if (hash.startsWith('#account') && person) return 'account'
   if (hash.startsWith('#automations') && allows(me, 'member')) return 'automations'

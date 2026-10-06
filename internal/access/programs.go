@@ -46,9 +46,9 @@ func mayManage(by Identity, stepUp bool) error {
 	return nil
 }
 
-// validProgram checks a Program's Name and Access level, answering the Name
-// trimmed.
-func validProgram(name string, level Level) (string, error) {
+// validDefinition checks the Name and Access level of a Person or a Program,
+// answering the Name trimmed.
+func validDefinition(name string, level Level) (string, error) {
 	if !level.valid() {
 		return "", fmt.Errorf("%w: access level %q: want guest, member or admin", home.ErrInvalid, level)
 	}
@@ -77,7 +77,7 @@ func (s *Store) CreateProgram(by Identity, name string, level Level) (Program, e
 	if err := mayManage(by, true); err != nil {
 		return Program{}, err
 	}
-	name, err := validProgram(name, level)
+	name, err := validDefinition(name, level)
 	if err != nil {
 		return Program{}, err
 	}
@@ -98,7 +98,7 @@ func (s *Store) EditProgram(by Identity, id, name string, level Level) error {
 	if err := mayManage(by, true); err != nil { // refused before told what is invalid
 		return err
 	}
-	name, err := validProgram(name, level)
+	name, err := validDefinition(name, level)
 	if err != nil {
 		return err
 	}

@@ -68,6 +68,8 @@ import { ReleaseBanner } from './About'
 import { Setup } from './Setup'
 import { SignIn } from './SignIn'
 import { Programs } from './Programs'
+import { Persons } from './Persons'
+import { SignInLink } from './SignInLink'
 import { Account } from './Account'
 import { screen, useAllows, useMe } from './access'
 import {
@@ -85,7 +87,7 @@ import {
 export function App() {
   const me = useMe()
   const [page, setPage] = useState(location.hash)
-  const [setup, setSetup] = useState(location.pathname === '/setup') // a Setup link, its secret as the hash
+  const [landing, setLanding] = useState(location.pathname) // a Setup or Sign-in link's page, its secret as the hash
   useEffect(() => {
     const follow = () => setPage(location.hash)
     addEventListener('hashchange', follow)
@@ -93,16 +95,17 @@ export function App() {
   }, [])
   const signedIn = !!me?.identity
   useEffect(() => (signedIn ? connect() : undefined), [signedIn])
-  if (setup) {
-    // Done: the dashboard, the secret out of the address and the browser's history.
-    const done = () => (history.replaceState(null, '', '/'), setPage(''), setSetup(false))
-    return <Setup onDone={done} />
-  }
+  // Done with a link's page: the dashboard, the secret out of the address and the browser's history.
+  const done = () => (history.replaceState(null, '', '/'), setPage(''), setLanding('/'))
+  if (landing === '/setup') return <Setup onDone={done} />
+  if (landing === '/sign-in') return <SignInLink onDone={done} />
   switch (screen(me, page)) {
     case null:
       return null
     case 'sign-in':
       return <SignIn me={me!} />
+    case 'persons':
+      return <Persons />
     case 'programs':
       return <Programs />
     case 'account':

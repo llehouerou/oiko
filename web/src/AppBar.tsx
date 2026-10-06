@@ -5,6 +5,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import {
   mdiAccountCircleOutline,
+  mdiAccountMultipleOutline,
   mdiApi,
   mdiChartLine,
   mdiClose,
@@ -99,7 +100,7 @@ function ConnectionBadge() {
   )
 }
 
-// Who is signed in, with a menu to their own page, an Admin's pages, and signing out.
+// Who is signed in, with a menu to their own page, an Admin's pages (Persons, Programs), and signing out.
 function Account() {
   const me = useMe()
   if (!me?.identity) return null
@@ -128,6 +129,16 @@ function Account() {
           >
             <Svg path={mdiKeyVariant} className="size-5 text-neutral-400" />
             Your account
+          </a>
+        )}
+        {me.level === 'admin' && 'person' in me.identity && (
+          <a
+            href="#persons"
+            onClick={() => document.getElementById('account')?.hidePopover()}
+            className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-neutral-800"
+          >
+            <Svg path={mdiAccountMultipleOutline} className="size-5 text-neutral-400" />
+            Persons
           </a>
         )}
         {me.level === 'admin' && 'person' in me.identity && (

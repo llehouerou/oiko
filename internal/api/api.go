@@ -160,15 +160,19 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	handleAccess(mux, acc, public)
 	handlePasskeys(mux, acc, public)
 	handlePrograms(mux, acc)
+	handlePersons(mux, acc, public)
 
 	client := files(static)
 	mux.Handle("GET /", client)
-	// The page a Setup link opens, its secret in the fragment.
-	mux.HandleFunc("GET /setup", func(w http.ResponseWriter, r *http.Request) {
+	// The pages a Setup link and a Sign-in link open, their secret in the
+	// fragment, which never reaches Oiko.
+	page := func(w http.ResponseWriter, r *http.Request) {
 		r = r.Clone(r.Context())
 		r.URL.Path = "/"
 		client.ServeHTTP(w, r)
-	})
+	}
+	mux.HandleFunc("GET /setup", page)
+	mux.HandleFunc("GET /sign-in", page)
 	return secure(http.NewCrossOriginProtection().Handler(identify(acc, public, mux)))
 }
 

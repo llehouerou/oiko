@@ -33,7 +33,7 @@ let
       ];
     };
     sourceRoot = "source/web";
-    npmDepsHash = "sha256-Wb6sJ8dfSrQrmKf/IzI3WW8WlEfXuqwFKkVCUiGUa28=";
+    npmDepsHash = "sha256-afFw9NR2qv1J0jCDqqWeav9gp5xz9zl/jcGmcyd1vJY=";
     installPhase = "cp -r dist $out";
   };
 in

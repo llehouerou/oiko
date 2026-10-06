@@ -18,10 +18,12 @@ const sessionCookie = "__Host-oiko-session"
 type identityKey struct{}
 
 // openEndpoints are those of the API a request without credentials
-// reaches: who am I, the Setup link, signing in with a Passkey, and signing
-// out, which clears the cookie of a Session that already ended.
+// reaches: who am I, the Setup link, signing in with a Passkey or a Sign-in
+// link, and signing out, which clears the cookie of a Session that already
+// ended.
 var openEndpoints = map[string]bool{
-	"/api/me": true, "/api/setup": true, "/api/sign-in/passkey/options": true, "/api/sign-in/passkey": true, "/api/sign-out": true,
+	"/api/me": true, "/api/setup": true, "/api/sign-in/passkey/options": true, "/api/sign-in/passkey": true,
+	"/api/sign-in/link/person": true, "/api/sign-in/link": true, "/api/sign-out": true,
 }
 
 // identify resolves each request, by its Token or else its Session, to its

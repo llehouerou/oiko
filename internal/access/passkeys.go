@@ -12,7 +12,6 @@ import (
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 
-	"github.com/llehouerou/oiko/bridge/store"
 	"github.com/llehouerou/oiko/internal/home"
 )
 
@@ -40,9 +39,9 @@ const (
 type purpose int
 
 const (
-	signingIn purpose = iota // any Passkey of this Oiko answers
-	steppingUp               // a Person's Passkey confirms it is them
-	enrolling                // a Person adds a Passkey
+	signingIn  purpose = iota // any Passkey of this Oiko answers
+	steppingUp                // a Person's Passkey confirms it is them
+	enrolling                 // a Person adds a Passkey
 )
 
 // ceremony is a WebAuthn ceremony begun and not yet finished.
@@ -208,7 +207,7 @@ func (s *Store) FinishSignIn(origin string, response []byte, browser string) (st
 	if err := s.signedWith(who, credential); err != nil {
 		return "", err
 	}
-	return s.signIn(s.persons[who].ID, browser, "passkey")
+	return s.signIn(s.persons[who].ID, browser, "passkey", "")
 }
 
 // signedWith records a sign-in or a step-up with Person i's Passkey credential: its
@@ -234,11 +233,7 @@ func (s *Store) signedWith(i int, credential *webauthn.Credential) error {
 func (s *Store) changePasskeys(i int, change func([]Passkey) []Passkey) error {
 	ps := slices.Clone(s.persons)
 	ps[i].Passkeys = change(slices.Clone(ps[i].Passkeys))
-	if err := store.Save(s.personsFile, PersonsFormat, ps); err != nil {
-		return err
-	}
-	s.persons = ps
-	return nil
+	return s.savePersons(ps)
 }
 
 // BeginStepUp starts a step-up of the Session of secret, in a browser at
@@ -311,12 +306,12 @@ func (s *Store) lasting(secret string) (*session, int, error) {
 	return x, s.person(x.Person), nil
 }
 
-// self is the index of Person by, who manages their own Passkeys, fresh for
-// step-up when stepUp; refused for anyone else. Callers hold s.mu.
+// self is the index of Person by, who manages their own Passkeys and Name,
+// fresh for step-up when stepUp; refused for anyone else. Callers hold s.mu.
 func (s *Store) self(by Identity, stepUp bool) (int, error) {
 	i := s.person(by.ID)
 	if by.Kind != PersonKind || i < 0 {
-		return 0, fmt.Errorf("%w: only a signed-in Person has Passkeys", ErrRefused)
+		return 0, fmt.Errorf("%w: only a signed-in Person has Passkeys and a Name of their own", ErrRefused)
 	}
 	if stepUp {
 		return i, by.StepUp()

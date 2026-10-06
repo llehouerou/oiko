@@ -5,8 +5,9 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { AppBar } from './AppBar'
 import { confirm } from './confirm'
 import { edit } from './store'
-import { api, levels, type Level } from './access'
+import { api, type Level } from './access'
 import { stepUp } from './passkeys'
+import { CopyButton, date, LevelSelect } from './manage'
 
 type Program = {
   id: string
@@ -16,8 +17,6 @@ type Program = {
   created: string
   token: { generated: string; lastUse?: string } | null
 }
-
-export const date = (t: string) => new Date(t).toLocaleString([], { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 export function Programs() {
   const [programs, setPrograms] = useState<Program[] | null>(null)
@@ -112,38 +111,14 @@ export function Programs() {
   )
 }
 
-function LevelSelect(props: { name?: string; defaultValue?: Level; value?: Level; onChange?: (l: Level) => void }) {
-  const { onChange, ...rest } = props
-  return (
-    <select {...rest} aria-label="Access level" onChange={onChange && ((e) => onChange(e.target.value as Level))} className="rounded bg-neutral-800 px-2 py-1">
-      {Object.entries(levels).map(([l, label]) => (
-        <option key={l} value={l}>
-          {label}
-        </option>
-      ))}
-    </select>
-  )
-}
-
 // A Token just generated, shown this once, with a Copy button.
 function ShownToken({ token, onDone }: { token: string; onDone: () => void }) {
-  const [copied, setCopied] = useState(false)
   return (
     <div className="space-y-2 rounded-lg border border-amber-400/40 bg-amber-400/10 p-3">
       <p className="text-amber-200">Copy this Token now: it will not be shown again.</p>
       <div className="flex flex-wrap items-center gap-2">
         <code className="min-w-0 flex-1 rounded bg-neutral-950 px-2 py-1 break-all select-all">{token}</code>
-        <button
-          onClick={() =>
-            navigator.clipboard?.writeText(token).then(
-              () => setCopied(true),
-              () => {}, // refused: the Token stays there to select
-            )
-          }
-          className="rounded bg-amber-400 px-3 py-1 font-medium text-neutral-900 hover:bg-amber-300"
-        >
-          {copied ? 'Copied' : 'Copy'}
-        </button>
+        <CopyButton text={token} />
         <button onClick={onDone} className="rounded bg-neutral-800 px-3 py-1 hover:bg-neutral-700">
           Done
         </button>

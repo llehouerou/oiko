@@ -1,8 +1,9 @@
 // Loads the built client, served by Oiko under its Content Security Policy
 // (ADR 0034), in a headless Chromium, and fails on any violation or page
 // error. On the way, its first Admin adds a Passkey to Chromium's virtual
-// authenticator and signs in with it again. Run after `npm run build`, from
-// the dev shell, which sets CHROMIUM.
+// authenticator and signs in with it again, then invites a Person, who signs
+// in by their Sign-in link. Run after `npm run build`, from the dev shell,
+// which sets CHROMIUM.
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { createServer } from 'node:net'
@@ -47,14 +48,18 @@ try {
   }
 
   browser = await chromium.launch({ executablePath: process.env.CHROMIUM })
-  const page = await browser.newPage()
-  await page.addInitScript(() => {
-    window.violations = []
-    document.addEventListener('securitypolicyviolation', (e) =>
-      window.violations.push(`${e.effectiveDirective} blocked ${e.blockedURI || 'inline'} at ${e.sourceFile}:${e.lineNumber}`),
+  // Every violation and page error of page, on whichever page it navigates to.
+  const watch = async (page) => {
+    await page.exposeFunction('violation', (v) => problems.push(v))
+    await page.addInitScript(() =>
+      document.addEventListener('securitypolicyviolation', (e) =>
+        window.violation(`${e.effectiveDirective} blocked ${e.blockedURI || 'inline'} at ${e.sourceFile}:${e.lineNumber}`),
+      ),
     )
-  })
-  page.on('pageerror', (e) => problems.push(`page error: ${e.message}`))
+    page.on('pageerror', (e) => problems.push(`page error: ${e.message}`))
+    return page
+  }
+  const page = await watch(await browser.newPage())
   const cdp = await page.context().newCDPSession(page)
   await cdp.send('WebAuthn.enable')
   await cdp.send('WebAuthn.addVirtualAuthenticator', {
@@ -76,12 +81,30 @@ try {
   // An Automation, for its editor.
   const id = await page.evaluate(async () => (await (await fetch('/api/automations', { method: 'POST', body: '{"name": "Night"}' })).json()).id)
 
-  for (const hash of ['', '#history', '#automations', `#automations/${id}`, '#programs', '#account']) {
+  for (const hash of ['', '#history', '#automations', `#automations/${id}`, '#persons', '#programs', '#account']) {
     await page.goto(`${base}/${hash}`)
     await page.locator('#root > *').first().waitFor()
     await page.waitForTimeout(1000) // ponytail: a fixed settle; wait on each page's content if it proves flaky
   }
-  problems.push(...(await page.evaluate(() => window.violations)))
+
+  // Alice invites Bob: a Person, then a Sign-in link, its QR code drawn inline.
+  await page.goto(`${base}/#persons`)
+  await page.getByPlaceholder('Name').fill('Bob')
+  await page.getByRole('button', { name: 'Create', exact: true }).click()
+  await page.getByRole('button', { name: 'Create a Sign-in link' }).nth(1).click() // Alice's is first
+  await page.getByRole('img', { name: 'QR code of the Sign-in link' }).waitFor()
+  const link = await page.locator('code', { hasText: '/sign-in#' }).textContent()
+  // Bob opens it on his own device: Continue, then the Passkey offer, declined.
+  const bob = await watch(await (await browser.newContext()).newPage())
+  await bob.goto(link)
+  await bob.getByText("You've been invited to Oiko as Bob").waitFor()
+  await bob.getByRole('button', { name: 'Continue' }).click()
+  await bob.getByRole('button', { name: 'Not now' }).click()
+  await bob.getByRole('button', { name: 'Open Oiko' }).click()
+  await bob.locator('nav a[href="#automations"]').waitFor() // a Member
+  // Spent, it says so.
+  await bob.goto(link)
+  await bob.getByText('expired or was already used').waitFor()
 } finally {
   await browser?.close()
   oiko.kill()
