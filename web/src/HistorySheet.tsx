@@ -204,7 +204,7 @@ function Sheet({ target, onClose }: { target: Target; onClose: () => void }) {
   return (
     <dialog
       ref={dialog}
-      onClose={onClose}
+      onClose={(e) => e.target === e.currentTarget && onClose()} // React passes on the close of a dialog opened from it, such as a Recording's
       onPointerDown={(e) => (pressed.current = e.target)}
       onClick={(e) => e.target === dialog.current && pressed.current === dialog.current && dialog.current.close()} // not a drag released there
       className="m-0 h-full max-h-none w-full max-w-none bg-neutral-900 p-0 text-neutral-100 backdrop:bg-black/60 sm:m-auto sm:h-[94vh] sm:max-h-[94vh] sm:w-[94vw] sm:max-w-7xl sm:rounded-xl"
