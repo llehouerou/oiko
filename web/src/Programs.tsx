@@ -28,7 +28,7 @@ export function Programs() {
     else setError((await res.text()).trim())
   }
   useEffect(() => void load(), [])
-  // Does a change, then shows the Programs as they now are, or why it was refused.
+  // After a change: shows why it was refused, if it was, and the Programs as they now are.
   const change = async (err: string | null) => (setError(err), load())
   const create = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -131,7 +131,12 @@ function ShownToken({ token, onDone }: { token: string; onDone: () => void }) {
       <div className="flex flex-wrap items-center gap-2">
         <code className="min-w-0 flex-1 rounded bg-neutral-950 px-2 py-1 break-all select-all">{token}</code>
         <button
-          onClick={() => navigator.clipboard?.writeText(token).then(() => setCopied(true))}
+          onClick={() =>
+            navigator.clipboard?.writeText(token).then(
+              () => setCopied(true),
+              () => {}, // refused: the Token stays there to select
+            )
+          }
           className="rounded bg-amber-400 px-3 py-1 font-medium text-neutral-900 hover:bg-amber-300"
         >
           {copied ? 'Copied' : 'Copy'}

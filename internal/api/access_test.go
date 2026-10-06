@@ -35,12 +35,12 @@ func browser(t *testing.T, srv *httptest.Server, origin string) func(method, pat
 }
 
 type me struct {
-	Identity  *struct{ Person string } `json:"identity"`
-	Name      string                   `json:"name"`
-	Level     access.Level             `json:"level"`
-	Fresh     bool                     `json:"fresh"`
-	Claimed   bool                     `json:"claimed"`
-	PublicURL *string                  `json:"publicUrl"`
+	Identity  map[string]string `json:"identity"` // {"person": id} or {"program": id}
+	Name      string            `json:"name"`
+	Level     access.Level      `json:"level"`
+	Fresh     bool              `json:"fresh"`
+	Claimed   bool              `json:"claimed"`
+	PublicURL *string           `json:"publicUrl"`
 }
 
 func whoAmI(t *testing.T, resp *http.Response) me {
@@ -83,7 +83,7 @@ func TestClaimingThroughTheSetupLink(t *testing.T) {
 		t.Fatalf("Session cookie = %+v, want __Host-, Secure, HttpOnly, Path=/, SameSite=Strict", cookie)
 	}
 	m := whoAmI(t, do("GET", "/api/me", "", cookie))
-	if m.Identity == nil || m.Identity.Person == "" || m.Name != "Alice" || m.Level != access.Admin || !m.Fresh || !m.Claimed {
+	if m.Identity["person"] == "" || m.Name != "Alice" || m.Level != access.Admin || !m.Fresh || !m.Claimed {
 		t.Errorf("signed in: %+v", m)
 	}
 	if resp := do("POST", "/api/setup", `{"secret":"`+secret+`","name":"Mallory"}`, nil); resp.StatusCode != http.StatusForbidden {

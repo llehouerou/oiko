@@ -33,9 +33,10 @@ type Token struct {
 	LastUse   time.Time `json:"lastUse,omitzero"`
 }
 
-// manage refuses by unless it is a signed-in Admin Person, fresh for step-up
-// when stepUp: a Program never manages access, whatever its level (ADR 0023).
-func manage(by Identity, stepUp bool) error {
+// mayManage refuses by unless it is a signed-in Admin Person, fresh for
+// step-up when stepUp: a Program never manages access, whatever its level
+// (ADR 0023).
+func mayManage(by Identity, stepUp bool) error {
 	if by.Kind != PersonKind || by.Level != Admin {
 		return fmt.Errorf("%w: only a signed-in Admin manages access", ErrRefused)
 	}
@@ -45,9 +46,10 @@ func manage(by Identity, stepUp bool) error {
 	return nil
 }
 
-// valid checks a Program's Name and Access level, answering the Name trimmed.
-func valid(name string, level Level) (string, error) {
-	if level != Guest && level != Member && level != Admin {
+// validProgram checks a Program's Name and Access level, answering the Name
+// trimmed.
+func validProgram(name string, level Level) (string, error) {
+	if !level.valid() {
 		return "", fmt.Errorf("%w: access level %q: want guest, member or admin", home.ErrInvalid, level)
 	}
 	return home.ValidName(name)
@@ -55,7 +57,7 @@ func valid(name string, level Level) (string, error) {
 
 // Programs answers every Program, oldest first, to an Admin Person.
 func (s *Store) Programs(by Identity) ([]Program, error) {
-	if err := manage(by, false); err != nil {
+	if err := mayManage(by, false); err != nil {
 		return nil, err
 	}
 	s.mu.Lock()
@@ -72,10 +74,10 @@ func (s *Store) Programs(by Identity) ([]Program, error) {
 
 // CreateProgram creates a Program, without a Token, for a fresh Admin Person.
 func (s *Store) CreateProgram(by Identity, name string, level Level) (Program, error) {
-	if err := manage(by, true); err != nil {
+	if err := mayManage(by, true); err != nil {
 		return Program{}, err
 	}
-	name, err := valid(name, level)
+	name, err := validProgram(name, level)
 	if err != nil {
 		return Program{}, err
 	}
@@ -93,7 +95,10 @@ func (s *Store) CreateProgram(by Identity, name string, level Level) (Program, e
 // EditProgram renames Program id and sets its Access level; a new level ends
 // its open event streams.
 func (s *Store) EditProgram(by Identity, id, name string, level Level) error {
-	name, err := valid(name, level)
+	if err := mayManage(by, true); err != nil { // refused before told what is invalid
+		return err
+	}
+	name, err := validProgram(name, level)
 	if err != nil {
 		return err
 	}
@@ -137,7 +142,7 @@ func (s *Store) RevokeToken(by Identity, id string) error {
 // copy of the Programs, where it is at i, and says whether the Program's open
 // event streams end.
 func (s *Store) changeProgram(by Identity, id string, change func(ps []Program, i int) ([]Program, bool)) error {
-	if err := manage(by, true); err != nil {
+	if err := mayManage(by, true); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -169,7 +174,7 @@ func (s *Store) ResolveToken(token string) (Identity, bool) {
 		return Identity{}, false
 	}
 	p := s.programs[i]
-	p.Token.LastUse = s.now()
+	s.programs[i].Token.LastUse = s.now()
 	s.used(&s.programUses, func() error { return s.savePrograms(s.programs) })
 	ended, ok := s.ends[p.ID]
 	if !ok {

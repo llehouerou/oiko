@@ -56,6 +56,8 @@ const (
 	Admin  Level = "admin"
 )
 
+func (l Level) valid() bool { return l == Guest || l == Member || l == Admin }
+
 // Person is a human known to Oiko.
 type Person struct {
 	ID    string `json:"id"`

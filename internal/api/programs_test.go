@@ -73,13 +73,8 @@ func TestAnAdminManagesAProgramAndItsToken(t *testing.T) {
 
 	// Served as the Program, on any address, by its Token.
 	bot := asProgram(t, srv, token)
-	if m := whoAmI(t, bot("GET", "/api/me", "")); m.Name != "Node-RED" || m.Level != access.Member {
+	if m := whoAmI(t, bot("GET", "/api/me", "")); len(m.Identity) != 1 || m.Identity["program"] != p.ID || m.Name != "Node-RED" || m.Level != access.Member {
 		t.Errorf("who am I, by Token: %+v", m)
-	}
-	var raw map[string]map[string]string
-	json.NewDecoder(bot("GET", "/api/me", "").Body).Decode(&raw)
-	if raw["identity"]["program"] != p.ID {
-		t.Errorf("identity %v, want {\"program\": %q}", raw["identity"], p.ID)
 	}
 
 	resp := do("GET", "/api/programs", "", cookie)
@@ -119,6 +114,34 @@ func TestAnAdminManagesAProgramAndItsToken(t *testing.T) {
 	}
 	if list := decodeAs[[]any](t, do("GET", "/api/programs", "", cookie), http.StatusOK); len(list) != 0 {
 		t.Errorf("after removing: %v", list)
+	}
+}
+
+func TestTheAuthorizationHeaderIsReadAsTheRFCSays(t *testing.T) {
+	_, acc, hdl := handlerAt(t, nil)
+	srv := httptest.NewServer(hdl)
+	t.Cleanup(srv.Close)
+	_, alice := signedIn(t, acc)
+	p, _ := acc.CreateProgram(alice, "Node-RED", access.Member)
+	token, _ := acc.GenerateToken(alice, p.ID)
+	for header, want := range map[string]int{
+		"Bearer " + token:        http.StatusOK,
+		"bearer " + token:        http.StatusOK, // the scheme is case-insensitive
+		"Bearer\t " + token:      http.StatusOK,
+		"Bearer":                 http.StatusUnauthorized, // a Token attempted, never anonymous
+		"Bearer " + token + " x": http.StatusUnauthorized,
+		"Basic " + token:         http.StatusOK, // not a Token: anonymous, until #40
+	} {
+		req, _ := http.NewRequest("GET", srv.URL+"/api/me", nil)
+		req.Header.Set("Authorization", header)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != want {
+			t.Errorf("Authorization: %q: %d, want %d", header, resp.StatusCode, want)
+		}
 	}
 }
 

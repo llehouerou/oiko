@@ -54,10 +54,17 @@ func resolve(acc *access.Store, r *http.Request) (access.Identity, bool) {
 }
 
 // bearer is r's Token, accepted only in its Authorization header, never in
-// its URL (ADR 0028); false if it has none.
+// its URL (ADR 0028); false if it sends none. A malformed one is "", never
+// valid.
 func bearer(r *http.Request) (string, bool) {
-	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
-	return token, ok && strings.EqualFold(scheme, "Bearer")
+	f := strings.Fields(r.Header.Get("Authorization"))
+	if len(f) == 0 || !strings.EqualFold(f[0], "Bearer") {
+		return "", false
+	}
+	if len(f) != 2 {
+		return "", true
+	}
+	return f[1], true
 }
 
 // handleAccess serves who a request is, the Setup link and signing out.
