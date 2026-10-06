@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/llehouerou/oiko/bridge"
+	"github.com/llehouerou/oiko/internal/access"
 	"github.com/llehouerou/oiko/internal/automation"
 	"github.com/llehouerou/oiko/internal/build"
 	"github.com/llehouerou/oiko/internal/history"
@@ -28,14 +30,24 @@ var static = fstest.MapFS{
 }
 
 // handler is Oiko's API over a Home without Devices, with its engine and
-// history running, serving static.
+// history running, serving static, without a Public URL.
 func handler(t *testing.T) (*home.Home, http.Handler) {
+	h, _, hdl := handlerAt(t, nil)
+	return h, hdl
+}
+
+// handlerAt is handler with Public URL public, and its access store.
+func handlerAt(t *testing.T, public *url.URL) (*home.Home, *access.Store, http.Handler) {
 	t.Helper()
 	store, err := history.Open(filepath.Join(t.TempDir(), "history.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { store.Close() })
+	acc, err := access.Open(t.TempDir(), time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
 	h := home.New(nil, nil, nil, nil, nil, nil, nil, nil, store.Command)
 	e := automation.New(h, nil, nil, nil, nil, nil, store.Record)
 	h.Follow(store.Follow)
@@ -43,7 +55,7 @@ func handler(t *testing.T) (*home.Home, http.Handler) {
 	t.Cleanup(cancel)
 	go e.Run(ctx)
 	go store.Run(ctx)
-	return h, Handler(h, e, store, build.Build{}, "binary", release.New(build.Build{}), nil, nil, static)
+	return h, acc, Handler(h, e, store, acc, build.Build{}, "binary", release.New(build.Build{}), nil, public, static)
 }
 
 // server serves handler(t), and does requests on it.

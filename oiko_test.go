@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -148,6 +149,23 @@ func TestPublicURLIsAnHTTPSOrigin(t *testing.T) {
 	}
 }
 
+// The Setup link opens on the Public URL, or on localhost where Oiko listens.
+func TestSetupOrigin(t *testing.T) {
+	public := &url.URL{Scheme: "https", Host: "oiko.example"}
+	for _, c := range []struct {
+		listen string
+		public *url.URL
+		want   string
+	}{
+		{":8080", public, "https://oiko.example"},
+		{":8080", nil, "http://localhost:8080"},
+		{"0.0.0.0:9000", nil, "http://localhost:9000"},
+	} {
+		if got := setupOrigin(c.listen, c.public); got != c.want {
+			t.Errorf("setupOrigin(%q, %v) = %q, want %q", c.listen, c.public, got, c.want)
+		}
+	}
+}
 // load checks publicUrl with the rest of the configuration, and starts
 // without it.
 func TestLoadChecksThePublicURL(t *testing.T) {

@@ -1,9 +1,10 @@
 // Oiko's chrome: a bar on top of every page (Oiko, opening what it is built from, its pages, the
-// connection, the page's settings),
+// connection, who is signed in, the page's settings),
 // and on the dashboard a floating + that creates an Area, an Aggregate or a Flag.
 
 import { useRef, useState, type ReactNode } from 'react'
 import {
+  mdiAccountCircleOutline,
   mdiChartLine,
   mdiClose,
   mdiCogOutline,
@@ -11,6 +12,7 @@ import {
   mdiGroup,
   mdiHomeAutomation,
   mdiHomePlusOutline,
+  mdiLogout,
   mdiPlus,
   mdiRobotOutline,
   mdiTimelineClockOutline,
@@ -21,6 +23,7 @@ import { Switch } from './controls'
 import { Svg } from './icons'
 import { useConnection } from './store'
 import { About } from './About'
+import { signOut, useMe } from './access'
 
 const pages = [
   { href: '#', label: 'Home', icon: mdiViewDashboardOutline },
@@ -67,6 +70,7 @@ export function AppBar({ page, onLeave, settings }: { page: Page; onLeave?: () =
         </nav>
         <div className="flex flex-1 items-center justify-end gap-2">
           <ConnectionBadge />
+          <Account />
           {settings && <Settings>{settings}</Settings>}
         </div>
       </div>
@@ -85,6 +89,52 @@ function ConnectionBadge() {
       <span className={`size-2 rounded-full ${color}`} />
       <span className="hidden sm:inline">{label}</span>
     </span>
+  )
+}
+
+const levels = { guest: 'Guest', member: 'Member', admin: 'Admin' }
+
+// Who is signed in, with a menu to sign out; while Oiko has no Admin, where its Setup link is.
+function Account() {
+  const me = useMe()
+  if (me && !me.claimed)
+    return (
+      <span
+        title="Oiko has no Admin yet: open the Setup link in Oiko's log to claim it"
+        className="rounded-full bg-amber-400/15 px-3 py-1.5 text-xs text-amber-300"
+      >
+        Setup link in Oiko's log
+      </span>
+    )
+  if (!me?.identity) return null
+  return (
+    <>
+      <button
+        popoverTarget="account"
+        title={me.name}
+        className="flex items-center gap-2 rounded-full px-2 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800 hover:text-white"
+      >
+        <Svg path={mdiAccountCircleOutline} className="size-5" />
+        <span className="hidden max-w-32 truncate md:inline">{me.name}</span>
+      </button>
+      <div
+        id="account"
+        popover="auto"
+        className="inset-auto top-16 right-4 m-0 min-w-60 rounded-xl border border-neutral-800 bg-neutral-900 p-1.5 text-sm text-neutral-100 shadow-2xl"
+      >
+        <p className="truncate px-2.5 pt-2 font-medium">{me.name}</p>
+        <p className="px-2.5 pb-2 text-xs text-neutral-400">{me.level && levels[me.level]}</p>
+        <button
+          popoverTarget="account"
+          popoverTargetAction="hide"
+          onClick={() => void signOut()}
+          className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-neutral-800"
+        >
+          <Svg path={mdiLogout} className="size-5 text-neutral-400" />
+          Sign out
+        </button>
+      </div>
+    </>
   )
 }
 

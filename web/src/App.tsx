@@ -65,6 +65,7 @@ import { dashboard, type DashboardTile, type TargetTile } from './dashboard'
 import { maxColumns, maxRows, move, placements, reflow, resize, rows, stored, type Arranged, type Place } from './layout'
 import { AppBar, ArrangeSetting, ChartsSetting, CreateButton } from './AppBar'
 import { ReleaseBanner } from './About'
+import { Setup } from './Setup'
 import {
   DndContext,
   PointerSensor,
@@ -79,11 +80,17 @@ import {
 
 export function App() {
   const [page, setPage] = useState(location.hash)
+  const [setup, setSetup] = useState(location.pathname === '/setup') // a Setup link, its secret as the hash
   useEffect(() => {
     const follow = () => setPage(location.hash)
     addEventListener('hashchange', follow)
     return () => removeEventListener('hashchange', follow)
   }, [])
+  if (setup) {
+    // Done: the dashboard, the secret out of the address and the browser's history.
+    const done = () => (history.replaceState(null, '', '/'), setPage(''), setSetup(false))
+    return <Setup onDone={done} />
+  }
   return page.startsWith('#automations') ? <Automations /> : page.startsWith('#history') ? <Timeline /> : <Home />
 }
 

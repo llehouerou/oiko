@@ -29,9 +29,11 @@ import (
 	"strings"
 	"syscall"
 	"text/tabwriter"
+	"time"
 
 	"github.com/llehouerou/oiko/bridge"
 	"github.com/llehouerou/oiko/bridge/store"
+	"github.com/llehouerou/oiko/internal/access"
 	"github.com/llehouerou/oiko/internal/api"
 	"github.com/llehouerou/oiko/internal/automation"
 	"github.com/llehouerou/oiko/internal/build"
@@ -370,10 +372,17 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 	for _, b := range bridges {
 		types[b.env.Name] = b.module.Type
 	}
+	acc, err := access.Open(dataDir, time.Now)
+	if err != nil {
+		log.Fatalf("access: %v", err)
+	}
+	if secret, ok := acc.Setup(); ok {
+		log.Printf("oiko: no Admin yet: open %s/setup#%s to claim this Oiko", setupOrigin(listen, public), secret)
+	}
 	built := build.Current()
 	releases := release.New(built)
 	go releases.Run(ctx)
-	srv := api.Server(listen, api.Handler(h, engine, hist, built, install, releases, types, public, web.Dist()))
+	srv := api.Server(listen, api.Handler(h, engine, hist, acc, built, install, releases, types, public, web.Dist()))
 	srv.BaseContext = func(net.Listener) context.Context { return ctx } // ends SSE streams on shutdown
 	served := make(chan struct{})
 	go func() {
@@ -386,4 +395,18 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 		log.Fatal(err)
 	}
 	<-served // requests under way are done
+	if err := acc.Flush(); err != nil {
+		log.Printf("access: %v", err)
+	}
+}
+
+// setupOrigin is where the Setup link opens: the Public URL, or without one
+// http://localhost on the port Oiko listens on, the only place sign-in works
+// then (ADR 0027).
+func setupOrigin(listen string, public *url.URL) string {
+	if public != nil {
+		return public.String()
+	}
+	_, port, _ := net.SplitHostPort(listen)
+	return "http://localhost:" + port
 }

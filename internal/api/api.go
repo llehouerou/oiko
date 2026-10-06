@@ -1,7 +1,7 @@
 // Package api exposes Home over HTTP: one SSE stream for Updates and the
 // Status of each module's Releases, one JSON endpoint for Commands, the
 // Automations' documents, Traces and the Command history, what Oiko is built
-// from, and the static web client.
+// from, who is signed in, and the static web client.
 package api
 
 import (
@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/llehouerou/oiko/internal/access"
 	"github.com/llehouerou/oiko/internal/automation"
 	"github.com/llehouerou/oiko/internal/build"
 	"github.com/llehouerou/oiko/internal/history"
@@ -24,15 +25,16 @@ import (
 	"github.com/llehouerou/oiko/internal/release"
 )
 
-// ponytail: no authentication yet; anyone on the LAN can observe and command.
-// Add accounts before exposing Oiko beyond a trusted network.
-// b is what Oiko is built from, install its Install (see CONTEXT.md), releases
-// what is newer, bridges the type of each Bridge of the configuration, by name,
-// public the Public URL, nil when the configuration has none: the origin and
-// RP ID sign-in will check.
-func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, b build.Build, install string, releases *release.Checker, bridges map[string]string, public *url.URL, static fs.FS) http.Handler {
+// ponytail: nothing enforced yet: a request without a Session keeps full
+// access until sign-in is required (#40).
+// acc keeps who signs in, b is what Oiko is built from, install its Install
+// (see CONTEXT.md), releases what is newer, bridges the type of each Bridge of
+// the configuration, by name, public the Public URL, nil when the
+// configuration has none: the origin sign-in checks.
+func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, acc *access.Store, b build.Build, install string, releases *release.Checker, bridges map[string]string, public *url.URL, static fs.FS) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/updates", updates(h, releases))
+	mux.HandleFunc("GET /api/updates", updates(h, acc, releases))
+	handleAccess(mux, acc, public)
 	mux.HandleFunc("GET /api/build", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, struct {
 			build.Build
@@ -139,8 +141,15 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	mux.HandleFunc("GET /api/lost-entries", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]uint64{"lost": hist.Lost()})
 	})
-	mux.Handle("GET /", files(static))
-	return secure(http.NewCrossOriginProtection().Handler(mux))
+	client := files(static)
+	mux.Handle("GET /", client)
+	// The page a Setup link opens, its secret in the fragment.
+	mux.HandleFunc("GET /setup", func(w http.ResponseWriter, r *http.Request) {
+		r = r.Clone(r.Context())
+		r.URL.Path = "/"
+		client.ServeHTTP(w, r)
+	})
+	return secure(http.NewCrossOriginProtection().Handler(identify(acc, mux)))
 }
 
 // Bounds on the HTTP server and the event stream (ADR 0034); variables so
@@ -248,8 +257,9 @@ func respond(w http.ResponseWriter, v any, err error) {
 // "releases" message, each time it changes. Updates available at once are
 // written together and flushed once. A client that stops reading ends the
 // stream, at the first write that does not go through within
-// streamWriteLimit.
-func updates(h *home.Home, releases *release.Checker) http.HandlerFunc {
+// streamWriteLimit. A stream opened in a Session counts as its use at each
+// keepalive, and ends with it.
+func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		snap, ch, cancel := h.Subscribe()
 		defer cancel()
@@ -290,6 +300,9 @@ func updates(h *home.Home, releases *release.Checker) http.HandlerFunc {
 					return
 				}
 			case <-keepalive.C:
+				if _, signedIn := identity(r); signedIn && !inSession(acc, r) {
+					return
+				}
 				if !send(func() bool { _, err := w.Write([]byte(": keepalive\n\n")); return err == nil }) {
 					return
 				}
@@ -611,6 +624,8 @@ func reply(w http.ResponseWriter, err error) {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 	case errors.Is(err, home.ErrNotRunning):
 		http.Error(w, err.Error(), http.StatusConflict)
+	case errors.Is(err, access.ErrRefused):
+		http.Error(w, err.Error(), http.StatusForbidden)
 	default:
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
