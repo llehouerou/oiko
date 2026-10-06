@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/llehouerou/oiko/bridge"
+	"github.com/llehouerou/oiko/internal/camera/cameratest"
 	"github.com/llehouerou/oiko/internal/home"
 )
 
@@ -21,7 +22,7 @@ import (
 // media as a vendor's storage would: at a path per id and part, ranges
 // included.
 type recorder struct {
-	cameras
+	cameratest.Bridge
 	list  []bridge.Recording
 	media *httptest.Server
 	err   error
@@ -59,7 +60,7 @@ func newRecorder(t *testing.T, list []bridge.Recording) *recorder {
 			http.Error(w, "expired", http.StatusForbidden)
 		case strings.HasSuffix(r.URL.Path, "/video"):
 			w.Header().Set("Content-Type", "video/mp4")
-			http.ServeContent(w, r, "", taken, bytes.NewReader(video))
+			http.ServeContent(w, r, "", cameratest.Taken, bytes.NewReader(video))
 		default:
 			w.Header().Set("Content-Type", "image/jpeg")
 			w.Write([]byte("jpeg of " + r.URL.Path))
@@ -71,8 +72,8 @@ func newRecorder(t *testing.T, list []bridge.Recording) *recorder {
 
 func TestRecordingsAreListedNewestFirstWithinTheRange(t *testing.T) {
 	h, do := server(t)
-	at := func(m int) time.Time { return taken.Add(time.Duration(m) * time.Minute) }
-	cam, _ := withCamera(t, h, "arlo", newRecorder(t, []bridge.Recording{
+	at := func(m int) time.Time { return cameratest.Taken.Add(time.Duration(m) * time.Minute) }
+	cam, _ := cameratest.Attach(t, h, "arlo", newRecorder(t, []bridge.Recording{
 		{ID: "a", Start: at(0), Duration: 12 * time.Second, Trigger: "motion"},
 		{ID: "c", Start: at(20), Duration: 30 * time.Second},
 		{ID: "b", Start: at(10), Duration: time.Minute, Trigger: "person"},
@@ -97,11 +98,11 @@ func TestAListingKeepsTheNewestRecordings(t *testing.T) {
 	h, do := server(t)
 	var list []bridge.Recording
 	for i := range maxRecordings + 5 {
-		list = append(list, bridge.Recording{ID: fmt.Sprint(i), Start: taken.Add(time.Duration(i) * time.Second)})
+		list = append(list, bridge.Recording{ID: fmt.Sprint(i), Start: cameratest.Taken.Add(time.Duration(i) * time.Second)})
 	}
-	cam, _ := withCamera(t, h, "arlo", newRecorder(t, list))
+	cam, _ := cameratest.Attach(t, h, "arlo", newRecorder(t, list))
 	var got []struct{ ID string }
-	json.NewDecoder(do("GET", fmt.Sprintf("/api/recordings?target=%s&from=0&to=%d", cam.Key(), taken.Add(time.Hour).UnixMilli()), "").Body).Decode(&got)
+	json.NewDecoder(do("GET", fmt.Sprintf("/api/recordings?target=%s&from=0&to=%d", cam.Key(), cameratest.Taken.Add(time.Hour).UnixMilli()), "").Body).Decode(&got)
 	if len(got) != maxRecordings || got[0].ID != fmt.Sprint(maxRecordings+4) {
 		t.Errorf("%d Recordings from %+v, want the %d newest", len(got), got[0], maxRecordings)
 	}
@@ -112,7 +113,7 @@ func TestARecordingsVideoIsRelayedRangesIncluded(t *testing.T) {
 	srv := httptest.NewServer(hdl)
 	t.Cleanup(srv.Close)
 	cookie, _ := signedIn(t, acc)
-	cam, _ := withCamera(t, h, "arlo", newRecorder(t, nil))
+	cam, _ := cameratest.Attach(t, h, "arlo", newRecorder(t, nil))
 	get := func(path, rng string) (*http.Response, []byte) {
 		req, _ := http.NewRequest("GET", srv.URL+path, nil)
 		req.AddCookie(cookie)
@@ -146,12 +147,12 @@ func TestARecordingsVideoIsRelayedRangesIncluded(t *testing.T) {
 
 func TestARecordingIsRefusedWhenThereIsNone(t *testing.T) {
 	h, do := server(t)
-	cam, _ := withCamera(t, h, "arlo", newRecorder(t, nil))
-	plain, _ := withCamera(t, h, "cams", &cameras{})
+	cam, _ := cameratest.Attach(t, h, "arlo", newRecorder(t, nil))
+	plain, _ := cameratest.Attach(t, h, "cams", &cameratest.Bridge{})
 	failing := newRecorder(t, nil)
 	failing.err = errors.New(`Get "https://media.example/secret": timeout`)
-	broken, _ := withCamera(t, h, "cloud", failing)
-	off, port := withCamera(t, h, "away", newRecorder(t, nil))
+	broken, _ := cameratest.Attach(t, h, "cloud", failing)
+	off, port := cameratest.Attach(t, h, "away", newRecorder(t, nil))
 	port.SetOnline(false)
 
 	for path, want := range map[string]int{

@@ -110,3 +110,61 @@ func TestALiveViewIsRefusedWhenThereIsNone(t *testing.T) {
 		t.Errorf("for whoever left: %v, want context.Canceled", err)
 	}
 }
+
+func TestAPictureIsKeptAMinute(t *testing.T) {
+	h, c, _ := cameras(t)
+	b := &cameratest.Bridge{}
+	cam, _ := cameratest.Attach(t, h, "arlo", b)
+
+	for range 2 {
+		pic, err := c.Picture(context.Background(), cam)
+		if err != nil || string(pic.Data) != "jpeg of cam1/camera" || pic.ContentType != "image/jpeg" || !pic.Taken.Equal(cameratest.Taken) {
+			t.Fatalf("Picture: %+v, %v", pic, err)
+		}
+	}
+	if n := b.Pictures.Load(); n != 1 {
+		t.Errorf("the Bridge was asked %d times, want once", n)
+	}
+
+	// Kept for no time, a Picture is asked of the Bridge each time.
+	pictureFor = 0
+	t.Cleanup(func() { pictureFor = time.Minute })
+	other := &cameratest.Bridge{}
+	cam, _ = cameratest.Attach(t, h, "other", other)
+	c.Picture(context.Background(), cam)
+	c.Picture(context.Background(), cam)
+	if n := other.Pictures.Load(); n != 2 {
+		t.Errorf("kept for no time, the Bridge was asked %d times, want twice", n)
+	}
+}
+
+func TestAPictureIsRefusedWhenThereIsNone(t *testing.T) {
+	h, c, _ := cameras(t)
+	cam, _ := cameratest.Attach(t, h, "arlo", &cameratest.Bridge{})
+	other, _ := cameratest.Attach(t, h, "z2m", plain{})
+	failing := &cameratest.Bridge{Err: errors.New(`Get "https://media.example/secret": timeout`)}
+	asleep, _ := cameratest.Attach(t, h, "cloud", failing)
+	away, port := cameratest.Attach(t, h, "away", &cameratest.Bridge{})
+	port.SetOnline(false)
+
+	for target, want := range map[home.Target]error{
+		home.TargetDevice(cam.Device(), "occupancy"): home.ErrNotFound,
+		home.TargetDevice(cam.Device(), ""):          home.ErrNotFound,
+		home.TargetDevice("unknown", "camera"):       home.ErrNotFound,
+		other:                                        home.ErrNotFound,
+		away:                                         home.ErrBridgeOffline,
+		asleep:                                       ErrNoAnswer,
+	} {
+		_, err := c.Picture(context.Background(), target)
+		if !errors.Is(err, want) {
+			t.Errorf("%s: %v, want %v", target, err, want)
+		}
+		if err != nil && strings.Contains(err.Error(), "secret") {
+			t.Errorf("%s: tells what the Bridge said: %v", target, err)
+		}
+	}
+	c.Picture(context.Background(), asleep)
+	if n := failing.Pictures.Load(); n != 2 {
+		t.Errorf("a failure was kept: the Bridge was asked %d times, want twice", n)
+	}
+}

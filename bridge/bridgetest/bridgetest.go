@@ -186,11 +186,11 @@ func (h *Home) Picture(address, function string) (bridge.Picture, error) {
 	if !ok {
 		return bridge.Picture{}, fmt.Errorf("%w: no Device at %s", ErrRefused, address)
 	}
-	pic, err := h.h.Picture(context.Background(), home.TargetDevice(id, function))
-	if errors.Is(err, home.ErrNotFound) || errors.Is(err, home.ErrBridgeOffline) {
-		return pic, fmt.Errorf("%w: %w", ErrRefused, err)
+	cameras, native, err := home.CameraBridge[bridge.Cameras](h.h, home.TargetDevice(id, function))
+	if err != nil {
+		return bridge.Picture{}, fmt.Errorf("%w: %w", ErrRefused, err)
 	}
-	return pic, err
+	return cameras.Picture(context.Background(), native, function)
 }
 
 // Recordings lists the Recordings of camera Function function of the Device

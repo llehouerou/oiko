@@ -46,7 +46,7 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	handle(guest, "GET /api/updates", updates(h, acc, releases))
 	handle(guest, "POST /api/commands", command(h))
 	// A camera's Picture shows the home as it is now (ADR 0036).
-	handle(guest, "GET /api/picture", picture(&pictures{h: h, kept: map[home.Target]keptPicture{}}))
+	handle(guest, "GET /api/picture", picture(cams))
 	handle(guest, "POST /api/live-view", liveView(cams))
 	// Runs an Automation from its Manual trigger step, at once: how the Run ended.
 	handle(guest, "POST /api/automations/{id}/steps/{step}/run", func(w http.ResponseWriter, r *http.Request) {

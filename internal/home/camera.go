@@ -12,17 +12,6 @@ import (
 // Camera is the kind of a camera Function (ADR 0036).
 const Camera = "camera"
 
-// Picture asks the Bridge of camera Function t for its Picture: ErrNotFound
-// when t is no camera Function, or its Bridge has no cameras, and
-// ErrBridgeOffline while that Bridge is offline.
-func (h *Home) Picture(ctx context.Context, t Target) (bridge.Picture, error) {
-	cameras, address, err := CameraBridge[bridge.Cameras](h, t)
-	if err != nil {
-		return bridge.Picture{}, err
-	}
-	return cameras.Picture(ctx, address, t.Function())
-}
-
 // Recordings asks the Bridge of camera Function t for its Recordings that
 // started within [from, to] (ADR 0038): ErrNotFound when t is no camera
 // Function or its Bridge has no Recordings, ErrBridgeOffline while that

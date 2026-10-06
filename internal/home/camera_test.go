@@ -1,7 +1,6 @@
 package home
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -38,8 +37,8 @@ func TestACameraWithoutCapabilitiesIsADeviceLikeAnyOther(t *testing.T) {
 
 	restarted, _ := registry(t, *disk)
 	port(restarted).SyncDevices(nil) // the camera is gone from its Bridge
-	if _, err := restarted.Picture(context.Background(), TargetDevice(id, "camera")); !errors.Is(err, ErrNotFound) {
-		t.Errorf("a Detached camera's Picture: %v, want ErrNotFound", err)
+	if _, _, err := CameraBridge[bridge.Cameras](restarted, TargetDevice(id, "camera")); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a Detached camera's Bridge: %v, want ErrNotFound", err)
 	}
 	if err := restarted.Delete(id); err != nil {
 		t.Errorf("deleting the Detached camera: %v", err)

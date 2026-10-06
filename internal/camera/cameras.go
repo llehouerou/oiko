@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"maps"
 	"sync"
 	"time"
 
@@ -17,15 +18,31 @@ import (
 // logged, never told: it may hold a URL giving its media to whoever reads it.
 var ErrNoAnswer = errors.New("the camera or its Bridge gave no answer; Oiko's log tells why")
 
-// liveViewFor bounds a Live view of a camera on battery (ADR 0036); a
-// variable so tests can shorten it.
-var liveViewFor = 5 * time.Minute
+// Variables so tests can shorten them.
+var (
+	// liveViewFor bounds a Live view of a camera on battery (ADR 0036).
+	liveViewFor = 5 * time.Minute
+	// pictureFor is how long a camera's Picture is kept, so that many screens
+	// reach its Bridge once a minute at most (ADR 0036).
+	pictureFor = time.Minute
+)
 
 // Cameras are the home's cameras as Oiko serves them, whoever asks.
 type Cameras struct {
 	h      *home.Home
 	relay  *relay
 	record func(history.LiveView)
+
+	// ponytail: screens missing a Picture at the same moment each reach the
+	// Bridge; one fetch per camera in flight if many Kiosks ever refresh in
+	// step.
+	mu   sync.Mutex
+	kept map[home.Target]keptPicture // only Pictures a Bridge gave: as many as the cameras
+}
+
+type keptPicture struct {
+	bridge.Picture
+	until time.Time
 }
 
 // New serves the cameras of h, handing each Live view to record once it
@@ -41,7 +58,34 @@ func New(h *home.Home, record func(history.LiveView)) *Cameras {
 			return cameras.Stream(ctx, address, t.Function())
 		}),
 		record: record,
+		kept:   map[home.Target]keptPicture{},
 	}
+}
+
+// Picture is the Picture of camera Function t, as its Bridge gave it within
+// pictureFor, or else asks it now. It is refused with home.ErrNotFound when
+// t is no camera, home.ErrBridgeOffline, or ErrNoAnswer.
+func (c *Cameras) Picture(ctx context.Context, t home.Target) (bridge.Picture, error) {
+	now := time.Now()
+	c.mu.Lock()
+	maps.DeleteFunc(c.kept, func(_ home.Target, k keptPicture) bool { return !now.Before(k.until) })
+	k, ok := c.kept[t]
+	c.mu.Unlock()
+	if ok {
+		return k.Picture, nil
+	}
+	cameras, address, err := home.CameraBridge[bridge.Cameras](c.h, t)
+	if err != nil {
+		return bridge.Picture{}, err
+	}
+	pic, err := cameras.Picture(ctx, address, t.Function())
+	if err != nil {
+		return bridge.Picture{}, failed(ctx, "reading a Picture", t, err)
+	}
+	c.mu.Lock()
+	c.kept[t] = keptPicture{pic, time.Now().Add(pictureFor)}
+	c.mu.Unlock()
+	return pic, nil
 }
 
 // LiveView is a Live view of a camera (ADR 0037): its fragmented MP4, from a
@@ -96,7 +140,7 @@ func (c *Cameras) onBattery(t home.Target) bool {
 	return err == nil
 }
 
-// failed is err, from doing what for camera t, as Watch tells it: Oiko's own
+// failed is err, from doing what for camera t, as Cameras tell it: Oiko's own
 // refusals as they are, the end of ctx as it is, anything else logged and
 // told as ErrNoAnswer.
 func failed(ctx context.Context, what string, t home.Target, err error) error {
