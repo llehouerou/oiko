@@ -51,9 +51,7 @@ Then open http://localhost:8080. Flags: `-listen`, `-data` (directory holding Oi
 `./oiko [flags] <bridge> <command> [args]` runs a command of a Bridge instead, such as `homekit pair`;
 `upgrade` (below) and `sign-in-link` are reserved for Oiko's own commands, never Bridge names.
 
-The Public URL, where users reach Oiko, goes in `data/config.json`: `{"publicUrl": "https://oiko.example.org"}`,
-an HTTPS origin with no path. Sign-in needs it: Oiko starts without it, but then only http://localhost
-offers sign-in, and anywhere else only a Program's Token is served.
+Anywhere but on this machine, sign-in needs a Public URL: see [Expose](#expose).
 
 Sun triggers need the home's location, written by hand in `data/config.json`:
 `{"location": {"latitude": 48.86, "longitude": 2.35}}`. Times of day follow the host timezone.
@@ -80,18 +78,6 @@ what Code Steps see and the configuration may break in a minor release while Oik
 only in a major one from v1.0.0; a v0 patch neither breaks nor adds anything. A type of Bridge's
 versions are read the same way.
 
-Every API request but signing in needs a Session, signed in on the dashboard, or a Program's Token, sent as
-`Authorization: Bearer`; the dashboard's page itself is served to anyone. While Oiko has no Admin,
-its log prints at each start a Setup link that claims it. A shared screen, such as a wall tablet,
-signs in as a Kiosk: its sign-in page offers a QR code, which an Admin scans from a signed-in
-phone and approves.
-
-The host is the last way back in, for an Admin who lost every Passkey: while Oiko runs,
-`oiko -data <dir> sign-in-link` lists the Persons (Name, Access level, id), and
-`oiko -data <dir> sign-in-link <id>` prints a Sign-in link for one, valid 15 minutes, whatever
-their Access level. It talks to Oiko through `<dir>/sign-in-link.sock`, open only to Oiko's user;
-on NixOS, `sudo -u oiko oiko -data /var/lib/oiko sign-in-link`.
-
 ## Deploy
 
 The flake exports the package and a NixOS module, `nixosModules.default`
@@ -107,11 +93,58 @@ After changing `web/package-lock.json` or `go.sum`, update `npmDepsHash` or
 **Backup.** Oiko produces no backup: the host owns its schedule, destination and retention.
 1. Copy `history.db` with `sqlite3 /var/lib/oiko/history.db "VACUUM INTO '/backup/history.db'"`
    (not `.backup`), and leave the live `history.db*` files (db, `-wal`, `-shm`) out.
-2. Copy the JSON files of `/var/lib/oiko` and its subdirectories as they are.
+2. Copy the JSON files of `/var/lib/oiko` and its subdirectories as they are, among them the
+   Persons, Kiosks, Programs and Sessions: `persons.json`, `kiosks.json`, `programs.json` and
+   `sessions.json`.
 3. To restore: stop `oiko`, put the copy back as `history.db` with no `-wal`/`-shm`, then start it.
    The restored `alive` mark makes Oiko record a Gap from the backup time (up to a minute early) to the restart.
+   Older JSON files bring back the Sessions and Tokens they hold, and the Persons, Kiosks and
+   Programs: sign out, remove or revoke again what should stay gone.
 4. A type of Bridge may keep state that must not move to another host, such as the Arlo
    session of `github.com/llehouerou/oiko-arlo`: its documentation says so.
+
+The Audit log lives in `history.db`: dropping that file drops the trail. The Names of removed
+Persons, Kiosks and Programs stay in it for up to a year.
+
+## Expose
+
+Every Oiko needs a Public URL to sign anyone in, even one only ever used at home: an HTTPS origin
+with no path, where users reach it, as `{"publicUrl": "https://oiko.example.org"}` in
+`data/config.json` or `services.oiko.publicUrl` on NixOS; anything else there stops Oiko from
+starting, with the reason. It takes a domain name and a certificate, from
+Let's Encrypt through a DNS-01 challenge, which needs no open port, or a Tailscale `ts.net` name;
+for LAN-only use, split-horizon DNS points the name at the host from inside the home. Without a
+Public URL, Oiko starts and runs the home, but only http://localhost offers sign-in, and anywhere
+else only a Program's Token is served.
+
+Oiko serves plain HTTP (`-listen`, `:8080` by default): put a reverse proxy that terminates TLS in
+front of it. TLS is all the proxy has to add, since Oiko trusts no forwarded header, but it must
+not buffer responses under `/api`: the dashboard follows the home through an event stream,
+`/api/updates`. Floods are the proxy's job too: Oiko limits no request rate (ADR 0034). A Program
+on the LAN may still call Oiko on its listen address, but a Token sent over plain HTTP can be read
+by anyone on the network. With [Caddy](https://caddyserver.com), which gets the certificate and
+passes the event stream on as it comes:
+
+```caddyfile
+oiko.example.org {
+	reverse_proxy localhost:8080
+}
+```
+
+For DNS-01, Caddy needs your DNS provider's module and a `tls { dns … }` block.
+
+Every API request but signing in needs a Session, signed in on the dashboard, or a Program's Token, sent as
+`Authorization: Bearer`; the dashboard's page itself is served to anyone. While Oiko has no Admin,
+its log prints at each start a Setup link that claims it (`journalctl -u oiko` on NixOS). The Admin
+then invites the household, a Sign-in link for each Person, and creates a Program and its Token for
+each other client. A shared screen, such as a wall tablet, signs in as a Kiosk: its sign-in page
+offers a QR code, which an Admin scans from a signed-in phone and approves.
+
+The host is the last way back in, for an Admin who lost every Passkey: while Oiko runs,
+`oiko -data <dir> sign-in-link` lists the Persons (Name, Access level, id), and
+`oiko -data <dir> sign-in-link <id>` prints a Sign-in link for one, valid 15 minutes, whatever
+their Access level. It talks to Oiko through `<dir>/sign-in-link.sock`, open only to Oiko's user;
+on NixOS, `sudo -u oiko oiko -data /var/lib/oiko sign-in-link`.
 
 ## Develop
 
