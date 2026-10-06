@@ -96,10 +96,11 @@ After changing `web/package-lock.json` or `go.sum`, update `npmDepsHash` or
 2. Copy the JSON files of `/var/lib/oiko` and its subdirectories as they are, among them the
    Persons, Kiosks, Programs and Sessions: `persons.json`, `kiosks.json`, `programs.json` and
    `sessions.json`.
-3. To restore: stop `oiko`, put the copy back as `history.db` with no `-wal`/`-shm`, then start it.
-   The restored `alive` mark makes Oiko record a Gap from the backup time (up to a minute early) to the restart.
-   Older JSON files bring back the Sessions and Tokens they hold, and the Persons, Kiosks and
-   Programs: sign out, remove or revoke again what should stay gone.
+3. To restore: stop `oiko`, put the copy back as `history.db` with no `-wal`/`-shm`, and the JSON
+   files as they were, then start it. The restored `alive` mark makes Oiko record a Gap from the
+   backup time (up to a minute early) to the restart. Older JSON files bring back the Sessions and
+   Tokens they hold, and the Persons, Kiosks and Programs: sign out, remove or revoke again what
+   should stay gone.
 4. A type of Bridge may keep state that must not move to another host, such as the Arlo
    session of `github.com/llehouerou/oiko-arlo`: its documentation says so.
 
@@ -131,13 +132,15 @@ oiko.example.org {
 }
 ```
 
-For DNS-01, Caddy needs your DNS provider's module and a `tls { dns … }` block.
+For DNS-01, Caddy needs the DNS provider's module and a `tls { dns … }` block.
+
+## Sign in
 
 Every API request but signing in needs a Session, signed in on the dashboard, or a Program's Token, sent as
 `Authorization: Bearer`; the dashboard's page itself is served to anyone. While Oiko has no Admin,
 its log prints at each start a Setup link that claims it (`journalctl -u oiko` on NixOS). The Admin
 then invites the household, a Sign-in link for each Person, and creates a Program and its Token for
-each other client. A shared screen, such as a wall tablet, signs in as a Kiosk: its sign-in page
+each script or system that calls the API. A shared screen, such as a wall tablet, signs in as a Kiosk: its sign-in page
 offers a QR code, which an Admin scans from a signed-in phone and approves.
 
 The host is the last way back in, for an Admin who lost every Passkey: while Oiko runs,
