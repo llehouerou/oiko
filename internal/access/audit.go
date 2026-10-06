@@ -41,7 +41,7 @@ const (
 
 // Changes to access.
 const (
-	SignedIn       Event = "signed-in"        // a Session started; "method" tells how: setup, passkey or link (its "by" if not their own)
+	SignedIn       Event = "signed-in"        // a Session started; "method" tells how: setup, passkey, link (its "by" if not their own) or host
 	SessionEnded   Event = "session-ended"    // "reason": signed out, expired, access ended, or removed with its Person
 	PersonCreated  Event = "person-created"   // "level"
 	PersonRenamed  Event = "person-renamed"   // "from" the previous Name
@@ -64,6 +64,7 @@ const (
 // Parties that are no identity.
 var (
 	nobody = Party{Kind: UnknownKind}
+	host   = Party{Kind: HostKind} // oiko sign-in-link
 	oiko   = Party{Kind: OikoKind} // an expiry
 )
 

@@ -41,6 +41,7 @@ const sentences: Record<string, (e: Entry, a: string, s: string) => string> = {
       setup: 'with the Setup link',
       passkey: 'with a Passkey',
       link: by ? `with a Sign-in link from ${who(by)}` : 'with a Sign-in link',
+      host: "with a Sign-in link from Oiko's host",
     }
     return `${s} signed in ${how[String(e.detail?.method)] ?? ''}`.trim()
   },

@@ -62,20 +62,28 @@ type configured struct {
 	module bridge.Module
 }
 
-// Main runs Oiko, or with arguments upgrades it or runs a command of one of
-// its Bridges: oiko [flags] [upgrade [-y] | <bridge> <command> [args]].
+// Main runs Oiko, or with arguments upgrades it, signs a Person in from its
+// host, or runs a command of one of its Bridges:
+// oiko [flags] [upgrade [-y] | sign-in-link [<id>] | <bridge> <command> [args]].
 func Main() {
 	listen := flag.String("listen", ":8080", "HTTP listen address")
 	dataDir := flag.String("data", "data", "directory holding Oiko's own configuration")
 	configPath := flag.String("config", "", "hand-written configuration (default <data>/config.json)")
 	showVersion := flag.Bool("version", false, "print what this Oiko is built from and exit")
 	flag.Usage = func() {
-		fmt.Fprintln(flag.CommandLine.Output(), "usage: oiko [flags] [upgrade [-y] | <bridge> <command> [args]]")
+		fmt.Fprintln(flag.CommandLine.Output(), "usage: oiko [flags] [upgrade [-y] | sign-in-link [<id>] | <bridge> <command> [args]]")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
 	if *showVersion {
 		printBuild(os.Stdout, build.Current())
+		return
+	}
+	// The last way back in, from the host: it needs no configuration (ADR 0035).
+	if flag.Arg(0) == "sign-in-link" {
+		if err := signInLink(*dataDir, flag.Args()[1:], os.Stdout); err != nil {
+			log.Fatal(err)
+		}
 		return
 	}
 	inst, err := install(os.Getenv("OIKO_INSTALL"))
@@ -379,6 +387,11 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 	if secret, ok := acc.Setup(); ok {
 		log.Printf("oiko: no Admin yet: open %s/setup#%s to claim this Oiko", setupOrigin(listen, public), secret)
 	}
+	hostLinks, err := listenHost(dataDir)
+	if err != nil {
+		log.Fatalf("oiko sign-in-link: %v", err)
+	}
+	go serveHost(ctx, hostLinks, acc, setupOrigin(listen, public))
 	built := build.Current()
 	releases := release.New(built)
 	go releases.Run(ctx)
@@ -400,9 +413,9 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 	}
 }
 
-// setupOrigin is where the Setup link opens: the Public URL, or without one
-// http://localhost on the port Oiko listens on, the only place sign-in works
-// then (ADR 0027).
+// setupOrigin is where the Setup link and the host's Sign-in links open: the
+// Public URL, or without one http://localhost on the port Oiko listens on,
+// the only place sign-in works then (ADR 0027).
 func setupOrigin(listen string, public *url.URL) string {
 	if public != nil {
 		return public.String()

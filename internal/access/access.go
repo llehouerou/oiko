@@ -89,7 +89,7 @@ type session struct {
 	ID        string    `json:"id"`
 	Person    string    `json:"person"`
 	Browser   string    `json:"browser"`
-	Method    string    `json:"method"`             // how it signed in: "setup", "passkey" or "link"
+	Method    string    `json:"method"`             // how it signed in: "setup", "passkey", "link", or "host": a link from Oiko's host
 	Provider  string    `json:"provider,omitempty"` // the provider of the Passkey it signed in with, if known
 	By        string    `json:"by,omitempty"`       // the Person who created the link it signed in with, when not its own
 	SignedIn  time.Time `json:"signedIn"`
@@ -118,6 +118,7 @@ type Kind string
 const (
 	PersonKind  Kind = "person"
 	ProgramKind Kind = "program"
+	HostKind    Kind = "host"    // Oiko's host: oiko sign-in-link
 	OikoKind    Kind = "oiko"    // Oiko itself: an expiry
 	UnknownKind Kind = "unknown" // no identity found
 )

@@ -7,6 +7,7 @@ test('a Session tells how it signed in', () => {
   expect(howSignedIn(s({ method: 'link', by: { id: 'p1', name: 'Alice' } }))).toBe('with a Sign-in link from Alice')
   expect(howSignedIn(s({ method: 'link', by: { id: 'p1' } }))).toBe('with a Sign-in link from a removed Person')
   expect(howSignedIn(s({ method: 'link' }))).toBe('with a Sign-in link')
+  expect(howSignedIn(s({ method: 'host' }))).toBe("with a Sign-in link from Oiko's host")
 })
 
 test("a Guest's last day ends as the next one begins, and reads back as that day", () => {

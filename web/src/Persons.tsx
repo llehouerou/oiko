@@ -16,7 +16,7 @@ type Person = {
   name: string
   level: Level
   ends?: string // a Guest's end date
-  link: { creator: { id: string; name?: string }; created: string; expires: string } | null // pending
+  link: { creator: { id: string; name?: string } | null; created: string; expires: string } | null // pending; null creator: Oiko's host
 }
 
 export function Persons() {
@@ -122,7 +122,8 @@ export function Persons() {
               )}
               {p.link && (
                 <p className="text-neutral-400">
-                  Sign-in link created by {p.link.creator.name ?? 'a removed Person'} on {date(p.link.created)}, valid until {date(p.link.expires)}
+                  Sign-in link created by {p.link.creator ? (p.link.creator.name ?? 'a removed Person') : "Oiko's host"} on {date(p.link.created)}, valid until{' '}
+                  {date(p.link.expires)}
                 </p>
               )}
               {shown?.person === p.id && <ShareLink link={shown.link} expires={shown.expires} onDone={() => setShown(null)} />}

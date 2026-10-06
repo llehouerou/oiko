@@ -46,6 +46,8 @@ export function howSignedIn(s: Session): string {
       return s.provider ? `with a Passkey from ${s.provider}` : 'with a Passkey'
     case 'link':
       return s.by ? `with a Sign-in link from ${s.by.name ?? 'a removed Person'}` : 'with a Sign-in link'
+    case 'host':
+      return "with a Sign-in link from Oiko's host"
   }
   return ''
 }

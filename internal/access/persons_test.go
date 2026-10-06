@@ -147,6 +147,37 @@ func signedInAs(t *testing.T, s *Store, alice Identity, id string) Identity {
 	return who
 }
 
+func TestTheHostCreatesA15MinuteLinkForAnyPerson(t *testing.T) {
+	c := newClock()
+	s, session := claimed(t, t.TempDir(), c)
+	alice := admin(t, s, session)
+	byAdmin := link(t, s, alice, alice.ID)
+	c.take()
+	secret, expires, err := s.HostLink(alice.ID)
+	if err != nil || !expires.Equal(c.t.Add(15*time.Minute)) {
+		t.Fatalf("HostLink = %v, %v; want a link for 15 minutes", expires, err)
+	}
+	recorded(t, c.take(), Entry{Event: LinkCreated, Actor: host, Subject: party(alice)})
+	if _, err := s.SignInWithLink(byAdmin, ""); !errors.Is(err, ErrRefused) {
+		t.Errorf("the previous link: %v, want ErrRefused", err)
+	}
+	if l := linkOf(t, s, alice, alice.ID); l == nil || l.Creator != "" {
+		t.Errorf("pending: %+v; want the host's", l)
+	}
+	if _, err := s.SignInWithLink(secret, "Firefox on Linux"); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ := s.Sessions(alice, alice.ID); list[len(list)-1].Method != "host" {
+		t.Errorf("the Session it opened: %+v, want from the host", list[len(list)-1])
+	}
+	if _, _, err := s.HostLink("unknown"); !errors.Is(err, home.ErrNotFound) {
+		t.Errorf("a link for no one: %v, want ErrNotFound", err)
+	}
+	if ps := s.HostPersons(); len(ps) != 1 || ps[0].Name != "Alice" || ps[0].Level != Admin {
+		t.Errorf("HostPersons = %+v", ps)
+	}
+}
+
 func TestAPersonHasOnePendingLinkWhichAnAdminRevokes(t *testing.T) {
 	c := newClock()
 	s, session := claimed(t, t.TempDir(), c)

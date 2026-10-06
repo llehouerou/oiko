@@ -18,7 +18,7 @@ func handlePersons(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 		Name string `json:"name,omitempty"` // none once they are removed
 	}
 	type link struct {
-		Creator named     `json:"creator"`
+		Creator *named    `json:"creator"` // null for Oiko's host
 		Created time.Time `json:"created"`
 		Expires time.Time `json:"expires"`
 	}
@@ -54,7 +54,10 @@ func handlePersons(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 		for i, p := range ps {
 			list[i] = person{p.ID, p.Name, p.Level, p.Ends, nil}
 			if l := p.Link; l != nil {
-				list[i].Link = &link{named{l.Creator, acc.PersonName(l.Creator)}, l.Created, l.Expires}
+				list[i].Link = &link{nil, l.Created, l.Expires}
+				if l.Creator != "" {
+					list[i].Link.Creator = &named{l.Creator, acc.PersonName(l.Creator)}
+				}
 			}
 		}
 		writeJSON(w, http.StatusOK, list)

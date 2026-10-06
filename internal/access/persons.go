@@ -20,10 +20,11 @@ const (
 )
 
 // Link is a Person's pending Sign-in link as stored: its secret's hash, the
-// Person who created it, by id, when, and until when it signs them in.
+// Person who created it, by id, or "" for Oiko's host, when, and until when
+// it signs them in.
 type Link struct {
 	Hash    string    `json:"hash"`
-	Creator string    `json:"creator"`
+	Creator string    `json:"creator,omitempty"`
 	Created time.Time `json:"created"`
 	Expires time.Time `json:"expires"`
 }
@@ -263,6 +264,22 @@ func (s *Store) CreateLink(by Identity, id string) (string, time.Time, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.newLink(id, party(by), by.ID, life)
+}
+
+// HostLink answers the secret of a new Sign-in link for Person id, and when
+// it expires, for oiko sign-in-link on Oiko's host (ADR 0026): for 15
+// minutes, whatever their Access level. It revokes their previous unused
+// link, whoever created it.
+func (s *Store) HostLink(id string) (string, time.Time, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.newLink(id, host, "", linkForSelf)
+}
+
+// newLink creates a Sign-in link for Person id, by Party by, the Person
+// creator unless "" for the host, that lasts life. Callers hold s.mu.
+func (s *Store) newLink(id string, by Party, creator string, life time.Duration) (string, time.Time, error) {
 	i, err := s.found(id)
 	if err != nil {
 		return "", time.Time{}, err
@@ -272,12 +289,20 @@ func (s *Store) CreateLink(by Identity, id string) (string, time.Time, error) {
 	}
 	secret, now := rand.Text(), s.now()
 	ps := slices.Clone(s.persons)
-	ps[i].Link = &Link{Hash: hash(secret), Creator: by.ID, Created: now, Expires: now.Add(life)}
+	ps[i].Link = &Link{Hash: hash(secret), Creator: creator, Created: now, Expires: now.Add(life)}
 	if err := s.savePersons(ps); err != nil {
 		return "", time.Time{}, err
 	}
-	s.record(Entry{Event: LinkCreated, Actor: party(by), Subject: personParty(ps[i]), Detail: map[string]any{"expires": now.Add(life)}})
+	s.record(Entry{Event: LinkCreated, Actor: by, Subject: personParty(ps[i]), Detail: map[string]any{"expires": now.Add(life)}})
 	return secret, now.Add(life), nil
+}
+
+// HostPersons answers every Person, oldest first, for oiko sign-in-link on
+// Oiko's host to pick whom it signs in.
+func (s *Store) HostPersons() []Person {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.persons)
 }
 
 // RevokeLink revokes the pending Sign-in link of Person id, for a fresh
@@ -333,11 +358,13 @@ func (s *Store) SignInWithLink(secret, browser string) (string, error) {
 	if err := s.savePersons(ps); err != nil {
 		return "", err
 	}
-	by := p.Link.Creator
-	if by == p.ID {
-		by = ""
+	x := session{Person: p.ID, Browser: browser, Method: "link", By: p.Link.Creator}
+	switch p.Link.Creator {
+	case p.ID:
+		x.By = ""
+	case "":
+		x.Method = "host"
 	}
-	x := session{Person: p.ID, Browser: browser, Method: "link", By: by}
 	session, err := s.signIn(&x)
 	if err == nil {
 		s.recordSignIn(p, x)

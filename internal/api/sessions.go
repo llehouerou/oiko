@@ -18,7 +18,7 @@ func handleSessions(mux *http.ServeMux, acc *access.Store) {
 	type session struct {
 		ID       string    `json:"id"`
 		Browser  string    `json:"browser"`
-		Method   string    `json:"method"`             // "setup", "passkey" or "link"
+		Method   string    `json:"method"`             // "setup", "passkey", "link", or "host": a link from Oiko's host
 		Provider string    `json:"provider,omitempty"` // of the Passkey it signed in with, if known
 		By       *named    `json:"by,omitempty"`       // who created the link it signed in with, when not its Person
 		SignedIn time.Time `json:"signedIn"`
