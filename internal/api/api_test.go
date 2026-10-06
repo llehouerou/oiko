@@ -17,6 +17,7 @@ import (
 	"github.com/llehouerou/oiko/internal/access"
 	"github.com/llehouerou/oiko/internal/automation"
 	"github.com/llehouerou/oiko/internal/build"
+	"github.com/llehouerou/oiko/internal/camera"
 	"github.com/llehouerou/oiko/internal/history"
 	"github.com/llehouerou/oiko/internal/home"
 	"github.com/llehouerou/oiko/internal/release"
@@ -61,7 +62,7 @@ func handlerIn(t *testing.T, dir string, public *url.URL, now func() time.Time) 
 	t.Cleanup(func() { cancel(); <-stored }) // before the store closes: its last writes and logs belong to this test
 	go e.Run(ctx)
 	go func() { store.Run(ctx); close(stored) }()
-	return h, acc, Handler(h, e, store, acc, build.Build{}, "binary", release.New(build.Build{}), nil, public, static)
+	return h, acc, Handler(h, e, store, camera.New(h, store.LiveView), acc, build.Build{}, "binary", release.New(build.Build{}), nil, public, static)
 }
 
 // server serves handlerAt(t, nil), and does requests on it as Alice, its

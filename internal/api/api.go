@@ -29,11 +29,12 @@ import (
 
 // Handler serves the API to a Session or a Token, each endpoint to the
 // Access levels it declares, and the web client to anyone (ADR 0023, 0027,
-// 0034). acc keeps who signs in, b is what Oiko is built from, install its
-// Install (see CONTEXT.md), releases what is newer, bridges the type of each
-// Bridge of the configuration, by name, public the Public URL, nil when the
-// configuration has none: the origin sign-in checks.
-func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, acc *access.Store, b build.Build, install string, releases *release.Checker, bridges map[string]string, public *url.URL, static fs.FS) http.Handler {
+// 0034). cams are the home's cameras, acc keeps who signs in, b is what Oiko
+// is built from, install its Install (see CONTEXT.md), releases what is
+// newer, bridges the type of each Bridge of the configuration, by name,
+// public the Public URL, nil when the configuration has none: the origin
+// sign-in checks.
+func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, cams *camera.Cameras, acc *access.Store, b build.Build, install string, releases *release.Checker, bridges map[string]string, public *url.URL, static fs.FS) http.Handler {
 	mux := http.NewServeMux()
 	handle := func(level access.Level, pattern string, serve http.HandlerFunc) {
 		mux.HandleFunc(pattern, needs(level, serve))
@@ -46,7 +47,7 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	handle(guest, "POST /api/commands", command(h))
 	// A camera's Picture shows the home as it is now (ADR 0036).
 	handle(guest, "GET /api/picture", picture(&pictures{h: h, kept: map[home.Target]keptPicture{}}))
-	handle(guest, "POST /api/live-view", liveView(h, camera.New(h.Stream), hist))
+	handle(guest, "POST /api/live-view", liveView(cams))
 	// Runs an Automation from its Manual trigger step, at once: how the Run ended.
 	handle(guest, "POST /api/automations/{id}/steps/{step}/run", func(w http.ResponseWriter, r *http.Request) {
 		end, err := automations.Trigger(r.PathValue("id"), r.PathValue("step"), origin(r))
@@ -711,7 +712,8 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-// reply answers 204 on success, or the status matching a Home error.
+// reply answers 204 on success, or the status matching a Home, camera or
+// access error.
 func reply(w http.ResponseWriter, err error) {
 	switch {
 	case err == nil:
@@ -720,8 +722,10 @@ func reply(w http.ResponseWriter, err error) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 	case errors.Is(err, home.ErrInvalid):
 		http.Error(w, err.Error(), http.StatusBadRequest)
-	case errors.Is(err, home.ErrBridgeOffline):
+	case errors.Is(err, home.ErrBridgeOffline), errors.Is(err, camera.ErrBusy):
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+	case errors.Is(err, camera.ErrNoAnswer):
+		http.Error(w, err.Error(), http.StatusBadGateway)
 	case errors.Is(err, home.ErrNotRunning):
 		http.Error(w, err.Error(), http.StatusConflict)
 	case errors.Is(err, access.ErrRefused):

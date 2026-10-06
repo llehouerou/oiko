@@ -37,6 +37,7 @@ import (
 	"github.com/llehouerou/oiko/internal/api"
 	"github.com/llehouerou/oiko/internal/automation"
 	"github.com/llehouerou/oiko/internal/build"
+	"github.com/llehouerou/oiko/internal/camera"
 	"github.com/llehouerou/oiko/internal/history"
 	"github.com/llehouerou/oiko/internal/home"
 	"github.com/llehouerou/oiko/internal/release"
@@ -395,7 +396,8 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 	built := build.Current()
 	releases := release.New(built)
 	go releases.Run(ctx)
-	srv := api.Server(listen, api.Handler(h, engine, hist, acc, built, install, releases, types, public, web.Dist()))
+	cams := camera.New(h, hist.LiveView)
+	srv := api.Server(listen, api.Handler(h, engine, hist, cams, acc, built, install, releases, types, public, web.Dist()))
 	srv.BaseContext = func(net.Listener) context.Context { return ctx } // ends SSE streams on shutdown
 	served := make(chan struct{})
 	go func() {

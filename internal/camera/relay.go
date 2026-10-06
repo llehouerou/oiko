@@ -1,7 +1,7 @@
-// Package camera relays the Live views of cameras (ADR 0036, 0037): one
-// connection to each camera's RTSP URL, read by go2rtc and shared by
-// everyone watching it, its media muxed into fragmented MP4 for each viewer,
-// without transcoding.
+// Package camera is what Oiko does with its cameras (ADR 0036-0039): their
+// Live views, relayed through one connection to each camera's RTSP URL, read
+// by go2rtc and shared by everyone watching it, its media muxed into
+// fragmented MP4 for each viewer, without transcoding.
 package camera
 
 import (
@@ -46,10 +46,10 @@ var (
 	openWithin = 30 * time.Second
 )
 
-// Relay holds the connection to each camera someone watches. One mutex
+// relay holds the connection to each camera someone watches. One mutex
 // guards every feed and viewer: a few viewers, a few hundred packets a
 // second.
-type Relay struct {
+type relay struct {
 	open    func(context.Context, home.Target) (string, error)
 	mu      sync.Mutex
 	feeds   map[home.Target]*feed
@@ -62,19 +62,19 @@ type feed struct {
 	ready   chan struct{} // closed once conn is set, or the feed ended
 	conn    io.Closer     // its network connection: closing it ends connect's
 	codecs  []*core.Codec // of its tracks: H.264 video, AAC audio
-	viewers map[*Viewer]bool
+	viewers map[*viewer]bool
 	idle    *time.Timer // closes it, once nobody watches
 	ended   bool
 }
 
-// New is a Relay asking open for a camera's URL: the Bridge's Stream.
-func New(open func(context.Context, home.Target) (string, error)) *Relay {
-	return &Relay{open: open, feeds: map[home.Target]*feed{}}
+// newRelay is a relay asking open for a camera's URL: the Bridge's Stream.
+func newRelay(open func(context.Context, home.Target) (string, error)) *relay {
+	return &relay{open: open, feeds: map[home.Target]*feed{}}
 }
 
-// Viewer is one Live view of a camera, from a key frame on.
-type Viewer struct {
-	r       *Relay
+// viewer is one Live view of a camera, from a key frame on.
+type viewer struct {
+	r       *relay
 	f       *feed
 	mux     *mp4.Muxer    // from its first key frame
 	out     chan []byte   // its initialization segment, then its fragments
@@ -88,7 +88,7 @@ type Viewer struct {
 // Watch opens a Live view of camera t, connecting to it unless someone
 // already watches it or did within grace, and returns once it starts with a
 // key frame. ctx bounds that wait only.
-func (r *Relay) Watch(ctx context.Context, t home.Target) (*Viewer, error) {
+func (r *relay) Watch(ctx context.Context, t home.Target) (*viewer, error) {
 	r.mu.Lock()
 	f := r.feeds[t]
 	if r.viewers >= InAll || f != nil && len(f.viewers) >= PerCamera {
@@ -96,7 +96,7 @@ func (r *Relay) Watch(ctx context.Context, t home.Target) (*Viewer, error) {
 		return nil, ErrBusy
 	}
 	if f == nil {
-		f = &feed{t: t, ready: make(chan struct{}), viewers: map[*Viewer]bool{}}
+		f = &feed{t: t, ready: make(chan struct{}), viewers: map[*viewer]bool{}}
 		r.feeds[t] = f
 		go r.connect(f)
 	}
@@ -104,7 +104,7 @@ func (r *Relay) Watch(ctx context.Context, t home.Target) (*Viewer, error) {
 		f.idle.Stop()
 		f.idle = nil
 	}
-	v := &Viewer{r: r, f: f, out: make(chan []byte, queued), started: make(chan struct{}), gone: make(chan struct{})}
+	v := &viewer{r: r, f: f, out: make(chan []byte, queued), started: make(chan struct{}), gone: make(chan struct{})}
 	f.viewers[v] = true
 	r.viewers++
 	r.mu.Unlock()
@@ -122,7 +122,7 @@ func (r *Relay) Watch(ctx context.Context, t home.Target) (*Viewer, error) {
 
 // WriteTo writes the Live view to w until it is closed, falls behind, or
 // its camera's connection ends: the initialization segment, then fragments.
-func (v *Viewer) WriteTo(w io.Writer) (int64, error) {
+func (v *viewer) WriteTo(w io.Writer) (int64, error) {
 	var n int64
 	for b := range v.out {
 		m, err := w.Write(b)
@@ -136,11 +136,11 @@ func (v *Viewer) WriteTo(w io.Writer) (int64, error) {
 }
 
 // Close ends the Live view; WriteTo returns.
-func (v *Viewer) Close() { v.r.leave(v) }
+func (v *viewer) Close() { v.r.leave(v) }
 
 // connect asks the Bridge for f's URL, opens it and plays it. A camera that
 // cannot be reached leaves no feed behind.
-func (r *Relay) connect(f *feed) {
+func (r *relay) connect(f *feed) {
 	ctx, cancel := context.WithTimeout(context.Background(), openWithin)
 	defer cancel()
 	u, err := r.open(ctx, f.t)
@@ -182,7 +182,7 @@ func dial(u string) (*rtsp.Conn, error) {
 
 // tracks sets up what a browser plays of what conn offers, H.264 video and
 // AAC audio, each read once for every viewer of f.
-func (r *Relay) tracks(f *feed, conn *rtsp.Conn) error {
+func (r *relay) tracks(f *feed, conn *rtsp.Conn) error {
 	for _, m := range conn.GetMedias() {
 		if m.Direction != core.DirectionRecvonly {
 			continue
@@ -231,7 +231,7 @@ func hasKind(codecs []*core.Codec, kind string) bool {
 // deliver hands packet p of track i to every viewer of f. A viewer starts
 // with a key frame, with an initialization segment for the codecs as known
 // then; one with no room left is ended.
-func (r *Relay) deliver(f *feed, i int, p *rtp.Packet) {
+func (r *relay) deliver(f *feed, i int, p *rtp.Packet) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	video := f.codecs[i].Name == core.CodecH264
@@ -269,7 +269,7 @@ func (r *Relay) deliver(f *feed, i int, p *rtp.Packet) {
 }
 
 // endViewer ends v with err. Callers hold r.mu.
-func (r *Relay) endViewer(v *Viewer, err error) {
+func (r *relay) endViewer(v *viewer, err error) {
 	if !v.f.viewers[v] {
 		return
 	}
@@ -282,7 +282,7 @@ func (r *Relay) endViewer(v *Viewer, err error) {
 
 // end ends f and each of its viewers with err. Its connection, if open,
 // stops: connect stops it.
-func (r *Relay) end(f *feed, err error) {
+func (r *relay) end(f *feed, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if f.ended {
@@ -305,7 +305,7 @@ func (r *Relay) end(f *feed, err error) {
 
 // leave takes v off its feed. The last one leaves the connection open for
 // grace.
-func (r *Relay) leave(v *Viewer) {
+func (r *relay) leave(v *viewer) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	f := v.f
@@ -317,7 +317,7 @@ func (r *Relay) leave(v *Viewer) {
 }
 
 // closeIdle closes f if nobody came back within grace.
-func (r *Relay) closeIdle(f *feed) {
+func (r *relay) closeIdle(f *feed) {
 	<-f.ready
 	r.mu.Lock()
 	idle := !f.ended && f.idle != nil && len(f.viewers) == 0

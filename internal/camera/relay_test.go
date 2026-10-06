@@ -34,7 +34,7 @@ func (s *sink) Write(p []byte) (int, error) {
 }
 
 // watching reads v into a sink until it ends, which ended tells.
-func watching(t *testing.T, v *Viewer) (s *sink, ended <-chan struct{}) {
+func watching(t *testing.T, v *viewer) (s *sink, ended <-chan struct{}) {
 	t.Helper()
 	s = newSink()
 	done := make(chan struct{})
@@ -52,9 +52,9 @@ func watching(t *testing.T, v *Viewer) (s *sink, ended <-chan struct{}) {
 	return s, done
 }
 
-func relayOf(t *testing.T, cam *cameratest.Camera, asked *atomic.Int32) *Relay {
+func relayOf(t *testing.T, cam *cameratest.Camera, asked *atomic.Int32) *relay {
 	t.Helper()
-	return New(func(context.Context, home.Target) (string, error) {
+	return newRelay(func(context.Context, home.Target) (string, error) {
 		asked.Add(1)
 		return cam.URL(), nil
 	})
@@ -119,7 +119,7 @@ func TestViewersAreBounded(t *testing.T) {
 	cam := cameratest.New(t)
 	var asked atomic.Int32
 	r := relayOf(t, cam, &asked)
-	var viewers []*Viewer
+	var viewers []*viewer
 	t.Cleanup(func() {
 		for _, v := range viewers {
 			v.Close()
@@ -175,7 +175,7 @@ func TestACameraGoingAwayEndsItsViewers(t *testing.T) {
 
 func TestACameraThatCannotBeReachedIsTriedAgain(t *testing.T) {
 	var asked atomic.Int32
-	r := New(func(context.Context, home.Target) (string, error) {
+	r := newRelay(func(context.Context, home.Target) (string, error) {
 		asked.Add(1)
 		return "", errors.New("the camera is asleep")
 	})

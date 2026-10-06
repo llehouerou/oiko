@@ -16,31 +16,11 @@ const Camera = "camera"
 // when t is no camera Function, or its Bridge has no cameras, and
 // ErrBridgeOffline while that Bridge is offline.
 func (h *Home) Picture(ctx context.Context, t Target) (bridge.Picture, error) {
-	h.mu.Lock()
-	cameras, address, err := h.camera(t)
-	h.mu.Unlock()
+	cameras, address, err := CameraBridge[bridge.Cameras](h, t)
 	if err != nil {
 		return bridge.Picture{}, err
 	}
 	return cameras.Picture(ctx, address, t.Function())
-}
-
-// Stream asks the Bridge of camera Function t for the URL of its live video,
-// refused as Picture is.
-func (h *Home) Stream(ctx context.Context, t Target) (string, error) {
-	h.mu.Lock()
-	cameras, address, err := h.camera(t)
-	h.mu.Unlock()
-	if err != nil {
-		return "", err
-	}
-	return cameras.Stream(ctx, address, t.Function())
-}
-
-// OnBattery reports whether the Device of Target t reports a battery.
-func (h *Home) OnBattery(t Target) bool {
-	_, err := h.Capability(TargetDevice(t.Device(), "").Ref("battery"))
-	return err == nil && t.Device() != ""
 }
 
 // Recordings asks the Bridge of camera Function t for its Recordings that
@@ -48,9 +28,7 @@ func (h *Home) OnBattery(t Target) bool {
 // Function or its Bridge has no Recordings, ErrBridgeOffline while that
 // Bridge is offline.
 func (h *Home) Recordings(ctx context.Context, t Target, from, to time.Time) ([]bridge.Recording, error) {
-	h.mu.Lock()
-	recordings, address, err := ofCamera[bridge.Recordings](h, t)
-	h.mu.Unlock()
+	recordings, address, err := CameraBridge[bridge.Recordings](h, t)
 	if err != nil {
 		return nil, err
 	}
@@ -60,24 +38,21 @@ func (h *Home) Recordings(ctx context.Context, t Target, from, to time.Time) ([]
 // RecordingMedia asks the Bridge of camera Function t for part of its
 // Recording id, refused as Recordings is.
 func (h *Home) RecordingMedia(ctx context.Context, t Target, id string, part bridge.RecordingPart, header http.Header) (*http.Response, error) {
-	h.mu.Lock()
-	recordings, address, err := ofCamera[bridge.Recordings](h, t)
-	h.mu.Unlock()
+	recordings, address, err := CameraBridge[bridge.Recordings](h, t)
 	if err != nil {
 		return nil, err
 	}
 	return recordings.RecordingMedia(ctx, address, t.Function(), id, part, header)
 }
 
-// camera is the Bridge of camera Function t and its Device's Native Address.
-// Callers hold h.mu.
-func (h *Home) camera(t Target) (bridge.Cameras, string, error) {
-	return ofCamera[bridge.Cameras](h, t)
-}
-
-// ofCamera is the Bridge of camera Function t, as the optional interface I
-// of the contract, and its Device's Native Address. Callers hold h.mu.
-func ofCamera[I any](h *Home, t Target) (I, string, error) {
+// CameraBridge is the Bridge of camera Function t, as I, an optional
+// interface of the contract (bridge.Cameras, bridge.Recordings), and its
+// Device's Native Address: ErrNotFound when t is no camera Function of an
+// attached Device or its Bridge does not implement I, ErrBridgeOffline while
+// that Bridge is offline.
+func CameraBridge[I any](h *Home, t Target) (I, string, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	var none I
 	d := h.devices[t.Device()]
 	if d == nil || d.Detached || t.Function() == "" {
