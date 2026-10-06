@@ -33,10 +33,10 @@ var (
 // Lifetimes of a Person's Session (ADR 0025), and how often its last use
 // reaches the disk (ADR 0032).
 const (
-	idleLimit     = 30 * 24 * time.Hour
-	absoluteLimit = 365 * 24 * time.Hour
-	freshFor      = 10 * time.Minute
-	writeLastUse  = time.Hour
+	idleLimit    = 30 * 24 * time.Hour
+	SessionLimit = 365 * 24 * time.Hour // the longest a Session lasts, used or not
+	freshFor     = 10 * time.Minute
+	writeLastUse = time.Hour
 )
 
 // ErrRefused is a credential or an action refused; its message says why.
@@ -167,14 +167,19 @@ func (s *Store) Claim(secret, name, browser string) (string, error) {
 	if s.setup == "" || s.claimed() || subtle.ConstantTimeCompare([]byte(hash(secret)), []byte(s.setup)) != 1 {
 		return "", fmt.Errorf("%w: this Setup link is no longer valid; Oiko's log has the current one, if Oiko has no Admin yet", ErrRefused)
 	}
+	// The Session first: written without its Person, it is dropped on load.
 	p := Person{ID: uuid.NewV7().String(), Name: name, Level: Admin}
-	s.persons = append(s.persons, p)
-	if err := store.Save(s.personsFile, PersonsFormat, s.persons); err != nil {
-		s.persons = s.persons[:len(s.persons)-1]
+	session, err := s.signIn(p.ID, browser, "setup")
+	if err != nil {
 		return "", err
 	}
+	if err := store.Save(s.personsFile, PersonsFormat, append(s.persons, p)); err != nil {
+		delete(s.sessions, hash(session))
+		return "", err
+	}
+	s.persons = append(s.persons, p)
 	s.setup = ""
-	return s.signIn(p.ID, browser, "setup")
+	return session, nil
 }
 
 // signIn opens a Session for Person person. Callers hold s.mu.
@@ -244,7 +249,7 @@ func (s *Store) end(x *session) error {
 // ended reports whether Session x is past a lifetime.
 func (s *Store) ended(x *session) bool {
 	now := s.now()
-	return now.Sub(x.LastUse) > idleLimit || now.Sub(x.SignedIn) > absoluteLimit
+	return now.Sub(x.LastUse) > idleLimit || now.Sub(x.SignedIn) > SessionLimit
 }
 
 // person is the index of Person id; -1 if there is none.
@@ -252,15 +257,23 @@ func (s *Store) person(id string) int {
 	return slices.IndexFunc(s.persons, func(p Person) bool { return p.ID == id })
 }
 
-// saveSessions writes every Session. Callers hold s.mu.
+// saveSessions writes every Session, deleting those that ended unnoticed.
+// Callers hold s.mu.
 func (s *Store) saveSessions() error {
 	all := make([]*session, 0, len(s.sessions))
-	for _, x := range s.sessions {
-		all = append(all, x)
+	for h, x := range s.sessions {
+		if s.ended(x) {
+			delete(s.sessions, h)
+		} else {
+			all = append(all, x)
+		}
 	}
 	slices.SortFunc(all, func(a, b *session) int { return a.SignedIn.Compare(b.SignedIn) })
+	if err := store.Save(s.sessionsFile, SessionsFormat, all); err != nil {
+		return err
+	}
 	s.written, s.unsaved = s.now(), false
-	return store.Save(s.sessionsFile, SessionsFormat, all)
+	return nil
 }
 
 func hash(secret string) string {

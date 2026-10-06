@@ -19,10 +19,8 @@ type identityKey struct{}
 // which the request then carries. A request without one goes on anonymous.
 func identify(acc *access.Store, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if c, err := r.Cookie(sessionCookie); err == nil {
-			if id, ok := acc.Resolve(c.Value); ok {
-				r = r.WithContext(context.WithValue(r.Context(), identityKey{}, id))
-			}
+		if id, ok := resolve(acc, r); ok {
+			r = r.WithContext(context.WithValue(r.Context(), identityKey{}, id))
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -34,14 +32,14 @@ func identity(r *http.Request) (access.Identity, bool) {
 	return id, ok
 }
 
-// inSession reports whether r's Session still lasts, counting it as a use.
-func inSession(acc *access.Store, r *http.Request) bool {
+// resolve answers who holds r's Session, counting it as a use; false without
+// one that lasts.
+func resolve(acc *access.Store, r *http.Request) (access.Identity, bool) {
 	c, err := r.Cookie(sessionCookie)
 	if err != nil {
-		return false
+		return access.Identity{}, false
 	}
-	_, ok := acc.Resolve(c.Value)
-	return ok
+	return acc.Resolve(c.Value)
 }
 
 // handleAccess serves who a request is, the Setup link and signing out.
@@ -71,7 +69,7 @@ func handleAccess(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 		writeJSON(w, http.StatusOK, me)
 	})
 	// Claims a fresh Oiko: the Setup link's secret and the first Admin's Name.
-	mux.HandleFunc("POST /api/setup", signIn(public, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/setup", atSignInOrigin(public, func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Secret string `json:"secret"`
 			Name   string `json:"name"`
@@ -84,7 +82,7 @@ func handleAccess(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 			reply(w, err)
 			return
 		}
-		setSession(w, secret, 365*24*60*60)
+		setSession(w, secret, int(access.SessionLimit.Seconds()))
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	mux.HandleFunc("POST /api/sign-out", func(w http.ResponseWriter, r *http.Request) {
@@ -108,9 +106,9 @@ func setSession(w http.ResponseWriter, secret string, maxAge int) {
 	})
 }
 
-// signIn serves next only to a page of the Public URL or of http://localhost,
-// the only origins where a browser signs in (ADR 0027).
-func signIn(public *url.URL, next http.HandlerFunc) http.HandlerFunc {
+// atSignInOrigin serves next only to a page of the Public URL or of
+// http://localhost, the only origins where a browser signs in (ADR 0027).
+func atSignInOrigin(public *url.URL, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 		u, err := url.Parse(origin)

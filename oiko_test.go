@@ -166,6 +166,7 @@ func TestSetupOrigin(t *testing.T) {
 		}
 	}
 }
+
 // load checks publicUrl with the rest of the configuration, and starts
 // without it.
 func TestLoadChecksThePublicURL(t *testing.T) {

@@ -300,8 +300,12 @@ func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.Ha
 					return
 				}
 			case <-keepalive.C:
-				if _, signedIn := identity(r); signedIn && !inSession(acc, r) {
-					return
+				// ponytail: an ended Session's stream closes at the next keepalive;
+				// streams indexed by identity close it at once when that is enforced.
+				if _, signedIn := identity(r); signedIn {
+					if _, ok := resolve(acc, r); !ok {
+						return
+					}
 				}
 				if !send(func() bool { _, err := w.Write([]byte(": keepalive\n\n")); return err == nil }) {
 					return
