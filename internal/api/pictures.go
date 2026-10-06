@@ -68,6 +68,8 @@ func picture(pics *pictures) http.HandlerFunc {
 		case errors.Is(err, home.ErrNotFound), errors.Is(err, home.ErrBridgeOffline):
 			reply(w, err)
 			return
+		case r.Context().Err() != nil: // the client left
+			return
 		case err != nil:
 			slog.Error("api: reading a Picture", "target", t, "err", err)
 			http.Error(w, "the camera's Bridge gave no Picture", http.StatusBadGateway)

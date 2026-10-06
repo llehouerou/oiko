@@ -46,6 +46,8 @@ func recordings(h *home.Home) http.HandlerFunc {
 		case errors.Is(err, home.ErrNotFound), errors.Is(err, home.ErrBridgeOffline):
 			reply(w, err)
 			return
+		case r.Context().Err() != nil: // the client left
+			return
 		case err != nil:
 			slog.Error("api: listing Recordings", "target", t, "err", err)
 			http.Error(w, "the camera's Bridge listed no Recordings", http.StatusBadGateway)
@@ -90,6 +92,8 @@ func recordingMedia(h *home.Home, part bridge.RecordingPart) http.HandlerFunc {
 			return
 		case errors.Is(err, bridge.ErrNotFound):
 			http.Error(w, "no such Recording", http.StatusNotFound)
+			return
+		case r.Context().Err() != nil: // the client left
 			return
 		case err != nil:
 			slog.Error("api: reading a Recording", "target", t, "part", part, "err", err)
