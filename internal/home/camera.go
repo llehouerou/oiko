@@ -23,6 +23,24 @@ func (h *Home) Picture(ctx context.Context, t Target) (bridge.Picture, error) {
 	return cameras.Picture(ctx, address, t.Function())
 }
 
+// Stream asks the Bridge of camera Function t for the URL of its live video,
+// refused as Picture is.
+func (h *Home) Stream(ctx context.Context, t Target) (string, error) {
+	h.mu.Lock()
+	cameras, address, err := h.camera(t)
+	h.mu.Unlock()
+	if err != nil {
+		return "", err
+	}
+	return cameras.Stream(ctx, address, t.Function())
+}
+
+// OnBattery reports whether the Device of Target t reports a battery.
+func (h *Home) OnBattery(t Target) bool {
+	_, err := h.Capability(TargetDevice(t.Device(), "").Ref("battery"))
+	return err == nil && t.Device() != ""
+}
+
 // camera is the Bridge of camera Function t and its Device's Native Address.
 // Callers hold h.mu.
 func (h *Home) camera(t Target) (bridge.Cameras, string, error) {

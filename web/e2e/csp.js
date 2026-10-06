@@ -86,6 +86,19 @@ try {
     await page.locator('#root > *').first().waitFor()
     await page.waitForTimeout(1000) // ponytail: a fixed settle; wait on each page's content if it proves flaky
   }
+  // A Live view plays through a MediaSource attached by a blob: URL (ADR 0037): one opens under the policy.
+  const opened = await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        const ms = new MediaSource()
+        ms.addEventListener('sourceopen', () => resolve(true), { once: true })
+        const v = document.createElement('video')
+        v.addEventListener('error', () => resolve(false), { once: true })
+        v.src = URL.createObjectURL(ms)
+        setTimeout(() => resolve(false), 5000)
+      }),
+  )
+  if (!opened) problems.push('a MediaSource does not open under the policy')
 
   // Alice invites Bob: a Person, then a Sign-in link, its QR code drawn inline.
   await page.goto(`${base}/#persons`)

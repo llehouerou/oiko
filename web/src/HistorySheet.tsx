@@ -52,7 +52,9 @@ import {
 import { Periods } from './Periods'
 import { useCatalogue, useNow } from './store'
 import { api, useAllows } from './access'
-import type { Capability, CommandRecord, Ref, RunEnd, Target } from './types'
+import type { Capability, CommandRecord, LiveView, Ref, RunEnd, Target } from './types'
+import { watchedFor } from './liveview'
+import { owner } from './targets'
 import type { Document } from './automation/model'
 import { runSummary, setting } from './automation/runtime'
 
@@ -415,11 +417,13 @@ function useDescribe() {
       const { trigger, result } = runSummary(r, targets, (id) => id)
       return `${automation(r.automation)} · ${trigger} → ${result}`
     },
+    liveView: (v: LiveView) => ['Live view', byWhom(v.origin, identities, automation), watchedFor(Date.parse(v.end) - Date.parse(v.start))].join(' · '),
   }
 }
 
 // markers are the Commands and Runs loaded on the Targets of series, linked to
-// their Run's Trace, and the Events of series: one each, or a bucket's count.
+// their Run's Trace, the Live views of the cameras of their Devices, and the
+// Events of series: one each, or a bucket's count.
 function markers(loaded: Loaded, series: { ref: Ref; cap: Capability }[], describe: ReturnType<typeof useDescribe>): Marker[] {
   const trace = (automation: string, run: string) => `#automations/${automation}/${run}`
   const ofSeries = (t: Target) => series.some((s) => s.ref.target === t)
@@ -433,6 +437,9 @@ function markers(loaded: Loaded, series: { ref: Ref; cap: Capability }[], descri
     ...loaded.runs
       .filter((r) => ofSeries(r.trigger.target))
       .map((r): Marker => ({ t: Date.parse(r.time), n: 1, kind: 'run', text: describe.run(r), link: trace(r.automation, r.run) })),
+    ...loaded.liveViews
+      .filter((v) => series.some((s) => owner(s.ref.target) === owner(v.target)))
+      .map((v): Marker => ({ t: Date.parse(v.start), n: 1, kind: 'liveView', text: describe.liveView(v) })),
     ...series
       .filter(({ cap }) => cap.stateless)
       .flatMap(({ ref, cap }) =>

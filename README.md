@@ -121,10 +121,10 @@ else only a Program's Token is served.
 Oiko serves plain HTTP (`-listen`, `:8080` by default): put a reverse proxy that terminates TLS in
 front of it. TLS is all the proxy has to add, since Oiko trusts no forwarded header, but it must
 not buffer responses under `/api`: the dashboard follows the home through an event stream,
-`/api/updates`. Floods are the proxy's job too: Oiko limits no request rate (ADR 0034). A Program
+`/api/updates`, and plays a camera's Live view as it arrives, `/api/live-view`. Floods are the proxy's job too: Oiko limits no request rate (ADR 0034). A Program
 on the LAN may still call Oiko on its listen address, but a Token sent over plain HTTP can be read
 by anyone on the network. With [Caddy](https://caddyserver.com), which gets the certificate and
-passes the event stream on as it comes:
+passes both streams on as they come:
 
 ```caddyfile
 oiko.example.org {

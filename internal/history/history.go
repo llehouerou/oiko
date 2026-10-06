@@ -82,7 +82,20 @@ CREATE TABLE alive (
 	id   INTEGER PRIMARY KEY CHECK (id = 0),
 	time INTEGER NOT NULL -- Unix ns, Oiko last known running
 );
-` + auditSchema
+` + auditSchema + liveViewsSchema
+
+// liveViewsSchema keeps who watched a camera, when and how long (ADR 0036).
+const liveViewsSchema = `
+CREATE TABLE live_views (
+	id     INTEGER PRIMARY KEY,
+	target TEXT NOT NULL,    -- the camera Function
+	device TEXT NOT NULL,    -- its Device: the History of each of its Functions shows it
+	start  INTEGER NOT NULL, -- Unix ns
+	"end"  INTEGER NOT NULL, -- Unix ns
+	origin TEXT NOT NULL     -- JSON
+);
+CREATE INDEX live_views_by_device ON live_views (device, start);
+`
 
 // auditSchema creates the Audit log (ADR 0033): append-only, each entry kept
 // a year. Its actor and subject are each a kind (person, kiosk, program,
@@ -116,8 +129,14 @@ END;
 var (
 	oldest     = 1
 	through    = ""
-	migrations = []func(*sql.Tx) error{toFormat2}
+	migrations = []func(*sql.Tx) error{toFormat2, toFormat3}
 )
+
+// toFormat3 keeps the Live views of cameras (ADR 0036).
+func toFormat3(tx *sql.Tx) error {
+	_, err := tx.Exec(liveViewsSchema)
+	return err
+}
 
 // toFormat2 reads the Commands from the API, before sign-in, as of unknown
 // Origin (ADR 0031), and creates the Audit log (ADR 0033).
@@ -158,6 +177,7 @@ type entry struct {
 	point     *point
 	lifecycle func(*sql.Tx) error
 	audit     *access.Entry
+	liveView  *LiveView
 }
 
 // kept reports whether e is never dropped.
@@ -336,6 +356,20 @@ func (s *Store) Record(t *automation.Trace) {
 // Command hands over a Command record, without waiting.
 func (s *Store) Command(c home.CommandRecord) {
 	s.hand(entry{command: &c})
+}
+
+// LiveView is one Live view of a camera Function, by whom, from Start to
+// End.
+type LiveView struct {
+	Target home.Target `json:"target"`
+	Origin home.Origin `json:"origin"`
+	Start  time.Time   `json:"start"`
+	End    time.Time   `json:"end"`
+}
+
+// LiveView hands over a Live view once it ended, without waiting.
+func (s *Store) LiveView(v LiveView) {
+	s.hand(entry{liveView: &v})
 }
 
 // Follow hands over an Update of Home.Follow, without waiting. A Value, an
@@ -612,6 +646,8 @@ func (s *Store) insert(batch []entry) (failed []entry, err error) {
 			}
 		case e.point != nil:
 			err = s.insertPoint(tx, e.point)
+		case e.liveView != nil:
+			err = insertLiveView(tx, e.liveView)
 		case e.trace != nil:
 			err = insertTrace(tx, e.trace)
 		case c.Status == home.Pending:
@@ -686,6 +722,16 @@ func insertTrace(tx *sql.Tx, t *automation.Trace) error {
 	}
 	_, err = tx.Exec(`INSERT INTO runs (id, automation, time, outcome, trace, trigger_target) VALUES (?, ?, ?, ?, ?, ?)`,
 		t.Run.String(), t.Automation, t.Time.UnixNano(), t.Outcome, string(data), trigger)
+	return err
+}
+
+func insertLiveView(tx *sql.Tx, v *LiveView) error {
+	origin, err := json.Marshal(v.Origin)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`INSERT INTO live_views (target, device, start, "end", origin) VALUES (?, ?, ?, ?, ?)`,
+		v.Target.Key(), home.TargetDevice(v.Target.Device(), "").Key(), v.Start.UnixNano(), v.End.UnixNano(), string(origin))
 	return err
 }
 

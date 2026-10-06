@@ -160,6 +160,10 @@ func (camera) Picture(_ context.Context, address, function string) (bridge.Pictu
 	return bridge.Picture{Data: []byte(address + "/" + function), ContentType: "image/jpeg"}, nil
 }
 
+func (camera) Stream(_ context.Context, address, function string) (string, error) {
+	return "rtsp://camera.example/" + address + "/" + function, nil
+}
+
 func TestAPictureIsReadThroughTheBridgesCameras(t *testing.T) {
 	cam := bridge.Device{NativeAddress: "cam1", Name: "Garden", Functions: []bridge.Function{{Key: "camera", Kind: "camera"}}}
 	h := bridgetest.New(&camera{})

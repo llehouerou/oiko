@@ -57,9 +57,10 @@ func handlerIn(t *testing.T, dir string, public *url.URL, now func() time.Time) 
 	e := automation.New(h, nil, nil, nil, nil, nil, store.Record)
 	h.Follow(store.Follow)
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
+	stored := make(chan struct{})
+	t.Cleanup(func() { cancel(); <-stored }) // before the store closes: its last writes and logs belong to this test
 	go e.Run(ctx)
-	go store.Run(ctx)
+	go func() { store.Run(ctx); close(stored) }()
 	return h, acc, Handler(h, e, store, acc, build.Build{}, "binary", release.New(build.Build{}), nil, public, static)
 }
 

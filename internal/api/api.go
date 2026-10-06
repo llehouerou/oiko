@@ -20,6 +20,7 @@ import (
 	"github.com/llehouerou/oiko/internal/access"
 	"github.com/llehouerou/oiko/internal/automation"
 	"github.com/llehouerou/oiko/internal/build"
+	"github.com/llehouerou/oiko/internal/camera"
 	"github.com/llehouerou/oiko/internal/history"
 	"github.com/llehouerou/oiko/internal/home"
 	"github.com/llehouerou/oiko/internal/release"
@@ -44,6 +45,7 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	handle(guest, "POST /api/commands", command(h))
 	// A camera's Picture shows the home as it is now (ADR 0036).
 	handle(guest, "GET /api/picture", picture(&pictures{h: h, kept: map[home.Target]keptPicture{}}))
+	handle(guest, "POST /api/live-view", liveView(h, camera.New(h.Stream), hist))
 	// Runs an Automation from its Manual trigger step, at once: how the Run ended.
 	handle(guest, "POST /api/automations/{id}/steps/{step}/run", func(w http.ResponseWriter, r *http.Request) {
 		end, err := automations.Trigger(r.PathValue("id"), r.PathValue("step"), origin(r))
@@ -205,15 +207,17 @@ func Server(addr string, handler http.Handler) *http.Server {
 
 // headers are the ones every response carries (ADR 0034).
 var headers = map[string]string{
-	"Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; " +
+	"Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self' blob:; font-src 'self'; " +
 		"connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
 	"X-Content-Type-Options":       "nosniff",
 	"Referrer-Policy":              "no-referrer",
 	"Cross-Origin-Opener-Policy":   "same-origin",
 	"Cross-Origin-Resource-Policy": "same-origin",
-	// Every feature denied but sharing and copying a Sign-in link (ADR 0030).
+	// Every feature denied but sharing and copying a Sign-in link (ADR 0030)
+	// and autoplay, which starts a Live view once its camera woke, seconds
+	// after the tap that asked for it (ADR 0037).
 	// Passkeys keep their default, Oiko itself: sign-in needs them.
-	"Permissions-Policy": "accelerometer=(), autoplay=(), camera=(), clipboard-read=(), display-capture=(), " +
+	"Permissions-Policy": "accelerometer=(), autoplay=(self), camera=(), clipboard-read=(), display-capture=(), " +
 		"encrypted-media=(), fullscreen=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), magnetometer=(), " +
 		"microphone=(), midi=(), payment=(), picture-in-picture=(), screen-wake-lock=(), serial=(), usb=(), " +
 		"xr-spatial-tracking=(), web-share=(self), clipboard-write=(self)",

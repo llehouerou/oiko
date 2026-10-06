@@ -12,7 +12,7 @@ import { current, follow } from './store'
 import { api } from './access'
 import { owner, targetKind, type Catalogue, type Entry } from './targets'
 import type { CommandKind } from './origin'
-import type { Capability, CommandRecord, CommandState, Ref, RunEnd, Snapshot, Target, Update } from './types'
+import type { Capability, CommandRecord, CommandState, LiveView, Ref, RunEnd, Snapshot, Target, Update } from './types'
 
 export const DAY = 24 * 60 * 60 * 1000
 
@@ -52,6 +52,7 @@ interface Answer {
   availability: Record<Target, Raw[]>
   commands?: CommandRecord[]
   runs?: RunEnd[]
+  liveViews?: LiveView[]
 }
 
 // What a view holds; replaced whole on each change. from is where the answer
@@ -63,6 +64,7 @@ export interface Loaded {
   gaps: Gap[]
   commands: CommandRecord[] // with markers, the earliest first
   runs: RunEnd[]
+  liveViews: LiveView[] // of the cameras of the Devices involved
 }
 
 export const key = (r: Ref) => `${r.target}|${r.capability}`
@@ -71,7 +73,7 @@ export const availabilityRef = (target: Target): Ref => ({ target, capability: '
 const views = new Set<HistoryView>() // those loaded and not closed
 
 export class HistoryView {
-  state: Loaded = { from: 0, bucket: '', series: new Map(), gaps: [], commands: [], runs: [] }
+  state: Loaded = { from: 0, bucket: '', series: new Map(), gaps: [], commands: [], runs: [], liveViews: [] }
   refs: Ref[] = []
   private query = { from: 0, to: 0, points: 0, markers: false }
   private follows = false // whether the range includes now: it follows the stream
@@ -111,7 +113,7 @@ export class HistoryView {
     const series = new Map<string, Point[]>()
     refs.forEach((r, i) => series.set(key(r), a.series[i] ?? []))
     for (const [t, ps] of Object.entries(a.availability)) series.set(key(availabilityRef(t)), ps)
-    this.state = { from: a.from, bucket: a.bucket, series, gaps: a.gaps, commands: a.commands ?? [], runs: a.runs ?? [] }
+    this.state = { from: a.from, bucket: a.bucket, series, gaps: a.gaps, commands: a.commands ?? [], runs: a.runs ?? [], liveViews: a.liveViews ?? [] }
     if (this.follows) this.seam(a)
     this.changed()
   }
@@ -379,7 +381,7 @@ export const targetBlanks = (loaded: Loaded, target: Target, from: number, to: n
   )
 
 // A marker on the time axis: n Commands, Runs or Events at t, the same kind.
-export type MarkerKind = CommandKind | 'run' | 'event'
+export type MarkerKind = CommandKind | 'run' | 'event' | 'liveView'
 export interface Marker {
   t: number
   n: number

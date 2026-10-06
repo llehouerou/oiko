@@ -574,6 +574,7 @@ export const markerStyle: Record<MarkerKind, { glyph: string; color: string; lab
   lost: { glyph: '▲', color: '#f87171', label: 'no response' },
   run: { glyph: '◆', color: '#e879f9', label: 'Run' },
   event: { glyph: '●', color: '#34d399', label: 'Event' },
+  liveView: { glyph: '■', color: '#fb923c', label: 'Live view' },
 }
 
 // MarkerStrip draws clusters of markers on the time scale: one alone as its

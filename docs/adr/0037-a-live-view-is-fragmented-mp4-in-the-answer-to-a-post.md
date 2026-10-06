@@ -13,6 +13,7 @@ The dashboard opens a camera's Live view (ADR 0036) with a `POST`, whose answer 
 ## Consequences
 
 - **Content Security Policy.** `media-src 'self' blob:` joins the policy of ADR 0034: a `MediaSource` is attached through a `blob:` URL, which `default-src 'self'` refuses.
+- **Permissions Policy.** `autoplay=(self)` replaces the `autoplay=()` of ADR 0034: a camera on battery sends its first key frame seconds after the tap that asked for it, past the browser's user activation, and a muted Live view must still start by itself.
 - **iPhones.** `ManagedMediaSource` exists from iOS 17.1; an older iPhone shows a camera's Picture but no Live view.
 - **Sound** plays only once the viewer unmutes it: browsers start no media with sound by themselves.
 - **Programs** may open a Live view the same way, with their Token; it is recorded with their Origin.

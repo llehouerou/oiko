@@ -32,6 +32,7 @@ var homeEndpoints = []struct {
 	{"POST", "/api/commands", `{"target": "flag:unknown", "values": {"on": true}}`, access.Guest},
 	{"POST", "/api/automations/unknown/steps/go/run", "", access.Guest},
 	{"GET", "/api/picture?target=device:unknown/camera", "", access.Guest},
+	{"POST", "/api/live-view", `{"target": "device:unknown/camera"}`, access.Guest},
 	{"GET", "/api/automations", "", access.Member},
 	{"GET", "/api/automations/unknown/state", "", access.Member},
 	{"GET", "/api/automations/unknown/runs", "", access.Member},

@@ -148,7 +148,7 @@ func TestFormat2ReadsTheAPIOriginAsUnknownAndAddsTheAuditLog(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Back to format 1: no audit table, and Commands from the API.
-	if _, err := db.Exec(`DROP TABLE audit; PRAGMA user_version = 1`); err != nil {
+	if _, err := db.Exec(`DROP TABLE audit; DROP TABLE live_views; PRAGMA user_version = 1`); err != nil {
 		t.Fatal(err)
 	}
 	target := home.TargetFlag("away")
@@ -175,8 +175,8 @@ func TestFormat2ReadsTheAPIOriginAsUnknownAndAddsTheAuditLog(t *testing.T) {
 	if err := s.db.QueryRow(`SELECT count(*) FROM audit`).Scan(&entries); err != nil || entries != 0 {
 		t.Fatalf("audit: %d entries, %v; want an empty table", entries, err)
 	}
-	if v := userVersion(t, path); v != 2 {
-		t.Fatalf("user_version %d, want 2", v)
+	if v := userVersion(t, path); v != 3 {
+		t.Fatalf("user_version %d, want 3", v)
 	}
 	copied, err := sql.Open("sqlite", "file:"+path+".v1")
 	if err != nil {

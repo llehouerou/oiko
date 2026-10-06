@@ -14,12 +14,16 @@ import (
 	"github.com/llehouerou/oiko/internal/home"
 )
 
-// cameras is a Bridge with cameras, counting the Pictures asked of it.
+// cameras is a Bridge with cameras, counting the Pictures asked of it. Its
+// live video is at url.
 type cameras struct {
 	nopBridge
 	asked atomic.Int32
 	err   error
+	url   string
 }
+
+func (c *cameras) Stream(context.Context, string, string) (string, error) { return c.url, c.err }
 
 var taken = time.Date(2026, 10, 1, 8, 30, 0, 0, time.UTC)
 

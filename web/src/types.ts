@@ -116,6 +116,14 @@ export interface CommandRecord extends CommandState {
   time: string
 }
 
+// Mirrors history.LiveView: who watched a camera, from start to end.
+export interface LiveView {
+  target: Target
+  origin: Origin
+  start: string
+  end: string
+}
+
 // Mirrors home.RunEnd.
 export interface RunEnd {
   automation: string

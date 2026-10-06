@@ -55,6 +55,13 @@ type Cameras interface {
 	// camera, which a Picture is read for every few minutes. Oiko keeps it in
 	// memory only, for a minute at most.
 	Picture(ctx context.Context, address, function string) (Picture, error)
+	// Stream returns the URL of the live video of camera Function function
+	// of the Device at address, which Oiko reads at once, for as long as
+	// anyone watches it, sharing it among them: rtsp://, rtsps://, or
+	// rtspx:// for RTSP over TLS whose certificate is not verified. It may be
+	// new on each call, or the same every time. Oiko plays H.264 video and
+	// AAC audio, without transcoding them.
+	Stream(ctx context.Context, address, function string) (string, error)
 }
 
 // Picture is a camera's latest still image.

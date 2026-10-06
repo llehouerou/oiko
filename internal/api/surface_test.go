@@ -16,7 +16,7 @@ import (
 func TestEveryResponseCarriesTheSecurityHeaders(t *testing.T) {
 	_, do := server(t)
 	want := map[string]string{
-		"Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; " +
+		"Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self' blob:; font-src 'self'; " +
 			"connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
 		"X-Content-Type-Options":       "nosniff",
 		"Referrer-Policy":              "no-referrer",
@@ -41,7 +41,7 @@ func TestEveryResponseCarriesTheSecurityHeaders(t *testing.T) {
 			}
 		}
 		p := resp.Header.Get("Permissions-Policy")
-		for _, feature := range []string{"camera=()", "geolocation=()", "microphone=()", "web-share=(self)", "clipboard-write=(self)"} {
+		for _, feature := range []string{"camera=()", "geolocation=()", "microphone=()", "autoplay=(self)", "web-share=(self)", "clipboard-write=(self)"} {
 			if !strings.Contains(p, feature) {
 				t.Errorf("%s: Permissions-Policy = %q, want %s", c.path, p, feature)
 			}

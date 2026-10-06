@@ -53,6 +53,9 @@ type Answer struct {
 	// Targets of the Series, and the Runs their Values or Events triggered.
 	Commands []home.CommandRecord `json:"commands,omitempty"`
 	Runs     []home.RunEnd        `json:"runs,omitempty"`
+	// With Markers, the Live views over the range of the cameras of the
+	// Devices of the Series, the earliest first.
+	LiveViews []LiveView `json:"liveViews,omitempty"`
 }
 
 // Raw is a point as recorded, or the Value of a bucket: an enum's state held
@@ -170,6 +173,9 @@ func (s *Store) points(q Query, now int64) (Answer, error) {
 		if a.Commands, a.Runs, err = s.markers(q); err != nil {
 			return Answer{}, err
 		}
+		if a.LiveViews, err = s.liveViews(q); err != nil {
+			return Answer{}, err
+		}
 	}
 	return a, nil
 }
@@ -202,6 +208,46 @@ func (s *Store) markers(q Query) ([]home.CommandRecord, []home.RunEnd, error) {
 	rs, err := runs(s.db.Query(`SELECT trace FROM runs WHERE time BETWEEN ? AND ? AND trigger_target IN (`+in+`) ORDER BY time`, args...))
 	return cs, rs, err
 }
+
+// liveViews reads the Live views over q's range of the cameras of the
+// Devices of q's Series.
+func (s *Store) liveViews(q Query) ([]LiveView, error) {
+	args := []any{q.To.UnixNano(), q.From.UnixNano()}
+	seen := map[home.Target]bool{}
+	for _, x := range q.Series {
+		if d := x.Ref.Target.Device(); d != "" && !seen[home.TargetDevice(d, "")] {
+			seen[home.TargetDevice(d, "")] = true
+			args = append(args, home.TargetDevice(d, "").Key())
+		}
+	}
+	if len(seen) == 0 {
+		return nil, nil
+	}
+	in := strings.TrimPrefix(strings.Repeat(",?", len(seen)), ",")
+	rows, err := s.db.Query(`SELECT target, start, "end", origin FROM live_views WHERE start <= ? AND "end" >= ? AND device IN (`+in+`) ORDER BY start`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var vs []LiveView
+	for rows.Next() {
+		var target, origin string
+		var start, end int64
+		if err := rows.Scan(&target, &start, &end, &origin); err != nil {
+			return nil, err
+		}
+		v := LiveView{Start: time.Unix(0, start), End: time.Unix(0, end)}
+		if v.Target, err = home.ParseTarget(target); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(origin), &v.Origin); err != nil {
+			return nil, err
+		}
+		vs = append(vs, v)
+	}
+	return vs, rows.Err()
+}
+
 func key(r home.Ref) seriesKey {
 	if r.Capability == "" {
 		return seriesKey{availabilityOf(r.Target).Key(), ""}

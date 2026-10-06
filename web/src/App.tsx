@@ -45,6 +45,7 @@ import {
   mdiAlarmLight,
   mdiAlarmLightOutline,
   mdiGestureTapButton,
+  mdiPlay,
   mdiPowerPlug,
   mdiPowerPlugOutline,
   mdiFlag,
@@ -66,6 +67,7 @@ import { dashboard, type DashboardTile, type TargetTile } from './dashboard'
 import { maxColumns, maxRows, move, placements, reflow, resize, rows, stored, type Arranged, type Place } from './layout'
 import { AppBar, ArrangeSetting, ChartsSetting, CreateButton } from './AppBar'
 import { ReleaseBanner } from './About'
+import { LiveViewer } from './LiveViewer'
 import { Setup } from './Setup'
 import { SignIn } from './SignIn'
 import { Programs } from './Programs'
@@ -1379,22 +1381,32 @@ function usePicture(target: Target) {
 }
 
 // A camera's Tile: its Picture and how old it is, its Device's state beside its name; a camera
-// drawn instead until it has a Picture, or once it cannot load it.
+// drawn instead until it has a Picture, or once it cannot load it. A tap on it opens its Live view,
+// never by itself: watching may wake a camera on battery (ADR 0036).
 function CameraTile({ target, state, name, note, badges, dimmed, onOpen }: SensorProps & { target: Target; state?: Part }) {
   const picture = usePicture(target)
   const [broken, setBroken] = useState<string>() // the src that failed to load
+  const [live, setLive] = useState(false)
   const now = useNow()
   const shown = picture && picture.src !== broken ? picture : undefined
   const status = [shown ? shown.taken && age(shown.taken, now) : picture === undefined ? 'loading' : 'no picture', note].filter(Boolean).join(' · ')
   return (
     <section className={`space-y-1.5 rounded-xl bg-neutral-900 p-1.5 ${dimmed ? 'opacity-50' : ''}`}>
-      <div className="relative aspect-video overflow-hidden rounded-lg bg-neutral-800">
+      <button
+        onClick={() => setLive(true)}
+        aria-label={`Watch ${name} live`}
+        className="group relative block aspect-video w-full overflow-hidden rounded-lg bg-neutral-800"
+      >
         {shown ? (
           <img src={shown.src} alt={`${name}, its latest picture`} onError={() => setBroken(shown.src)} className="size-full object-cover" />
         ) : (
           <Svg path={mdiCctv} className="absolute inset-0 m-auto size-10 text-neutral-600" />
         )}
-      </div>
+        <span className="absolute right-2 bottom-2 rounded-full bg-black/60 p-1.5 text-white group-hover:bg-amber-500 group-hover:text-black">
+          <Svg path={mdiPlay} className="size-5" />
+        </span>
+      </button>
+      {live && createPortal(<LiveViewer target={target} name={name} onClose={() => setLive(false)} />, document.body)}
       <div className="flex items-center gap-3 pl-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-xs">
