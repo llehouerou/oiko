@@ -71,9 +71,11 @@ func TestEachPersonKeepsTheirOwnDashboardsAndNothingElseDoes(t *testing.T) {
 func TestAPersonsDashboardsReachEachOfTheirStreamsAndOnlyTheirs(t *testing.T) {
 	as := identities(t)
 	bob, again, carol, kiosk := stream(t, as["Bob"]), stream(t, as["Bob"]), stream(t, as["Carol"]), stream(t, as["Kiosk"])
-	for _, msgs := range []<-chan map[string]any{bob, again, carol, kiosk} {
-		if ns := names(next(t, msgs, "snapshot")); ns != nil {
-			t.Fatalf("before any, a snapshot has %v", ns)
+	// Before any, a Person's snapshot has none, and a Kiosk's no place for them.
+	for name, msgs := range map[string]<-chan map[string]any{"Bob's": bob, "Bob's other": again, "Carol's": carol, "the Kiosk's": kiosk} {
+		ds, has := next(t, msgs, "snapshot")["dashboards"]
+		if want := name != "the Kiosk's"; has != want || has && len(ds.([]any)) != 0 {
+			t.Fatalf("%s snapshot before any: %v %v", name, has, ds)
 		}
 	}
 

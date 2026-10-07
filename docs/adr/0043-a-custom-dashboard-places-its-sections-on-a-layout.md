@@ -15,6 +15,7 @@ The grid of ADR 0015 is used at two levels of a custom Dashboard. Each own Secti
 
 - One grid model, one check (inside the columns, no overlap, each occupant once) and one editor serve an Area's Tiles, an own Section's Tiles and a Dashboard's Sections.
 - The order of a custom Dashboard's Sections is its Layout's reading order: it is what a narrow screen shows, top to bottom.
+- On a Dashboard's Layout an Area's Section is named by its Area, and an own Section by an id of its own, which Oiko gives it on its first save and keeps after: moved or renamed, it stays the same occupant, and the fold a browser keeps for it stays.
 - An own Section a viewer cannot see, being empty for them (ADR 0041), leaves its cells empty: everyone else keeps the place it was arranged in.
 - A Section folded shrinks to its header; its row shrinks with it unless another Section keeps it tall.
 - Duplicating the built-in Dashboard lays its Sections out two per row, in their order, for the copy's owner to rearrange.

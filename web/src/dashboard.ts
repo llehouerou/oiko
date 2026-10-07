@@ -2,7 +2,7 @@ import { roles } from './roles'
 import { aggregateTarget, catalogue, deviceTarget, flagTarget, fnOf, parseTarget } from './targets'
 import { aggregateSummary, memberLeaves, tileCaps, tileShape, titled, type Shape } from './tiles'
 import { arrange, defaultColumns, type Place } from './layout'
-import type { Aggregate, Area, AutomationStatus, Capability, CustomDashboard, CustomSection, Device, Flag, Fn, PlacedTile, Spot, Target } from './types'
+import type { Aggregate, Area, AutomationStatus, Capability, CustomDashboard, CustomSection, Device, Flag, Fn, PlacedTile, Target } from './types'
 
 // A Target's Tile, resolved once: everything about it that does not change while it is shown.
 // Its Availability, Values and Commands are read live.
@@ -107,9 +107,7 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
       .filter((a) => !a.derived && (a.area ?? '') === id)
       .map((a) => ({ key: aggregateTarget(a.id), label: a.name, kind: 'target' as const, ...aggregateTile(a) })),
     ...devices.flatMap((device) => {
-      const fns = (device.functions ?? []).filter(
-        (fn) => (fn.area ?? device.area ?? '') === id && deviceTarget(device.id, fn.key) !== lone && (tileCaps(fn).length > 0 || fn.kind === 'camera'),
-      )
+      const fns = (device.functions ?? []).filter((fn) => (fn.area ?? device.area ?? '') === id && deviceTarget(device.id, fn.key) !== lone && hasTile(fn))
       return fns.length ? [{ key: deviceTarget(device.id), label: device.name, kind: 'target' as const, ...deviceTile(device, fns) }] : []
     }),
   ]
@@ -148,7 +146,7 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
       return devices
         .filter((d) => d.id === p.id)
         .flatMap((d) => {
-          const fns = (d.functions ?? []).filter((fn) => tileCaps(fn).length > 0 || fn.kind === 'camera')
+          const fns = (d.functions ?? []).filter(hasTile)
           return fns.length ? tile(d.name, deviceTile(d, fns)) : []
         })
     }
@@ -187,7 +185,10 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
 }
 
 // The place of occupant key at spot, on a Layout.
-const at = (key: string, { col, row, width, height }: Spot) => ({ key, col, row, width, height })
+const at = (key: string, { col, row, width, height }: Place) => ({ key, col, row, width, height })
+
+// Whether a Function shows on a Device's Tile: a camera has a Tile though it has no Capability.
+const hasTile = (fn: Fn) => tileCaps(fn).length > 0 || fn.kind === 'camera'
 
 // The custom Dashboard hash opens, #dashboard/<id>, if it is one of dashboards; undefined for the
 // built-in one, which any other address opens.

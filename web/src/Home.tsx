@@ -7,7 +7,7 @@ import { AppBar, ArrangeSetting, ChartsSetting, CreateButton } from './AppBar'
 import { ReleaseBanner } from './About'
 import { ChartsShown } from './MiniChart'
 import { Svg } from './icons'
-import { CustomDashboard, Dashboard } from './Dashboard'
+import { CustomDashboardView, Dashboard } from './Dashboard'
 import { DashboardMenu } from './DashboardMenu'
 import { FlagPill } from './Tiles'
 import { AggregatePanel, AreaPanel, DevicePanel, FlagPanel } from './HomePanels'
@@ -54,9 +54,10 @@ export function Home({ hash }: { hash: string }) {
   const home = dashboard(devices, aggregates, flags, areas, automations)
   const { pills, sections } = home
   const current = shown(hash, dashboards) // undefined: the built-in Dashboard
-  // Whether an Admin is arranging the built-in Dashboard: the Areas' order and their Layouts.
-  const [arranging, setArranging] = useState(false)
-  const arrange = arranging && !current
+  // The address an Admin arranges the built-in Dashboard at (the Areas' order and their Layouts),
+  // if they do: leaving it ends arranging.
+  const [arranging, setArranging] = useState<string | null>(null)
+  const arrange = arranging === hash && !current
   return (
     <>
       <AppBar
@@ -66,7 +67,7 @@ export function Home({ hash }: { hash: string }) {
           member && (
             <>
               <ChartsSetting charts={charts} onCharts={toggleCharts} />
-              {admin && !current && <ArrangeSetting onArrange={() => setArranging(true)} />}
+              {admin && !current && <ArrangeSetting onArrange={() => setArranging(hash)} />}
             </>
           )
         }
@@ -82,7 +83,7 @@ export function Home({ hash }: { hash: string }) {
         )}
         <ChartsShown value={charts}>
           {current ? (
-            <CustomDashboard
+            <CustomDashboardView
               id={current.id}
               columns={current.columns}
               sections={home.custom(current)}
@@ -96,7 +97,7 @@ export function Home({ hash }: { hash: string }) {
       </main>
       {arrange ? (
         <button
-          onClick={() => setArranging(false)}
+          onClick={() => setArranging(null)}
           className="fixed right-6 bottom-6 z-10 flex h-14 items-center gap-2 rounded-2xl bg-amber-400 px-5 font-medium text-neutral-950 shadow-xl shadow-amber-500/20 hover:bg-amber-300"
         >
           <Svg path={mdiCheck} className="size-6" />

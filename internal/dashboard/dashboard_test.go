@@ -118,7 +118,7 @@ func TestAPersonCreatesSavesAndDeletesTheirOwn(t *testing.T) {
 	}
 
 	// Another Person, an Admin included, neither saves nor deletes it.
-	if err := s.Save(bob, id, saved); !errors.Is(err, access.ErrRefused) {
+	if err := s.Save(bob, id, Dashboard{}); !errors.Is(err, access.ErrRefused) { // refused before told what is invalid
 		t.Errorf("Bob saving it: %v", err)
 	}
 	if err := s.Delete(bob, id); !errors.Is(err, access.ErrRefused) {
@@ -165,6 +165,8 @@ func TestASaveIsRefusedUnlessItHoldsTogether(t *testing.T) {
 		"a Section name long":   `{"name": "E", "sections": [{"name": "` + strings.Repeat("x", 101) + `", "columns": 1, "col": 0, "row": 0, "width": 1}]}`,
 		"no columns of its own": `{"name": "E", "sections": [{"col": 0, "row": 0, "width": 1}]}`,
 		"a Tile twice":          `{"name": "E", "sections": [{"columns": 2, "col": 0, "row": 0, "width": 1, "tiles": [{` + lamp + `, "col": 0, "row": 0, "width": 1}, {` + lamp + `, "col": 1, "row": 0, "width": 1}]}]}`,
+		"overlapping Tiles":     `{"name": "E", "sections": [{"columns": 2, "col": 0, "row": 0, "width": 1, "tiles": [{` + lamp + `, "col": 0, "row": 0, "width": 2}, {"automation": "night", "col": 1, "row": 0, "width": 1}]}]}`,
+		"too many of its own":   `{"name": "E", "sections": [{"columns": 7, "col": 0, "row": 0, "width": 1}]}`,
 		"a Tile outside":        `{"name": "E", "sections": [{"columns": 1, "col": 0, "row": 0, "width": 1, "tiles": [{` + lamp + `, "col": 0, "row": 0, "width": 2}]}]}`,
 		"a Tile of nothing":     `{"name": "E", "sections": [{"columns": 1, "col": 0, "row": 0, "width": 1, "tiles": [{"col": 0, "row": 0, "width": 1}]}]}`,
 		"a Tile of two things":  `{"name": "E", "sections": [{"columns": 1, "col": 0, "row": 0, "width": 1, "tiles": [{` + lamp + `, "automation": "night", "col": 0, "row": 0, "width": 1}]}]}`,

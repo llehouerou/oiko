@@ -354,7 +354,7 @@ func updates(h *home.Home, acc *access.Store, dash *dashboard.Store, releases *r
 			Kind string `json:"kind"`
 			home.Snapshot
 			Releases   []release.Status      `json:"releases"`
-			Dashboards []dashboard.Dashboard `json:"dashboards,omitempty"`
+			Dashboards []dashboard.Dashboard `json:"dashboards,omitzero"` // none for a Kiosk or a Program, [] for a Person without any
 		}{"snapshot", snap, statuses, dashboards})) {
 			return
 		}

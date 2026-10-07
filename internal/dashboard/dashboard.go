@@ -87,6 +87,10 @@ func Open(dir string, h *home.Home) (*Store, error) {
 	if err := store.Load(s.file, Format, &s.doc); err != nil {
 		return nil, fmt.Errorf("loading %s: %w", s.file, err)
 	}
+	// Held across Follow: an Update announced as it returns waits for the
+	// snapshot to be kept first, rather than be overwritten by it.
+	s.kmu.Lock()
+	defer s.kmu.Unlock()
 	snap, _ := h.Follow(s.deliver)
 	s.known = known{snap.Devices, snap.Aggregates, snap.Flags, snap.Areas, snap.Automations}
 	return s, nil
@@ -152,14 +156,13 @@ func (s *Store) Save(by access.Identity, id string, d Dashboard) error {
 	if err := person(by); err != nil {
 		return err
 	}
-	d, err := s.valid(d)
-	if err != nil {
-		return err
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	i, err := s.editable(by, id)
 	if err != nil {
+		return err
+	}
+	if d, err = s.valid(d); err != nil {
 		return err
 	}
 	d.ID, d.Owner = id, s.doc.Dashboards[i].Owner
@@ -284,7 +287,10 @@ func (k known) own(sec Section) (Section, error) {
 	}
 	sec.Tiles = tiles
 	return sec, home.CheckLayout(sec.Columns, sec.Tiles, func(t Tile) (string, home.Place) {
-		return t.Target.Key() + t.Automation, t.Place
+		if t.Automation != "" {
+			return "automation " + t.Automation, t.Place
+		}
+		return t.Target.Key(), t.Place
 	})
 }
 

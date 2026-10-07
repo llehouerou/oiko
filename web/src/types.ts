@@ -1,5 +1,7 @@
 // Mirrors the JSON of internal/home.
 
+import type { Place } from './layout'
+
 export type Availability = 'online' | 'offline' | 'unknown'
 
 export interface Capability {
@@ -249,9 +251,6 @@ export interface Dashboards {
   dashboards: CustomDashboard[]
 }
 
-// Where a Section sits on a Dashboard's Layout, or a Tile on an own Section's.
-export type Spot = Omit<Placement, 'tile'>
-
 // Mirrors dashboard.Dashboard: a custom Dashboard, its Sections on a Layout of its columns.
 export interface CustomDashboard {
   id: string
@@ -263,10 +262,10 @@ export interface CustomDashboard {
 
 // An Area's Section, by its id, or one of the Dashboard's own: an optional Name and Icon, and
 // its Tiles on a Layout of its columns.
-export type CustomSection = Spot & ({ area: string } | { area?: undefined; id: string; name?: string; icon?: string; columns: number; tiles?: PlacedTile[] })
+export type CustomSection = Place & ({ area: string } | { area?: undefined; id: string; name?: string; icon?: string; columns: number; tiles?: PlacedTile[] })
 
 // A Tile placed in an own Section: a Target's or an Automation's.
-export type PlacedTile = Spot & ({ target: Target; automation?: undefined } | { target?: undefined; automation: string })
+export type PlacedTile = Place & ({ target: Target; automation?: undefined } | { target?: undefined; automation: string })
 
 export interface Update {
   seq: number
