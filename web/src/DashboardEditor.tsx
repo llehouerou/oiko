@@ -1,45 +1,42 @@
 import { useState, type ReactNode } from 'react'
-import { DndContext, PointerSensor, pointerWithin, useDraggable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
-import { mdiCheck, mdiDeleteOutline, mdiDrag, mdiPlus, mdiShapeOutline, mdiViewColumnOutline, mdiViewGridOutline } from '@mdi/js'
+import { DndContext, PointerSensor, useDraggable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { mdiCheck, mdiDeleteOutline, mdiDrag, mdiMagnify, mdiPlus, mdiShapeOutline, mdiViewColumnOutline, mdiViewGridOutline } from '@mdi/js'
 import { edit } from './store'
-import type { Area, CustomDashboard } from './types'
-import type { DashboardSection } from './dashboard'
-import {
-  addSection,
-  moveSection,
-  nameSection,
-  removeSection,
-  resizeSection,
-  setDashboardColumns,
-  setSectionColumns,
-  type SectionContent,
-} from './editDashboard'
-import { cellsOf, defaultColumns, maxColumns, rows } from './layout'
+import type { Area, CustomDashboard, TileRef } from './types'
+import type { DashboardSection, TileChoice } from './dashboard'
+import { addSection, layTiles, moveSection, nameSection, removeSection, resizeSection, setDashboardColumns, type SectionContent } from './editDashboard'
+import { cellsOf, defaultColumns, maxColumns, move, placements, reflow, rows, type Arranged } from './layout'
 import { confirm } from './confirm'
 import { AreaIcon, AreaIconPicker, Svg } from './icons'
 import { Panel } from './Panel'
-import { Cell, cells, SizeSteppers, Stepper } from './Arrange'
-import { Section } from './Section'
+import { ArrangedGrid, Cell, cells, landing, SizeSteppers, Stepper } from './Arrange'
+import { Section, tileNodes } from './Section'
 
 // A custom Dashboard turned into its editor, in place: everything live and at full size. A bar on
 // top holds its Name, its columns, Delete and Done; every free cell of its grid has a + adding a
 // Section there; each Section has a bar that drags it to another cell, steps its size and removes
-// it, and on an own Section edits its Name, Icon and columns. An Area's Section shows the Area
-// dimmed: it follows the Area, arranged on Home. Each change saves the whole Dashboard at once.
+// it, and on an own Section edits its Name, Icon and columns. An own Section's Tiles are arranged
+// as an Area's are on Home, a + in each free cell picking one to add. An Area's Section shows the
+// Area dimmed: it follows the Area, arranged on Home. Each change saves the whole Dashboard at once.
 export function DashboardEditor({
   dashboard: d,
   sections,
   areas,
+  choices,
   onDone,
   onResult,
 }: {
   dashboard: CustomDashboard
   sections: DashboardSection[] // d's, as custom draws them while editing
   areas: Area[]
+  choices: (query: string, taken: string[]) => { area?: Area; tiles: TileChoice[] }[] // the home's Tiles
   onDone: () => void
   onResult: (r: { text: string; error?: boolean }) => void
 }) {
   const [adding, setAdding] = useState<{ col: number; row: number } | null>(null)
+  // Where a Tile is being added: an own Section's key, and a cell of its grid.
+  const [addingTile, setAddingTile] = useState<{ section: string; col: number; row: number } | null>(null)
+  const tileSection = addingTile && sections.find((s) => s.key === addingTile.section)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
   // Whether next is saved; a refusal is told.
   const save = async (next: CustomDashboard) => {
@@ -54,9 +51,16 @@ export function DashboardEditor({
     onDone()
     location.hash = '#'
   }
+  // own Section s's Tiles in columns, where layout places them, added among them if given.
+  const lay = (s: DashboardSection, columns: number, layout: Arranged[], added?: TileRef) => save(layTiles(d, s.key, columns, layout, added))
+  // A dragged Section takes the cell it lands on; a dragged Tile, the cell of its Section it lands on.
   const dropped = ({ active, over }: DragEndEvent) => {
+    const from = active.data.current
     const to = over?.data.current
-    if (to) save(moveSection(d, String(active.data.current?.key), to.col, to.row))
+    if (!from || !to) return
+    if (from.type === 'section') return save(moveSection(d, from.key, to.col, to.row))
+    const s = sections.find((s) => s.key === from.grid)
+    if (s?.columns) lay(s, s.columns, move(placements(s.tiles), from.tile, to.col, to.row, s.columns))
   }
   // every cell, one row more than the Sections take, for one to be added or land in
   const height = Math.max(0, ...sections.map((s) => s.place!.row + rows(s.place!))) + 1
@@ -90,7 +94,7 @@ export function DashboardEditor({
           Done
         </button>
       </div>
-      <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={dropped}>
+      <DndContext sensors={sensors} collisionDetection={landing} onDragEnd={dropped}>
         <div className="grid auto-rows-[minmax(5rem,auto)] items-start gap-6" style={{ gridTemplateColumns: `repeat(${d.columns}, minmax(0, 1fr))` }}>
           {[...Array(height * d.columns).keys()].map((i) => {
             const col = i % d.columns
@@ -117,9 +121,21 @@ export function DashboardEditor({
               onSize={(size) => save(resizeSection(d, s.key, size))}
               onRemove={() => save(removeSection(d, s.key))}
               onName={(change) => save(nameSection(d, s.key, change))}
-              onColumns={(n) => save(setSectionColumns(d, s.key, n))}
+              onColumns={(n) => lay(s, n, reflow(placements(s.tiles), n))}
             >
-              <Section section={s} title={s.area?.name ?? s.own?.name} collapsed={false} onCollapse={() => {}} onResult={onResult} />
+              {s.own ? (
+                <div className="px-1">
+                  <ArrangedGrid
+                    grid={s.key}
+                    columns={s.columns!}
+                    tiles={tileNodes(s.tiles, onResult)}
+                    onLayout={(n, layout) => lay(s, n, layout)}
+                    onAdd={(col, row) => setAddingTile({ section: s.key, col, row })}
+                  />
+                </div>
+              ) : (
+                <Section section={s} title={s.area?.name} collapsed={false} onCollapse={() => {}} onResult={onResult} />
+              )}
             </EditedSection>
           ))}
         </div>
@@ -130,6 +146,26 @@ export function DashboardEditor({
           present={d.sections.flatMap((s) => (s.area !== undefined ? [s.area] : []))}
           onAdd={(s) => (setAdding(null), save(addSection(d, s, adding.col, adding.row)))}
           onClose={() => setAdding(null)}
+        />
+      )}
+      {addingTile && tileSection && (
+        <AddTile
+          choices={(query) =>
+            choices(
+              query,
+              tileSection.tiles.map((t) => t.key),
+            )
+          }
+          onAdd={(c) => {
+            setAddingTile(null)
+            lay(
+              tileSection,
+              tileSection.columns!,
+              [...placements(tileSection.tiles), { key: c.key, col: addingTile.col, row: addingTile.row, width: 1 }],
+              c.tile,
+            )
+          }}
+          onClose={() => setAddingTile(null)}
         />
       )}
     </div>
@@ -156,7 +192,7 @@ function EditedSection({
   children: ReactNode
 }) {
   const [picking, setPicking] = useState(false)
-  const { setNodeRef, listeners, attributes, transform, isDragging } = useDraggable({ id: `edit:${s.key}`, data: { key: s.key } })
+  const { setNodeRef, listeners, attributes, transform, isDragging } = useDraggable({ id: `edit:${s.key}`, data: { type: 'section', key: s.key } })
   const place = s.place!
   const label = s.area?.name ?? (s.own?.name || 'Section')
   return (
@@ -186,7 +222,7 @@ function EditedSection({
               {s.own.icon ? <AreaIcon icon={s.own.icon} className="size-5" /> : <Svg path={mdiShapeOutline} className="size-5 text-neutral-500" />}
             </button>
             <NameInput name={s.own.name ?? ''} label={`${label} name`} placeholder="No name" onName={(name) => onName({ name })} className="min-w-32 flex-1" />
-            <Stepper icon={mdiViewGridOutline} value={s.columns ?? defaultColumns} max={maxColumns} label="columns of tiles" onChange={onColumns} />
+            <Stepper icon={mdiViewGridOutline} value={s.columns!} max={maxColumns} label="columns of tiles" onChange={onColumns} />
           </>
         )}
         <span className="ml-auto flex flex-wrap gap-1">
@@ -271,6 +307,58 @@ function AddSection({ areas, present, onAdd, onClose }: { areas: Area[]; present
             {a.name}
           </button>
         ))}
+      </div>
+    </Panel>
+  )
+}
+
+// Asks which Tile to add in a cell of an own Section: a search over the home's, by Area, those the
+// Section holds greyed out.
+function AddTile({
+  choices,
+  onAdd,
+  onClose,
+}: {
+  choices: (query: string) => { area?: Area; tiles: TileChoice[] }[]
+  onAdd: (c: TileChoice) => void
+  onClose: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const groups = choices(query)
+  return (
+    <Panel title={<h2 className="text-lg font-medium">Add a tile</h2>} onClose={onClose}>
+      <label className="flex items-center gap-2 rounded-lg bg-neutral-800 px-2.5 py-2 text-sm">
+        <Svg path={mdiMagnify} className="size-5 text-neutral-400" />
+        <input
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search"
+          aria-label="Search tiles"
+          className="min-w-0 flex-1 bg-transparent outline-none"
+        />
+      </label>
+      <div className="mt-2 space-y-1 text-sm">
+        {groups.map((g) => (
+          <section key={g.area?.id ?? ''}>
+            <h3 className="flex items-center gap-2 px-2.5 pt-3 pb-1 text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+              <AreaIcon icon={g.area?.icon} className="size-4" />
+              {g.area?.name ?? 'No area'}
+            </h3>
+            {g.tiles.map((c) => (
+              <button
+                key={c.key}
+                disabled={c.taken}
+                onClick={() => onAdd(c)}
+                className="flex w-full items-baseline gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-neutral-800 disabled:text-neutral-600 disabled:hover:bg-transparent"
+              >
+                <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                <span className="text-xs text-neutral-500">{c.taken ? 'In this section' : c.kind}</span>
+              </button>
+            ))}
+          </section>
+        ))}
+        {!groups.length && <p className="px-2.5 py-2 text-neutral-500">No tile matches.</p>}
       </div>
     </Panel>
   )

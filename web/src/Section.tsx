@@ -4,9 +4,9 @@ import { mdiChevronDown, mdiCogOutline, mdiDrag, mdiGauge } from '@mdi/js'
 import type { Aggregate } from './types'
 import { aggregateTarget, parseTarget } from './targets'
 import { AreaIcon, Svg } from './icons'
-import type { DashboardSection, TargetTile } from './dashboard'
-import { maxColumns, placements, reflow, resize, rows, type Arranged } from './layout'
-import { ArrangedTile, Cell, cells, Stepper, type TileNode } from './Arrange'
+import type { DashboardSection, DashboardTile, TargetTile } from './dashboard'
+import { maxColumns, placements, reflow, type Arranged } from './layout'
+import { ArrangedGrid, cells, Stepper, type TileNode } from './Arrange'
 import { ManualTile, ReadingText, readingIcons, StateText, Tile } from './Tiles'
 
 // The narrowest a column of a Layout gets, in px (14rem), and the gap between two.
@@ -58,13 +58,8 @@ export function Section({
 }) {
   const { columns } = section
   const hidden = section.area?.hidden ?? []
-  // A Tile's ⋯ opens its Device's, Aggregate's or Flag's panel.
-  const opener = (t: TargetTile) => onOpen && ((back?: () => void) => onOpen(parseTarget(t.subject)!.id, back))
   const onSettings = onOpen && section.area && (() => onOpen(section.area!.id))
-  const tiles = section.tiles.map((t): TileNode => ({
-    ...t,
-    node: t.kind === 'manual' ? <ManualTile key={t.key} automation={t.automation} onResult={onResult} /> : <Tile key={t.key} tile={t} onOpen={opener(t)} />,
-  }))
+  const tiles = tileNodes(section.tiles, onResult, onOpen)
   const status = (
     <>
       <Climate aggregates={section.climate} />
@@ -72,7 +67,7 @@ export function Section({
       {section.doors && <AreaState aggregate={section.doors} />}
     </>
   )
-  const bar = section.bar && <Tile tile={section.bar} compact onOpen={opener(section.bar)} />
+  const bar = section.bar && <Tile tile={section.bar} compact onOpen={opener(section.bar, onOpen)} />
   const [showHidden, setShowHidden] = useState(false)
   const [width, measure] = useWidth()
   const area = section.area?.id ?? ''
@@ -158,22 +153,7 @@ export function Section({
       {open && (
         <div ref={measure} className="space-y-3 p-3 empty:hidden">
           {arranging && columns ? (
-            <div className="grid auto-rows-[minmax(3.5rem,auto)] items-start gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-              {/* every cell, one row more than the tiles take, for a tile to land in */}
-              {[...Array((Math.max(0, ...layout.map((p) => p.row + rows(p))) + 1) * columns).keys()].map((i) => (
-                <Cell key={i} grid={area} data={{ type: 'tile', area }} col={i % columns} row={Math.floor(i / columns)} />
-              ))}
-              {tiles.map((t) => (
-                <ArrangedTile
-                  key={t.key}
-                  area={area}
-                  tile={t}
-                  hidden={hidden.includes(t.key)}
-                  columns={columns}
-                  onSize={(size) => arranging.onLayout(columns, resize(layout, t.key, size, columns))}
-                />
-              ))}
-            </div>
+            <ArrangedGrid grid={section.key} columns={columns} tiles={tiles} hidden={hidden} onLayout={arranging.onLayout} />
           ) : visible.length > 0 && grid ? (
             <div className="grid auto-rows-[minmax(3.5rem,auto)] items-start gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
               {visible.map((t) => (
@@ -197,6 +177,22 @@ export function Section({
     </section>
   )
 }
+
+// What a Tile's ⋯ opens: its Device's, Aggregate's or Flag's panel, an Admin's.
+const opener = (t: TargetTile, onOpen?: (id: string, back?: () => void) => void) => onOpen && ((back?: () => void) => onOpen(parseTarget(t.subject)!.id, back))
+
+// tiles drawn: a Tile's ⋯ opens its Device's, Aggregate's or Flag's panel, a Manual trigger's
+// result is told.
+export const tileNodes = (
+  tiles: DashboardTile[],
+  onResult: (r: { text: string; error?: boolean }) => void,
+  onOpen?: (id: string, back?: () => void) => void,
+): TileNode[] =>
+  tiles.map((t) => ({
+    ...t,
+    node:
+      t.kind === 'manual' ? <ManualTile key={t.key} automation={t.automation} onResult={onResult} /> : <Tile key={t.key} tile={t} onOpen={opener(t, onOpen)} />,
+  }))
 
 // An Area's presence or doors in its header: the state of its Aggregate of occupancy or of contacts.
 function AreaState({ aggregate }: { aggregate: Aggregate }) {

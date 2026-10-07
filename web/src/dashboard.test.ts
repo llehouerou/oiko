@@ -212,13 +212,43 @@ test("a custom Dashboard's Area Sections are the built-in Dashboard's, its own S
     'device:relay 001',
     'aggregate:kitchen-light 101',
     'flag:away 011',
-    'bedtime 112',
+    'automation:bedtime 112',
   ])
   // a Device's Tile shows each of its Functions that has one, whatever their Areas
   const relay = own!.tiles[0]!
   expect(relay.kind === 'target' && relay.fns.map((f) => f.target)).toEqual(['device:relay/l1', 'device:relay/l2'])
   // while editing, an own Section with nothing to show is there to edit
   expect(home.custom(evening, true).map((s) => `${s.key} ${s.tiles.length}`)).toEqual(['own:favourites 4', 'area:kitchen 1', 'own:empty 0'])
+})
+
+test("the Tiles to pick for an own Section: the home's, grouped by Area, searched by name, those it holds greyed out", () => {
+  const nothing: Fn = { key: 'config', kind: 'config', capabilities: [{ ...on, category: 'config' }] }
+  const devices = [
+    device('lamp', 'living', fn('light')),
+    device('fan', 'kitchen', fn('switch')),
+    device('config', 'living', nothing),
+    device('radio', undefined, fn('switch')),
+  ]
+  const aggregates: Aggregate[] = [
+    { ...derived('living', 'light', 'device:lamp/light'), name: 'Living room lights' },
+    { id: 'down', name: 'Downstairs', members: [], binary: 'any', numeric: 'mean' },
+  ]
+  const flags = [{ id: 'guest', name: 'Guest', kind: 'flag', area: 'kitchen', capabilities: [{ ...on, key: 'on' }] }]
+  const bedtime: AutomationStatus = { id: 'bedtime', name: 'Bedtime', status: 'enabled', manualTriggers: [{ step: 'go', name: 'Go' }] }
+  const night: AutomationStatus = { id: 'night', name: 'Night', status: 'enabled' } // no Manual trigger: no Tile
+  const areas = [area('living', { name: 'Living room' }), area('office', { name: 'Office' }), area('kitchen', { name: 'Kitchen' })]
+  const home = dashboard(devices, aggregates, flags, areas, [bedtime, night])
+  const short = (groups: ReturnType<typeof home.choices>) =>
+    groups.map((g) => `${g.area?.name ?? '-'}: ${g.tiles.map((t) => `${t.name}${t.taken ? ' (in it)' : ''}`).join(', ')}`)
+  // in the Areas' order, those without one last; a Device without a Tile is not there
+  expect(short(home.choices('', ['device:lamp', 'automation:bedtime']))).toEqual([
+    'Living room: lamp (in it), Living room lights',
+    'Kitchen: fan, Guest',
+    '-: Bedtime (in it), Downstairs, radio',
+  ])
+  expect(short(home.choices(' LI ', []))).toEqual(['Living room: Living room lights'])
+  expect(home.choices('bed', [])[0]!.tiles[0]).toMatchObject({ key: 'automation:bedtime', tile: { automation: 'bedtime' }, kind: 'Automation' })
+  expect(home.choices('guest', [])[0]!.tiles[0]).toMatchObject({ key: 'flag:guest', tile: { target: 'flag:guest' }, kind: 'Flag' })
 })
 
 test("#dashboard/<id> opens one of the Person's own Dashboards; any other address the built-in one", () => {

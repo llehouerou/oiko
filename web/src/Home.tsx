@@ -86,7 +86,14 @@ export function Home({ hash }: { hash: string }) {
         )}
         <ChartsShown value={charts}>
           {current && editing ? (
-            <DashboardEditor dashboard={current} sections={home.custom(current, true)} areas={areas} onDone={() => setEditingId(null)} onResult={setToast} />
+            <DashboardEditor
+              dashboard={current}
+              sections={home.custom(current, true)}
+              areas={areas}
+              choices={home.choices}
+              onDone={() => setEditingId(null)}
+              onResult={setToast}
+            />
           ) : current ? (
             <CustomDashboardView
               id={current.id}

@@ -276,7 +276,8 @@ export interface OwnSection {
 }
 
 // A Tile placed in an own Section: a Target's or an Automation's.
-export type PlacedTile = Place & ({ target: Target; automation?: undefined } | { target?: undefined; automation: string })
+export type PlacedTile = Place & TileRef
+export type TileRef = { target: Target; automation?: undefined } | { target?: undefined; automation: string }
 
 export interface Update {
   seq: number

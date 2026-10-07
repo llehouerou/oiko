@@ -1,25 +1,91 @@
-// Arranging an Area's Layout on the dashboard: the cells a tile may land in, the veil that drags
-// and sizes a tile, and the steppers that count columns and rows.
+// Arranging a Layout of tiles, an Area's on the built-in Dashboard or an own Section's in a
+// Dashboard's editor: the cells a tile may land in, the veil that drags and sizes a tile, and the
+// steppers that count columns and rows.
 
 import type { CSSProperties, ReactNode } from 'react'
 import { pointerWithin, useDraggable, useDroppable, type CollisionDetection } from '@dnd-kit/core'
-import { mdiArrowExpandHorizontal, mdiArrowExpandVertical } from '@mdi/js'
+import { mdiArrowExpandHorizontal, mdiArrowExpandVertical, mdiClose, mdiPlus } from '@mdi/js'
 import { Svg } from './icons'
-import { maxRows, rows, type Place } from './layout'
+import { cellsOf, maxRows, placements, resize, rows, type Arranged, type Place } from './layout'
 
-// A tile of the dashboard, drawn: key is its Target, which an Area may hide, or its Automation's id.
+// A tile of a Dashboard, drawn: key names it on its Layout: its Target, which an Area may hide, or
+// its Automation.
 export interface TileNode {
   key: string
   label: string
-  place?: Place // in an Area's Layout
+  place?: Place // in its Layout
   node: ReactNode
 }
 
-// Where a drag lands: an Area on another Area, a tile in a cell of its own Area's grid.
+// Where a drag lands: an Area on another Area, a Section in a cell of its Dashboard, a tile in a
+// cell of its own grid.
 export const landing: CollisionDetection = (args) => {
   const from = args.active.data.current
-  const fits = (to?: Record<string, unknown>) => to?.type === from?.type && (from?.type === 'area' || to?.area === from?.area)
+  const fits = (to?: Record<string, unknown>) => to?.type === from?.type && (from?.type === 'area' || to?.grid === from?.grid)
   return pointerWithin({ ...args, droppableContainers: args.droppableContainers.filter((d) => fits(d.data.current)) })
+}
+
+// The tiles of grid while arranging, in a grid of columns: every cell, one row more than they take,
+// for a tile to land in, and each tile under its veil, those hidden dimmed. Each change hands the
+// whole Layout to onLayout; a drop is the page's. With onAdd, an own Section's: a free cell has a +
+// adding a tile there, and a tile a button removing it.
+export function ArrangedGrid({
+  grid,
+  columns,
+  tiles,
+  hidden = [],
+  onLayout,
+  onAdd,
+}: {
+  grid: string
+  columns: number
+  tiles: TileNode[]
+  hidden?: string[]
+  onLayout: (columns: number, layout: Arranged[]) => void
+  onAdd?: (col: number, row: number) => void
+}) {
+  const layout = placements(tiles)
+  const taken = new Set(layout.flatMap((p) => cellsOf(p, columns)))
+  const height = Math.max(0, ...layout.map((p) => p.row + rows(p))) + 1
+  return (
+    <div className="grid auto-rows-[minmax(3.5rem,auto)] items-start gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+      {[...Array(height * columns).keys()].map((i) => {
+        const col = i % columns
+        const row = Math.floor(i / columns)
+        return (
+          <Cell key={i} grid={grid} data={{ type: 'tile', grid }} col={col} row={row}>
+            {onAdd && !taken.has(i) && (
+              <button
+                onClick={() => onAdd(col, row)}
+                aria-label={`Add a tile at column ${col + 1}, row ${row + 1}`}
+                className="grid size-9 place-items-center rounded-full text-neutral-500 hover:bg-neutral-800 hover:text-white"
+              >
+                <Svg path={mdiPlus} className="size-5" />
+              </button>
+            )}
+          </Cell>
+        )
+      })}
+      {tiles.map((t) => (
+        <ArrangedTile
+          key={t.key}
+          grid={grid}
+          tile={t}
+          hidden={hidden.includes(t.key)}
+          columns={columns}
+          onSize={(size) => onLayout(columns, resize(layout, t.key, size, columns))}
+          onRemove={
+            onAdd &&
+            (() =>
+              onLayout(
+                columns,
+                layout.filter((p) => p.key !== t.key),
+              ))
+          }
+        />
+      ))}
+    </div>
+  )
 }
 
 // A place's cells in the grid of a Layout. A tile several rows tall fills them, whatever its content.
@@ -45,23 +111,26 @@ export function Cell({ grid, data, col, row, children }: { grid: string; data: R
 }
 
 // A tile while arranging: a veil over it keeps its controls from a tap and drags it to another
-// cell; its width steps from one column to them all, its height from one row to maxRows.
-export function ArrangedTile({
-  area,
+// cell of its grid; its width steps from one column to them all, its height from one row to
+// maxRows; with onRemove, a button in its corner removes it.
+function ArrangedTile({
+  grid,
   tile,
   hidden,
   columns,
   onSize,
+  onRemove,
 }: {
-  area: string
+  grid: string
   tile: TileNode
   hidden: boolean
   columns: number
   onSize: (size: { width?: number; height?: number }) => void
+  onRemove?: () => void
 }) {
   const { setNodeRef, listeners, attributes, transform, isDragging } = useDraggable({
-    id: `tile:${area}:${tile.key}`,
-    data: { type: 'tile', area, tile: tile.key },
+    id: `tile:${grid}:${tile.key}`,
+    data: { type: 'tile', grid, tile: tile.key },
   })
   const place = tile.place!
   return (
@@ -79,6 +148,16 @@ export function ArrangedTile({
       >
         <SizeSteppers place={place} columns={columns} onSize={onSize} className="bg-neutral-950/90 text-xs" />
       </div>
+      {onRemove && (
+        <button
+          onClick={onRemove}
+          aria-label={`Remove ${tile.label}`}
+          title="Remove"
+          className="absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-full bg-neutral-950/90 text-neutral-300 hover:bg-red-950 hover:text-red-300"
+        >
+          <Svg path={mdiClose} className="size-4" />
+        </button>
+      )}
     </div>
   )
 }

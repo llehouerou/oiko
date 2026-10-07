@@ -16,10 +16,24 @@ import type {
   OwnSection,
   PlacedTile,
   Target,
+  TileRef,
 } from './types'
 
 // The key that names a Section on its Dashboard's Layout: an Area's by its Area, an own one by its id.
 export const sectionKey = (s: AreaSection | OwnSection) => (s.area !== undefined ? `area:${s.area}` : `own:${s.id}`)
+
+// The key that names a Tile on its own Section's Layout: its Target, or its Automation's id.
+export const tileKey = (t: TileRef) => t.target ?? `automation:${t.automation}`
+
+// A Tile to pick for an own Section, under its Area: what it is, and whether the Section holds it.
+export interface TileChoice {
+  key: string
+  tile: TileRef
+  name: string
+  kind: 'Device' | 'Aggregate' | 'Flag' | 'Automation'
+  area?: string // its Area's id
+  taken: boolean
+}
 
 // A Target's Tile, resolved once: everything about it that does not change while it is shown.
 // Its Availability, Values and Commands are read live.
@@ -156,9 +170,10 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
   // The Tile of t placed in an own Section, if it shows anything: a Device's shows every one of
   // its Functions that has a Tile, whatever their Areas.
   const placed = (t: PlacedTile): DashboardTile[] => {
-    if (t.automation !== undefined) return manual.filter((a) => a.id === t.automation).map((a) => ({ key: a.id, label: a.name, kind: 'manual', automation: a }))
+    const key = tileKey(t)
+    if (t.automation !== undefined) return manual.filter((a) => a.id === t.automation).map((a) => ({ key, label: a.name, kind: 'manual', automation: a }))
     const p = parseTarget(t.target)
-    const tile = (label: string, tt: TargetTile): DashboardTile[] => [{ key: t.target, label, kind: 'target', ...tt }]
+    const tile = (label: string, tt: TargetTile): DashboardTile[] => [{ key, label, kind: 'target', ...tt }]
     if (p?.kind === 'device' && !p.function) {
       return devices
         .filter((d) => d.id === p.id)
@@ -197,6 +212,33 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
         d.columns,
         shown.map(([c, s]) => at(c.key, s)),
       )
+    },
+    // Every Tile of the home whose name holds query, by Area in their order, then those without
+    // one; taken are the keys of those the Section holds already. A Device has a Tile if any of its
+    // Functions has one; an Aggregate, an Area's included, a Flag and a manual Automation always do.
+    choices: (query: string, taken: string[]) => {
+      const choice = (tile: TileRef, name: string, kind: TileChoice['kind'], area?: string): TileChoice => ({
+        key: tileKey(tile),
+        tile,
+        name,
+        kind,
+        area,
+        taken: taken.includes(tileKey(tile)),
+      })
+      const q = query.trim().toLowerCase()
+      const all = [
+        ...devices.filter((d) => d.functions?.some(hasTile)).map((d) => choice({ target: deviceTarget(d.id) }, d.name, 'Device', d.area)),
+        ...aggregates.map((a) => choice({ target: aggregateTarget(a.id) }, a.name, 'Aggregate', a.area)),
+        ...flags.map((f) => choice({ target: flagTarget(f.id) }, f.name, 'Flag', f.area)),
+        ...manual.map((a) => choice({ automation: a.id }, a.name, 'Automation')),
+      ]
+        .filter((c) => c.name.toLowerCase().includes(q))
+        .sort((a, b) => a.name.localeCompare(b.name))
+      const inArea = (c: TileChoice, area?: Area) => (area ? c.area === area.id : !areas.some((a) => a.id === c.area))
+      return [...areas, undefined].flatMap((area) => {
+        const tiles = all.filter((c) => inArea(c, area))
+        return tiles.length ? [{ area, tiles }] : []
+      })
     },
   }
 }

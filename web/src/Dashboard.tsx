@@ -49,8 +49,8 @@ export function Dashboard({ sections, arranging, onOpen, onResult }: { sections:
       ids.splice(at, 0, from.area)
       return report(await edit('PUT', 'areas', { order: ids }))
     }
-    const s = sections.find((s) => s.area?.id === from.area)
-    if (s?.columns) saveLayout(from.area, s.columns, move(placements(s.tiles), from.tile, to.col, to.row, s.columns))
+    const s = sections.find((s) => s.key === from.grid)
+    if (s?.area && s.columns) saveLayout(s.area.id, s.columns, move(placements(s.tiles), from.tile, to.col, to.row, s.columns))
   }
   return (
     <DndContext sensors={sensors} collisionDetection={landing} onDragEnd={dropped}>
