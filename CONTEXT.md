@@ -14,7 +14,7 @@ _Avoid_: Integration, Adapter, Coordinator, Plugin
 What an Oiko executable is made of: Oiko's version and each type of Bridge compiled into it, built in or added, with the Go package registering it and the module and version that package comes from, as Go records them in the executable. A version is unknown for a development build or a module taken from a directory; an untagged commit has a pseudo-version.
 _Avoid_: recipe, manifest (reserved for a Bridge's), bill of materials
 **Install**:
-How an Oiko runs on its host: from Oiko's NixOS module, in a Docker image, or as a plain binary, as `OIKO_INSTALL` tells (`nixos`, `docker`, unset). It decides how a Release is applied: the dashboard tells what to change for each, and a plain binary rebuilds itself with `oiko upgrade`.
+How an Oiko runs on its host: from Oiko's NixOS module, in a Docker image, or as a plain binary, as `OIKO_INSTALL` tells (`nixos`, `docker`, unset). It decides how a Release is applied: the web client tells what to change for each, and a plain binary rebuilds itself with `oiko upgrade`.
 _Avoid_: deployment, distribution, install method
 **Manifest**:
 What an added type of Bridge's module tells the catalogue about itself, in `oiko-bridge.json` at its root: each type its root package registers, with a description and an example of its section of the configuration. Its versions and the Oiko each needs are not in it: the module proxy and its `go.mod` say them (ADR 0020).
@@ -131,7 +131,7 @@ Step running a Starlark `run(trigger, state)` written by an Admin. It reaches ta
 _Avoid_: Function node, Script
 
 **Manual trigger**:
-Trigger Step started from the dashboard rather than by the home: a button named after the Step, on the dashboard's tile for its Automation, or in the editor. Its Run is like any other, with a Trace; only an enabled Automation, neither broken nor runaway, runs.
+Trigger Step started from the web client rather than by the home: a button named after the Step, on its Automation's Tile, or in the editor. Its Run is like any other, with a Trace; only an enabled Automation, neither broken nor runaway, runs.
 _Avoid_: Scene, Script, inject, button (reserved for a Device's)
 
 **Run**:
@@ -149,18 +149,25 @@ _Avoid_: alert, message, push
 ### Home
 
 **Area**:
-Room or zone of the home, created and named by an Admin, in an order of their choosing. Areas are flat: none contains another. A Device has an Area or none; each of its Functions inherits it unless assigned another one. A Flag or an Aggregate may be assigned one too. Deleting an Area leaves what it held without one. The dashboard shows one section per Area, in their order, and everything without one last.
+Room or zone of the home, created and named by an Admin, in an order of their choosing. Areas are flat: none contains another. A Device has an Area or none; each of its Functions inherits it unless assigned another one. A Flag or an Aggregate may be assigned one too. Deleting an Area leaves what it held without one. The built-in Dashboard shows one section per Area, in their order, and everything without one last.
 
 **Area Aggregate**:
 Aggregate Oiko derives for an Area and an aggregated kind (lights, occupancy, doors, temperature, humidity, CO2) from the Functions of that kind in the Area, under a rule fixed per kind: a room's temperature and humidity are its mean, its CO2 its highest. Its members are never stored, its Name is derived, and it exists while it has at least one member, coming back under the same identity when it has one again.
 _Avoid_: Room, Zone
 
+**Dashboard**:
+A view of the home in the web client, made of Tiles. The built-in one, derived from the Areas, is always complete; the others are custom, shared or personal to one Person (a Guest's included), and an Admin may assign one to a Kiosk, which never edits it. A Dashboard only arranges what its viewer may see: it grants nothing.
+_Avoid_: view, page, board, panel; the dashboard (for the web client as a whole)
+
+**Web client**:
+Oiko's own app in a browser, where a Person or a Kiosk signs in and sees its Dashboards.
+_Avoid_: dashboard (reserved for one view of it), UI, frontend
 **Tile**:
-A Device's, Aggregate's, Flag's or Automation's box on the dashboard; an Automation's holds a button for each of its Manual triggers. A Target's Tile shows at most one control, its main control; every other settable Capability is a setting, behind its ⋯. Its shape (control bar, state, readings or event) follows from its Capabilities' Roles, never from the hardware model; a camera's shows its Picture. Battery and tamper show on it only when something is wrong.
+A Device's, Aggregate's, Flag's or Automation's box on a Dashboard; an Automation's holds a button for each of its Manual triggers. A Target's Tile shows at most one control, its main control; every other settable Capability is a setting, behind its ⋯. Its shape (control bar, state, readings or event) follows from its Capabilities' Roles, never from the hardware model; a camera's shows its Picture. Battery and tamper show on it only when something is wrong.
 _Avoid_: card, widget, entity row
 
 **Layout**:
-Where an Area's Tiles sit on the dashboard: a grid of a few columns, and for each Tile placed, its cell and how many columns and rows it spans, with empty cells wherever they are left. A row is as tall as its tallest Tile; a Tile several rows tall fills them, leaving the cells beside it to others. Until it is set, a Tile is one row tall, a Tile of readings one per line of its cells. A Tile not placed takes the first free cells after the placed ones. A screen too narrow for the columns shows the Tiles one under another in reading order, without the empty cells. Tiles without an Area have no Layout.
+Where an Area's Tiles sit on the built-in Dashboard: a grid of a few columns, and for each Tile placed, its cell and how many columns and rows it spans, with empty cells wherever they are left. A row is as tall as its tallest Tile; a Tile several rows tall fills them, leaving the cells beside it to others. Until it is set, a Tile is one row tall, a Tile of readings one per line of its cells. A Tile not placed takes the first free cells after the placed ones. A screen too narrow for the columns shows the Tiles one under another in reading order, without the empty cells. Tiles without an Area have no Layout.
 _Avoid_: arrangement, position, grid (as the term)
 
 **Name**:
@@ -168,17 +175,17 @@ Display label of a Device, an Aggregate, a Flag, an Area, a Person, a Kiosk or a
 _Avoid_: entity_id, slug as identifier
 
 **Icon**:
-Picture the dashboard shows for a Device or an Aggregate, picked by an Admin among the dashboard's own, known to Oiko by its name only. Without one, a light shows a bulb and an Aggregate of lights several. Like a Name, a label: never a reference, never written back to the Bridge.
+Picture the web client shows for a Device or an Aggregate, picked by an Admin among the web client's own, known to Oiko by its name only. Without one, a light shows a bulb and an Aggregate of lights several. Like a Name, a label: never a reference, never written back to the Bridge.
 _Avoid_: symbol, image
 
 ### Access
 
 **Person**:
-A human known to Oiko: a member of the household or a temporary guest, under an identity that survives a change of Name or of credentials. May sign in to the dashboard, or never do so (a child presence will later track). Created by an Admin, who invites them by creating a Sign-in link for them.
+A human known to Oiko: a member of the household or a temporary guest, under an identity that survives a change of Name or of credentials. May sign in to the web client, or never do so (a child presence will later track). Created by an Admin, who invites them by creating a Sign-in link for them.
 _Avoid_: User, account, member (as the term), occupant, resident
 
 **Kiosk**:
-A shared screen, such as a wall tablet, signed in to the dashboard as itself rather than as a Person. What is done from it is the Kiosk's doing, and it is revoked on its own. Holds at most one Session, which ends only when an Admin signs it out or after 30 days without use; it shows no sign-out and manages nothing, not even its Name.
+A shared screen, such as a wall tablet, signed in to the web client as itself rather than as a Person. What is done from it is the Kiosk's doing, and it is revoked on its own. Holds at most one Session, which ends only when an Admin signs it out or after 30 days without use; it shows no sign-out and manages nothing, not even its Name.
 _Avoid_: panel, display, shared device, household account
 
 **Kiosk pairing**:
@@ -210,7 +217,7 @@ The HTTPS address at which a household reaches its Oiko, through a reverse proxy
 _Avoid_: base URL, external URL, origin, domain
 
 **Session**:
-A browser signed in to the dashboard as a Person or a Kiosk, from sign-in until it is signed out, revoked or expires. One device may hold several, one per browser.
+A browser signed in to the web client as a Person or a Kiosk, from sign-in until it is signed out, revoked or expires. One device may hold several, one per browser.
 _Avoid_: login, signed-in device (as the term), token, cookie
 
 **Token**:
