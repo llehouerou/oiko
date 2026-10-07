@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -49,13 +50,29 @@ func aHome(t *testing.T) living {
 	return living{h, area, home.TargetDevice(snap.Devices[0].ID, ""), home.TargetFlag(flag), string(other)}
 }
 
+// persons are the Persons the tests' Dashboards know at load.
+var persons = []string{"alice", "bob", "carol"}
+
 func opened(t *testing.T, dir string, h *home.Home) *Store {
 	t.Helper()
-	s, err := Open(dir, h)
+	s, err := Open(dir, h, persons)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return s
+}
+
+// list is what Person p's list holds, as "id" or "-id" when hidden.
+func list(s *Store, p access.Identity) []string {
+	var ids []string
+	for _, e := range s.List(p) {
+		if e.Hidden {
+			ids = append(ids, "-"+e.ID)
+		} else {
+			ids = append(ids, e.ID)
+		}
+	}
+	return ids
 }
 
 // parse is a Dashboard from its JSON, as the web client sends it.
@@ -336,5 +353,105 @@ func TestWhatIsGoneIsDroppedOnASave(t *testing.T) {
 	want := []string{l.lamp.Key() + "/light", l.flag.Key(), "aggregate:" + string(l.area) + ".light", "night"}
 	if !reflect.DeepEqual(kept, want) {
 		t.Errorf("its Tiles kept: %v, want %v", kept, want)
+	}
+}
+
+func TestEachPersonOrdersTheDashboardsTheySee(t *testing.T) {
+	s := opened(t, t.TempDir(), home.New(nil))
+	want := func(p access.Identity, ids ...string) {
+		t.Helper()
+		if got := list(s, p); !slices.Equal(got, ids) {
+			t.Errorf("%s's list: %v, want %v", p.Name, got, ids)
+		}
+	}
+	create := func(by access.Identity, d Dashboard) string {
+		t.Helper()
+		id, err := s.Create(by, d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+
+	// A new Person's starts with the built-in Dashboard; one created later
+	// joins the end of every list it belongs to, shown.
+	want(alice, Builtin)
+	shared := create(bob, Dashboard{Shared: true, Name: "Evening"})
+	alices := create(alice, Dashboard{Name: "Alice's"})
+	carols := create(carol, Dashboard{Name: "Carol's"})
+	want(alice, Builtin, shared, alices)
+	want(carol, Builtin, shared, carols)
+
+	// A list saved is reconciled: what Alice does not see dropped, what she
+	// misses appended, shown; she alone is told.
+	_, aliceTold := s.Dashboards(alice)
+	_, carolTold := s.Dashboards(carol)
+	if err := s.SaveList(alice, []Entry{{ID: shared}, {ID: carols}, {ID: "gone"}, {ID: Builtin, Hidden: true}, {ID: shared, Hidden: true}}); err != nil {
+		t.Fatal(err)
+	}
+	want(alice, shared, "-"+Builtin, alices)
+	want(carol, Builtin, shared, carols)
+	select {
+	case <-aliceTold:
+	default:
+		t.Error("saving her list does not tell Alice")
+	}
+	select {
+	case <-carolTold:
+		t.Error("Alice saving her list tells Carol")
+	default:
+	}
+
+	// Only a list with none shown is refused.
+	if err := s.SaveList(alice, []Entry{{ID: shared, Hidden: true}, {ID: Builtin, Hidden: true}, {ID: alices, Hidden: true}}); !errors.Is(err, home.ErrInvalid) {
+		t.Errorf("none shown: %v", err)
+	}
+	if err := s.SaveList(alice, []Entry{{ID: shared}, {ID: Builtin, Hidden: true}, {ID: alices, Hidden: true}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A deletion that leaves none shown shows the first one left again.
+	if err := s.Delete(bob, shared); err != nil {
+		t.Fatal(err)
+	}
+	want(alice, Builtin, "-"+alices)
+
+	// A Kiosk and a Program have no list.
+	for _, by := range []access.Identity{
+		{Kind: access.KioskKind, ID: "hall", Level: access.Member},
+		{Kind: access.ProgramKind, ID: "script", Level: access.Admin},
+	} {
+		if err := s.SaveList(by, []Entry{{ID: Builtin}}); !errors.Is(err, access.ErrRefused) {
+			t.Errorf("a %s saving a list: %v", by.Kind, err)
+		}
+	}
+}
+
+func TestARemovedPersonTakesTheirListWithThem(t *testing.T) {
+	dir := t.TempDir()
+	s := opened(t, dir, home.New(nil))
+	shared, err := s.Create(bob, Dashboard{Shared: true, Name: "Evening"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []access.Identity{alice, carol} {
+		if err := s.SaveList(p, []Entry{{ID: shared}, {ID: Builtin, Hidden: true}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.RemovePerson("alice"); err != nil {
+		t.Fatal(err)
+	}
+	if got := list(opened(t, dir, home.New(nil)), alice); !slices.Equal(got, []string{Builtin, shared}) {
+		t.Errorf("a removed Person's list: %v", got)
+	}
+
+	// Carol, removed while her list was not, loses it on load.
+	again, err := Open(dir, home.New(nil), []string{"bob"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := list(again, carol); !slices.Equal(got, []string{Builtin, shared}) {
+		t.Errorf("a list of a Person no longer known: %v", got)
 	}
 }

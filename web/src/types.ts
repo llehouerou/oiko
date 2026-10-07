@@ -237,6 +237,7 @@ export interface Snapshot {
   automations: AutomationStatus[]
   releases: ReleaseStatus[]
   dashboards?: CustomDashboard[] // those a Person sees, as they see them; none for a Kiosk or a Program
+  list?: ListEntry[] // a Person's
 }
 
 // Sent again each time a check finds something else; not an Update.
@@ -245,10 +246,19 @@ export interface Releases {
   releases: ReleaseStatus[]
 }
 
-// The Dashboards a Person sees, sent again whole each time what they see of them changes; not an Update.
+// The Dashboards a Person sees and their list, sent again whole each time either changes; not an
+// Update.
 export interface Dashboards {
   kind: 'dashboards'
   dashboards: CustomDashboard[]
+  list: ListEntry[]
+}
+
+// Mirrors dashboard.Entry: a Dashboard in a Person's list, by id ('builtin' for the built-in one),
+// and whether they hide it from their menu. The list holds every Dashboard they see, in their order.
+export interface ListEntry {
+  id: string
+  hidden?: true
 }
 
 // Mirrors dashboard.Dashboard: a custom Dashboard, shared (an Admin's to edit, every Person's to

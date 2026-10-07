@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -73,6 +74,15 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	handle(guest, "DELETE /api/dashboards/{id}", func(w http.ResponseWriter, r *http.Request) {
 		by, _ := identity(r)
 		reply(w, dash.Delete(by, r.PathValue("id")))
+	})
+	// A Person's list of the Dashboards they see: their order, the hidden ones
+	// (ADR 0044).
+	handle(guest, "PUT /api/me/dashboards", func(w http.ResponseWriter, r *http.Request) {
+		var list []dashboard.Entry
+		if decode(w, r, &list) {
+			by, _ := identity(r)
+			reply(w, dash.SaveList(by, list))
+		}
 	})
 	// A camera's Picture shows the home as it is now (ADR 0036).
 	handle(guest, "GET /api/picture", picture(cams))
@@ -198,7 +208,7 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	handlePasskeys(mux, acc, public)
 	handlePrograms(mux, acc)
 	handleKiosks(mux, acc, public)
-	handlePersons(mux, acc, public)
+	handlePersons(mux, acc, dash, public)
 	handleSessions(mux, acc)
 	handleAudit(mux, acc, hist)
 
@@ -324,9 +334,10 @@ func respond(w http.ResponseWriter, v any, err error) {
 // press, never who did what (ADR 0031). The Status of each module's Releases
 // comes to an Admin with the snapshot, and again, as a "releases" message,
 // each time it changes (ADR 0023). The Dashboards a Person sees come with the
-// snapshot too, as they see them, and again, whole, as a "dashboards" message,
-// each time what they see of them changes (ADR 0041, 0046): one of them
-// edited, or for a Guest, the Automations it may press. Updates available at
+// snapshot too, as they see them, with their list, and again, whole, as a
+// "dashboards" message, each time what they see of them changes (ADR 0041,
+// 0044, 0046): one of them edited, their list saved, or for a Guest, the
+// Automations it may press. Updates available at
 // once are written together and flushed once. A client that stops reading
 // ends the stream, at the first write that does not go through within
 // streamWriteLimit. It counts as a use of its Session or Token at each
@@ -344,7 +355,8 @@ func updates(h *home.Home, acc *access.Store, dash *dashboard.Store, releases *r
 			statuses, changed = releases.Statuses()
 		}
 		dashboards, rearranged := dash.Dashboards(id)
-		shown := dashboardsFor(id, dashboards, automations)
+		list := dash.List(id) // after the channel: a list saved since closes it
+		shown, listed := dashboardsFor(id, dashboards, automations), list
 		w.Header().Set("Content-Type", "text/event-stream")
 		rc := http.NewResponseController(w)
 		defer rc.SetWriteDeadline(time.Time{}) // the connection may serve other requests
@@ -360,21 +372,23 @@ func updates(h *home.Home, acc *access.Store, dash *dashboard.Store, releases *r
 			home.Snapshot
 			Releases   []release.Status      `json:"releases"`
 			Dashboards []dashboard.Dashboard `json:"dashboards,omitzero"` // none for a Kiosk or a Program, [] for a Person without any
-		}{"snapshot", snap, statuses, shown})) {
+			List       []dashboard.Entry     `json:"list,omitzero"`       // a Person's
+		}{"snapshot", snap, statuses, shown, listed})) {
 			return
 		}
-		// writeDashboards writes the Dashboards as the identity sees them, if that
-		// changed.
+		// writeDashboards writes the Dashboards as the identity sees them, and its
+		// list, if that changed.
 		writeDashboards := func() bool {
 			now := dashboardsFor(id, dashboards, automations)
-			if reflect.DeepEqual(now, shown) {
+			if reflect.DeepEqual(now, shown) && slices.Equal(list, listed) {
 				return true
 			}
-			shown = now
+			shown, listed = now, list
 			return writeEvent(w, struct {
 				Kind       string                `json:"kind"`
 				Dashboards []dashboard.Dashboard `json:"dashboards"`
-			}{"dashboards", shown}) == nil
+				List       []dashboard.Entry     `json:"list"`
+			}{"dashboards", shown, listed}) == nil
 		}
 		keepalive := time.NewTicker(keepaliveEvery)
 		defer keepalive.Stop()
@@ -404,6 +418,7 @@ func updates(h *home.Home, acc *access.Store, dash *dashboard.Store, releases *r
 				}
 			case <-rearranged:
 				dashboards, rearranged = dash.Dashboards(id)
+				list = dash.List(id)
 				if !send(writeDashboards) {
 					return
 				}

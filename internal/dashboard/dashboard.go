@@ -1,11 +1,13 @@
 // Package dashboard keeps the custom Dashboards in dashboards.json (ADR 0040
 // to 0046): shared ones, an Admin's to edit and every Person's to see, and
-// personal ones, their owner's alone. It alone checks what a Dashboard may
-// hold and who may save it; the HTTP layer only names who asks.
+// personal ones, their owner's alone; and each Person's list of those they
+// see. It alone checks what a Dashboard may hold and who may save it; the
+// HTTP layer only names who asks.
 package dashboard
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -75,9 +77,21 @@ type Tile struct {
 	home.Place
 }
 
+// Builtin is the built-in Dashboard's id: the web client derives it, Oiko
+// never stores it, and it is in every list.
+const Builtin = "builtin"
+
+// Entry is a Dashboard in a Person's list (ADR 0044), by id, and whether
+// they hide it from their menu.
+type Entry struct {
+	ID     string `json:"id"`
+	Hidden bool   `json:"hidden,omitempty"`
+}
+
 // document is dashboards.json.
 type document struct {
-	Dashboards []Dashboard `json:"dashboards"`
+	Dashboards []Dashboard        `json:"dashboards"`
+	Lists      map[string][]Entry `json:"lists,omitempty"` // each Person's, as they last saved it, by Person id
 }
 
 // Store holds the custom Dashboards, and follows the home to know what they
@@ -86,7 +100,7 @@ type Store struct {
 	file    string
 	mu      sync.Mutex
 	doc     document
-	changed map[string]chan struct{} // closed when the Dashboards a Person sees change, by Person id
+	changed map[string]chan struct{} // closed when the Dashboards a Person sees or their list change, by Person id
 
 	kmu   sync.Mutex // under Home's lock: never held while calling Home
 	known known
@@ -101,12 +115,17 @@ type known struct {
 	automations []home.AutomationStatus
 }
 
-// Open loads the Dashboards from dir, and follows h.
-func Open(dir string, h *home.Home) (*Store, error) {
+// Open loads the Dashboards from dir, dropping the lists of whoever is not
+// one of persons, by id, and follows h.
+func Open(dir string, h *home.Home, persons []string) (*Store, error) {
 	s := &Store{file: filepath.Join(dir, "dashboards.json"), changed: map[string]chan struct{}{}}
 	if err := store.Load(s.file, Format, &s.doc); err != nil {
 		return nil, fmt.Errorf("loading %s: %w", s.file, err)
 	}
+	if s.doc.Lists == nil {
+		s.doc.Lists = map[string][]Entry{}
+	}
+	maps.DeleteFunc(s.doc.Lists, func(p string, _ []Entry) bool { return !slices.Contains(persons, p) })
 	// Held across Follow: an Update announced as it returns waits for the
 	// snapshot to be kept first, rather than be overwritten by it.
 	s.kmu.Lock()
@@ -135,8 +154,8 @@ func (s *Store) deliver(u home.Update) {
 }
 
 // Dashboards are those by sees, the shared ones and their own, and a channel
-// closed once they change. A Kiosk and a Program have none, and are never
-// told.
+// closed once they or by's list change. A Kiosk and a Program have none, and
+// are never told.
 func (s *Store) Dashboards(by access.Identity) ([]Dashboard, <-chan struct{}) {
 	if by.Kind != access.PersonKind {
 		return nil, nil
@@ -155,6 +174,79 @@ func (s *Store) Dashboards(by access.Identity) ([]Dashboard, <-chan struct{}) {
 		s.changed[by.ID] = ch
 	}
 	return seen, ch
+}
+
+// List is by's list (ADR 0044): the Dashboards by sees, the built-in one
+// included, in their order, those missing from what by saved at the end,
+// shown; the first one shown again if none is. A Kiosk and a Program have
+// none.
+func (s *Store) List(by access.Identity) []Entry {
+	if by.Kind != access.PersonKind {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list, shows := s.reconciled(by.ID, s.doc.Lists[by.ID])
+	if !shows {
+		list[0].Hidden = false
+	}
+	return list
+}
+
+// SaveList saves by's list, reconciled (ADR 0046): what by does not see
+// dropped, what it misses appended, shown; refused if it shows none.
+func (s *Store) SaveList(by access.Identity, list []Entry) error {
+	if err := person(by); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list, shows := s.reconciled(by.ID, list)
+	if !shows {
+		return fmt.Errorf("%w: a list shows at least one dashboard", home.ErrInvalid)
+	}
+	lists := maps.Clone(s.doc.Lists)
+	lists[by.ID] = list
+	return s.save(document{s.doc.Dashboards, lists}, func(p string) bool { return p == by.ID })
+}
+
+// RemovePerson drops removed Person p's list (ADR 0045); the Persons are
+// written first, and a list left behind is dropped on load.
+func (s *Store) RemovePerson(p string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.doc.Lists[p]; !ok {
+		return nil
+	}
+	lists := maps.Clone(s.doc.Lists)
+	delete(lists, p)
+	return s.save(document{s.doc.Dashboards, lists}, func(string) bool { return false })
+}
+
+// reconciled is list as Person p's: each Dashboard p sees once, in list's
+// order, then those list misses, shown, the built-in one first; and whether
+// it shows any. An entry for a Dashboard deleted since is dropped here.
+// Callers hold s.mu.
+func (s *Store) reconciled(p string, list []Entry) ([]Entry, bool) {
+	seen := []string{Builtin}
+	for _, d := range s.doc.Dashboards {
+		if d.seenBy(p) {
+			seen = append(seen, d.ID)
+		}
+	}
+	out := []Entry{}
+	in := func(id string) bool { return slices.ContainsFunc(out, func(e Entry) bool { return e.ID == id }) }
+	for _, e := range list {
+		if slices.Contains(seen, e.ID) && !in(e.ID) {
+			out = append(out, e)
+		}
+	}
+	for _, id := range seen {
+		if !in(id) {
+			out = append(out, Entry{ID: id})
+		}
+	}
+	return out, slices.ContainsFunc(out, func(e Entry) bool { return !e.Hidden })
 }
 
 // Create adds d, shared if it says so, which only an Admin creates, or by's
@@ -244,12 +336,18 @@ func (s *Store) editable(by access.Identity, id string) (int, error) {
 // changed: every Person if it is shared, its owner otherwise. Callers hold
 // s.mu.
 func (s *Store) write(ds []Dashboard, changed Dashboard) error {
-	if err := store.Save(s.file, Format, document{ds}); err != nil {
+	return s.save(document{ds, s.doc.Lists}, changed.seenBy)
+}
+
+// save saves doc, which is then dashboards.json, and tells each Person tell
+// reports true for. Callers hold s.mu.
+func (s *Store) save(doc document, tell func(p string) bool) error {
+	if err := store.Save(s.file, Format, doc); err != nil {
 		return err
 	}
-	s.doc.Dashboards = ds
+	s.doc = doc
 	for p, ch := range s.changed {
-		if changed.seenBy(p) {
+		if tell(p) {
 			close(ch)
 			delete(s.changed, p)
 		}

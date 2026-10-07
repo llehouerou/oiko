@@ -293,8 +293,9 @@ func (s *Store) newLink(id string, by Party, creator string, life time.Duration)
 	return secret, now.Add(life), nil
 }
 
-// HostPersons answers every Person, oldest first, for oiko sign-in-link on
-// Oiko's host to pick whom it signs in.
+// HostPersons answers every Person, oldest first, to Oiko itself: for oiko
+// sign-in-link on Oiko's host to pick whom it signs in, and for the
+// Dashboards to know whose lists to keep.
 func (s *Store) HostPersons() []Person {
 	s.mu.Lock()
 	defer s.mu.Unlock()

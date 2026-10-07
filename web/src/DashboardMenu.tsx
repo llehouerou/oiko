@@ -1,17 +1,22 @@
 // The Home tab of the bar, for a Person: the current Dashboard's Name, opening a menu of the
-// Dashboards they see (the built-in one, the shared ones, then their own) and an entry to create one.
+// Dashboards they show, in their order (ADR 0044), then entries to create one and to edit the list.
 
 import { useRef, useState, type FormEvent } from 'react'
-import { mdiChevronDown, mdiPlus, mdiViewDashboardOutline } from '@mdi/js'
-import type { CustomDashboard } from './types'
+import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { mdiChevronDown, mdiDrag, mdiFormatListBulleted, mdiPlus, mdiViewDashboardOutline } from '@mdi/js'
+import type { CustomDashboard, ListEntry } from './types'
 import { api, useAllows } from './access'
+import { edit } from './store'
+import { Switch } from './controls'
 import { Svg } from './icons'
 import { Panel } from './Panel'
 
-export function DashboardMenu({ current, dashboards }: { current?: CustomDashboard; dashboards: CustomDashboard[] }) {
+export function DashboardMenu({ current, dashboards, list }: { current?: CustomDashboard; dashboards: CustomDashboard[]; list: ListEntry[] }) {
   const button = useRef<HTMLButtonElement>(null)
   const [creating, setCreating] = useState(false)
-  const item = (id: string, name: string) => (
+  const [editing, setEditing] = useState(false)
+  const name = (id: string) => (id === 'builtin' ? 'Home' : (dashboards.find((d) => d.id === id)?.name ?? id))
+  const item = (id: string) => (
     <a
       key={id}
       href={`#dashboard/${id}`}
@@ -19,7 +24,7 @@ export function DashboardMenu({ current, dashboards }: { current?: CustomDashboa
       onClick={() => document.getElementById('dashboards')?.hidePopover()}
       className="block truncate rounded-lg px-2.5 py-2 hover:bg-neutral-800 aria-[current]:text-amber-300"
     >
-      {name}
+      {name(id)}
     </a>
   )
   return (
@@ -48,8 +53,7 @@ export function DashboardMenu({ current, dashboards }: { current?: CustomDashboa
         }}
         className="inset-auto m-0 w-64 rounded-xl border border-neutral-800 bg-neutral-900 p-1.5 text-sm text-neutral-100 shadow-2xl"
       >
-        {item('builtin', 'Home')}
-        {[...dashboards.filter((d) => d.shared), ...dashboards.filter((d) => !d.shared)].map((d) => item(d.id, d.name))}
+        {list.filter((e) => !e.hidden).map((e) => item(e.id))}
         <button
           popoverTarget="dashboards"
           popoverTargetAction="hide"
@@ -59,12 +63,84 @@ export function DashboardMenu({ current, dashboards }: { current?: CustomDashboa
           <Svg path={mdiPlus} className="size-5 text-neutral-400" />
           New dashboard
         </button>
+        <button
+          popoverTarget="dashboards"
+          popoverTargetAction="hide"
+          onClick={() => setEditing(true)}
+          className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-neutral-800"
+        >
+          <Svg path={mdiFormatListBulleted} className="size-5 text-neutral-400" />
+          Edit list
+        </button>
       </div>
       {creating && <NewDashboard onClose={() => setCreating(false)} />}
+      {editing && <EditList list={list} name={name} onClose={() => setEditing(false)} />}
     </>
   )
 }
 
+// The Person's list: every Dashboard they see, in their order, a handle dragging one onto another's
+// place, a switch showing or hiding it in the menu, the hidden ones dimmed; the last one shown stays
+// shown. Each change is saved at once, and comes back through the stream.
+function EditList({ list, name, onClose }: { list: ListEntry[]; name: (id: string) => string; onClose: () => void }) {
+  const [error, setError] = useState<string | null>(null)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
+  const save = async (next: ListEntry[]) => setError(await edit('PUT', 'me/dashboards', next))
+  const shown = list.filter((e) => !e.hidden).length
+  const dropped = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return
+    const next = list.filter((e) => e.id !== active.id)
+    next.splice(
+      list.findIndex((e) => e.id === over.id),
+      0,
+      list.find((e) => e.id === active.id)!,
+    )
+    save(next)
+  }
+  const show = (id: string, on: boolean) => save(list.map((e): ListEntry => (e.id !== id ? e : on ? { id } : { id, hidden: true })))
+  return (
+    <Panel title={<h2 className="text-lg font-medium">Dashboards</h2>} onClose={onClose}>
+      <DndContext sensors={sensors} onDragEnd={dropped}>
+        <ul className="space-y-1 text-sm">
+          {list.map((e) => (
+            <ListRow key={e.id} entry={e} name={name(e.id)} last={!e.hidden && shown === 1} onShow={(on) => show(e.id, on)} />
+          ))}
+        </ul>
+      </DndContext>
+      {error && <p className="text-sm text-red-400">{error}</p>}
+    </Panel>
+  )
+}
+
+function ListRow({ entry, name, last, onShow }: { entry: ListEntry; name: string; last: boolean; onShow: (on: boolean) => void }) {
+  const drag = useDraggable({ id: entry.id })
+  const drop = useDroppable({ id: entry.id })
+  return (
+    <li
+      ref={(el) => (drag.setNodeRef(el), drop.setNodeRef(el))}
+      style={drag.transform ? { transform: `translate3d(${drag.transform.x}px, ${drag.transform.y}px, 0)` } : undefined}
+      className={`flex items-center gap-2 rounded-lg p-1 ${drag.isDragging ? 'relative z-10 bg-neutral-800 shadow-xl' : drop.isOver ? 'bg-neutral-800' : ''}`}
+    >
+      <button
+        {...drag.listeners}
+        {...drag.attributes}
+        aria-label={`Move ${name}`}
+        title="Drag to move"
+        className="grid size-8 shrink-0 cursor-grab touch-none place-items-center rounded text-neutral-400 hover:bg-neutral-800"
+      >
+        <Svg path={mdiDrag} className="size-5" />
+      </button>
+      <span className={`min-w-0 flex-1 truncate ${entry.hidden ? 'text-neutral-500' : ''}`}>{name}</span>
+      <Switch
+        on={!entry.hidden}
+        onChange={onShow}
+        small
+        disabled={last}
+        label={last ? 'The last one shown stays shown' : entry.hidden ? `Show ${name}` : `Hide ${name}`}
+      />
+    </li>
+  )
+}
 // Asks for a Name, and an Admin whether it is shared or their own, creates an empty Dashboard of
 // it, and opens it.
 function NewDashboard({ onClose }: { onClose: () => void }) {

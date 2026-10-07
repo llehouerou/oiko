@@ -48,6 +48,27 @@ func names(m map[string]any) []string {
 	return ns
 }
 
+// listed is the list in a snapshot or a dashboards message, as "id", or "-id"
+// when hidden, with id the Name of a custom Dashboard of it.
+func listed(m map[string]any) []string {
+	named := map[string]string{"builtin": "builtin"}
+	ds, _ := m["dashboards"].([]any)
+	for _, d := range ds {
+		named[d.(map[string]any)["id"].(string)] = d.(map[string]any)["name"].(string)
+	}
+	var ids []string
+	es, _ := m["list"].([]any)
+	for _, e := range es {
+		e := e.(map[string]any)
+		if e["hidden"] == true {
+			ids = append(ids, "-"+named[e["id"].(string)])
+		} else {
+			ids = append(ids, named[e["id"].(string)])
+		}
+	}
+	return ids
+}
+
 func TestEachPersonKeepsTheirOwnDashboardsAndNothingElseDoes(t *testing.T) {
 	as := identities(t)
 	for _, who := range []string{"Carol", "Bob", "Alice"} {
@@ -218,5 +239,40 @@ func TestAGuestSeesOfASharedDashboardWhatTheyMayPress(t *testing.T) {
 	read(t, alice("PUT", "/api/automations/"+night, `{"name": "Night", "steps": `+steps("manualTrigger")+`}`), http.StatusNoContent)
 	if got := tiles(next(t, guest, "dashboards")); got["Shared"] != whole {
 		t.Errorf("a Guest's stream once Night has a Manual trigger: %v", got)
+	}
+}
+
+func TestEachPersonSavesTheirListOfDashboards(t *testing.T) {
+	as := identities(t)
+	for _, who := range []string{"Carol", "Bob", "Alice"} {
+		do := as[who]
+		mine, other := stream(t, do), stream(t, do)
+		if got := listed(next(t, mine, "snapshot")); !slices.Equal(got, []string{"builtin"}) {
+			t.Errorf("%s's snapshot: %v", who, got)
+		}
+		next(t, other, "snapshot")
+		created := decodeAs[struct{ ID string }](t, do("POST", "/api/dashboards", `{"name": "Evening"}`), http.StatusCreated)
+		if got := listed(next(t, other, "dashboards")); !slices.Equal(got, []string{"builtin", "Evening"}) {
+			t.Errorf("%s's list once one is created: %v", who, got)
+		}
+
+		// Saved in one browser, it reaches the others at once.
+		read(t, do("PUT", "/api/me/dashboards", `[{"id": "`+created.ID+`"}, {"id": "builtin", "hidden": true}]`), http.StatusNoContent)
+		if got := listed(next(t, other, "dashboards")); !slices.Equal(got, []string{"Evening", "-builtin"}) {
+			t.Errorf("%s's other stream once their list is saved: %v", who, got)
+		}
+		read(t, do("PUT", "/api/me/dashboards", `[{"id": "`+created.ID+`", "hidden": true}, {"id": "builtin", "hidden": true}]`), http.StatusBadRequest)
+
+		// Deleting the one shown shows the built-in one again.
+		read(t, do("DELETE", "/api/dashboards/"+created.ID, ""), http.StatusNoContent)
+		if got := listed(next(t, other, "dashboards")); !slices.Equal(got, []string{"builtin"}) {
+			t.Errorf("%s's list once theirs is deleted: %v", who, got)
+		}
+	}
+	for _, who := range []string{"Kiosk", "Program"} {
+		read(t, as[who]("PUT", "/api/me/dashboards", `[{"id": "builtin"}]`), http.StatusForbidden)
+	}
+	if _, has := next(t, stream(t, as["Kiosk"]), "snapshot")["list"]; has {
+		t.Error("a Kiosk's snapshot has a list")
 	}
 }

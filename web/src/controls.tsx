@@ -3,7 +3,19 @@
 import type { ReactNode } from 'react'
 import type { Capability } from './types'
 
-export function Switch({ on, onChange, label, small }: { on: boolean; onChange: (on: boolean) => void; label: string; small?: boolean }) {
+export function Switch({
+  on,
+  onChange,
+  label,
+  small,
+  disabled,
+}: {
+  on: boolean
+  onChange: (on: boolean) => void
+  label: string
+  small?: boolean
+  disabled?: boolean
+}) {
   return (
     <button
       type="button"
@@ -11,8 +23,9 @@ export function Switch({ on, onChange, label, small }: { on: boolean; onChange: 
       aria-checked={on}
       aria-label={label}
       title={label}
+      disabled={disabled}
       onClick={() => onChange(!on)}
-      className={`shrink-0 rounded-full transition-colors ${small ? 'h-4 w-7' : 'h-7 w-12'} ${on ? 'bg-amber-400' : 'bg-neutral-700'}`}
+      className={`shrink-0 rounded-full transition-colors disabled:opacity-40 ${small ? 'h-4 w-7' : 'h-7 w-12'} ${on ? 'bg-amber-400' : 'bg-neutral-700'}`}
     >
       <span
         className={`block rounded-full bg-white transition-transform ${small ? 'size-3' : 'size-5'} ${on ? (small ? 'translate-x-3.5' : 'translate-x-6') : small ? 'translate-x-0.5' : 'translate-x-1'}`}

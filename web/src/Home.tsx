@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { mdiCheck } from '@mdi/js'
-import { useAggregates, useAreas, useAutomationStatuses, useDashboards, useDevices, useFlags } from './store'
+import { useAggregates, useAreas, useAutomationStatuses, useDashboardList, useDashboards, useDevices, useFlags } from './store'
 import { useAllows, useMe } from './access'
 import { dashboard, shown } from './dashboard'
 import { AppBar, ChartsSetting, CreateButton, EditSetting } from './AppBar'
@@ -13,7 +13,7 @@ import { DashboardEditor } from './DashboardEditor'
 import { FlagPill } from './Tiles'
 import { AggregatePanel, AreaPanel, DevicePanel, FlagPanel } from './HomePanels'
 
-// The Home page: the Dashboard hash opens, a shared one or a Person's own at #dashboard/<id>, the built-in one
+// The Home page: the Dashboard hash opens, at #dashboard/<id>, the Person's first one shown
 // otherwise, and the panels an Admin opens from it. The built-in Dashboard is drawn from the
 // Sections derived from the Areas, under the Flags without an Area as pills. A Person switches
 // Dashboards from the menu that takes the Home tab's place.
@@ -24,6 +24,7 @@ export function Home({ hash }: { hash: string }) {
   const areas = useAreas()
   const automations = useAutomationStatuses() // their Tiles: those with a Manual trigger show
   const dashboards = useDashboards()
+  const list = useDashboardList()
   const identity = useMe()?.identity
   const person = !!identity && 'person' in identity
   const member = useAllows('member') // reads the home's past: its tiles' charts
@@ -54,7 +55,7 @@ export function Home({ hash }: { hash: string }) {
   const openArea = areas.find((a) => a.id === openId)
   const home = dashboard(devices, aggregates, flags, areas, automations)
   const { pills, sections } = home
-  const current = shown(hash, dashboards) // undefined: the built-in Dashboard
+  const current = shown(hash, dashboards, list) // undefined: the built-in Dashboard
   // Whether the viewer changes the current Dashboard: an Admin arranges the built-in one (the
   // Areas' order and their Layouts) and edits a shared one, a Person edits their own.
   const editable = current ? !current.shared || admin : admin
@@ -66,7 +67,7 @@ export function Home({ hash }: { hash: string }) {
     <>
       <AppBar
         page="#"
-        home={person && <DashboardMenu current={current} dashboards={dashboards} />}
+        home={person && <DashboardMenu current={current} dashboards={dashboards} list={list} />}
         settings={
           (member || editable) && (
             <>

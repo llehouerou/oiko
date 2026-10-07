@@ -309,8 +309,16 @@ test("the Tiles to pick for an own Section: the home's, grouped by Area, searche
   expect(home.choices('guest', [])[0]!.tiles[0]).toMatchObject({ key: 'flag:guest', tile: { target: 'flag:guest' }, kind: 'Flag' })
 })
 
-test("#dashboard/<id> opens one of the Person's own Dashboards; any other address the built-in one", () => {
-  const mine = [{ id: 'evening', owner: 'alice', name: 'Evening', columns: 2, sections: [] }]
-  expect(shown('#dashboard/evening', mine)?.name).toBe('Evening')
-  for (const hash of ['', '#', '#dashboard/builtin', '#dashboard/someone-elses', '#dashboard/']) expect(shown(hash, mine), hash).toBeUndefined()
+test('#dashboard/<id> opens a Dashboard the Person sees, hidden or not; any other address their first one shown', () => {
+  const mine = [
+    { id: 'evening', owner: 'alice', name: 'Evening', columns: 2, sections: [] },
+    { id: 'night', shared: true as const, name: 'Night', columns: 2, sections: [] },
+  ]
+  const list = [{ id: 'evening', hidden: true as const }, { id: 'night' }, { id: 'builtin' }]
+  expect(shown('#dashboard/evening', mine, list)?.name).toBe('Evening')
+  expect(shown('#dashboard/builtin', mine, list)).toBeUndefined()
+  for (const hash of ['', '#', '#dashboard/someone-elses', '#dashboard/']) expect(shown(hash, mine, list)?.name, hash).toBe('Night')
+  // the built-in Dashboard first, or no list at all (a Kiosk's), opens it
+  expect(shown('#', mine, [{ id: 'builtin' }, { id: 'night' }])).toBeUndefined()
+  expect(shown('#', mine, [])).toBeUndefined()
 })

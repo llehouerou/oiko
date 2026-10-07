@@ -1,18 +1,20 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/llehouerou/oiko/internal/access"
+	"github.com/llehouerou/oiko/internal/dashboard"
 )
 
 // handlePersons serves the Persons to an Admin Person, their Sign-in links,
 // a Person's own Name, and signing in by link (ADR 0026, 0030). A link's
 // secret travels in request bodies only, never in a URL: its page has it in
-// its fragment.
-func handlePersons(mux *http.ServeMux, acc *access.Store, public *url.URL) {
+// its fragment. dash drops a removed Person's list.
+func handlePersons(mux *http.ServeMux, acc *access.Store, dash *dashboard.Store, public *url.URL) {
 	type named struct {
 		ID   string `json:"id"`
 		Name string `json:"name,omitempty"` // none once they are removed
@@ -80,8 +82,18 @@ func handlePersons(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 			reply(w, acc.EditPerson(by(r), r.PathValue("id"), req.Name, req.Level, req.Ends))
 		}
 	})
+	// A removed Person's list of Dashboards goes with them; left behind, it is
+	// dropped on load.
 	mux.HandleFunc("DELETE /api/persons/{id}", func(w http.ResponseWriter, r *http.Request) {
-		reply(w, acc.RemovePerson(by(r), r.PathValue("id")))
+		id := r.PathValue("id")
+		if err := acc.RemovePerson(by(r), id); err != nil {
+			reply(w, err)
+			return
+		}
+		if err := dash.RemovePerson(id); err != nil {
+			slog.Error("dashboards: dropping a removed Person's list", "err", err)
+		}
+		w.WriteHeader(http.StatusNoContent)
 	})
 	// A new Sign-in link for Person {id}, an Admin's for anyone, or anyone's
 	// for themself: its secret, shown this once, and when it expires.

@@ -12,6 +12,7 @@ import type {
   Dashboards,
   Device,
   Flag,
+  ListEntry,
   Ref,
   ReleaseStatus,
   Releases,
@@ -34,6 +35,7 @@ let automations: AutomationStatus[] = []
 let bridges: Record<string, boolean> = {}
 let releases: ReleaseStatus[] = []
 let dashboards: CustomDashboard[] = [] // those this Person sees: the shared ones and their own
+let list: ListEntry[] = [] // this Person's: every Dashboard they see, in their order
 let connected = false
 let now = Date.now()
 const values = new Map<string, Value>()
@@ -80,6 +82,7 @@ function apply(msg: Snapshot | Update) {
       bridges = msg.bridges
       releases = msg.releases
       dashboards = msg.dashboards ?? []
+      list = msg.list ?? []
       values.clear()
       for (const { ref, value } of msg.values) values.set(refKey(ref), value)
       events.clear()
@@ -189,6 +192,7 @@ export function connect() {
       }
       if (msg.kind === 'dashboards') {
         dashboards = msg.dashboards
+        list = msg.list
         return notify('dashboards')
       }
       apply(msg)
@@ -352,6 +356,10 @@ export const useReleases = () => useSyncExternalStore(subscribeTo('releases'), (
 
 // The custom Dashboards this Person sees: the shared ones and their own.
 export const useDashboards = () => useSyncExternalStore(subscribeTo('dashboards'), () => dashboards)
+
+// This Person's list of the Dashboards they see, the built-in one included: their order, the hidden
+// ones, saved with edit('PUT', 'me/dashboards', list).
+export const useDashboardList = () => useSyncExternalStore(subscribeTo('dashboards'), () => list)
 
 // 'disconnected', 'online', or the names of the Bridges offline.
 export const useConnection = () =>

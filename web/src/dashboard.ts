@@ -13,6 +13,7 @@ import type {
   Device,
   Flag,
   Fn,
+  ListEntry,
   OwnSection,
   PlacedTile,
   Target,
@@ -270,9 +271,12 @@ const hasTile = (fn: Fn) => tileCaps(fn).length > 0 || fn.kind === 'camera'
 // A Function's name on its own Tile: its Device's, then its key.
 const functionName = (d: Device, key: string) => `${d.name} · ${key}`
 
-// The custom Dashboard hash opens, #dashboard/<id>, if it is one of dashboards; undefined for the
-// built-in one, which any other address opens.
-export function shown(hash: string, dashboards: CustomDashboard[]) {
+// The Dashboard hash opens, undefined for the built-in one (ADR 0044): #dashboard/<id>, hidden from
+// the menu or not, if it is the built-in one or one of dashboards; any other address, a bare # or a
+// Dashboard the Person does not see, the first one shown in their list, the built-in one without any.
+export function shown(hash: string, dashboards: CustomDashboard[], list: ListEntry[]) {
   const id = hash.match(/^#dashboard\/(.+)$/)?.[1]
-  return dashboards.find((d) => d.id === id)
+  if (id === 'builtin') return undefined
+  const first = list.find((e) => !e.hidden)?.id
+  return dashboards.find((d) => d.id === id) ?? dashboards.find((d) => d.id === first)
 }
