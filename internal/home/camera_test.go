@@ -16,7 +16,7 @@ func TestACameraWithoutCapabilitiesIsADeviceLikeAnyOther(t *testing.T) {
 	h := opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{camera})
 	id := idOf(t, h, "cam1")
-	area, err := h.CreateArea("Garden")
+	area, err := h.CreateArea("Garden", "")
 	if err != nil {
 		t.Fatal(err)
 	}

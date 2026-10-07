@@ -26,11 +26,10 @@ func (h *Home) Rename(id DeviceID, name string) error {
 }
 
 // SetIcon sets the Icon of Device or Aggregate t; "" goes back to the
-// default. Like a Name it is a label only, and Oiko does not draw it: it is
-// the name of a picture the dashboard has.
+// default.
 func (h *Home) SetIcon(t Target, icon string) error {
-	if len(icon) > 50 || strings.Trim(icon, "abcdefghijklmnopqrstuvwxyz0123456789-") != "" {
-		return fmt.Errorf("%w: an icon is named with lowercase letters, digits and dashes", ErrInvalid)
+	if err := validIcon(icon); err != nil {
+		return err
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -54,6 +53,16 @@ func (h *Home) SetIcon(t Target, icon string) error {
 		return h.aggregatesChanged()
 	}
 	return fmt.Errorf("%w: only a device or an aggregate has an icon", ErrInvalid)
+}
+
+// validIcon refuses what cannot name an Icon. Like a Name it is a label only,
+// and Oiko does not draw it: it is the name of a picture the web client has;
+// "" is none.
+func validIcon(icon string) error {
+	if len(icon) > 50 || strings.Trim(icon, "abcdefghijklmnopqrstuvwxyz0123456789-") != "" {
+		return fmt.Errorf("%w: an icon is named with lowercase letters, digits and dashes", ErrInvalid)
+	}
+	return nil
 }
 
 // Delete forgets a Detached Device for good, and its History.

@@ -77,6 +77,7 @@ func (h *Home) syncAreaAggregates() {
 type Area struct {
 	ID   AreaID `json:"id"`
 	Name string `json:"name"`
+	Icon string `json:"icon,omitempty"` // "" for none: its header shows its Name alone
 	// How the dashboard shows it: the tiles it folds away (a Device's, a
 	// Flag's or an Aggregate's), the kinds whose Area Aggregate its header
 	// leaves out, and its Layout.
@@ -101,21 +102,27 @@ type Placement struct {
 const maxColumns = 6
 
 // CreateArea defines a new Area, last in the order, and returns its ID.
-func (h *Home) CreateArea(name string) (AreaID, error) {
+func (h *Home) CreateArea(name, icon string) (AreaID, error) {
 	name, err := ValidName(name)
+	if err == nil {
+		err = validIcon(icon)
+	}
 	if err != nil {
 		return "", err
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	id := AreaID(uuid.NewV7().String())
-	h.areas = append(h.areas, Area{ID: id, Name: name})
+	h.areas = append(h.areas, Area{ID: id, Name: name, Icon: icon})
 	return id, h.areasChanged()
 }
 
-// RenameArea sets an Area's Name.
-func (h *Home) RenameArea(id AreaID, name string) error {
+// EditArea sets an Area's Name and Icon, "" for none.
+func (h *Home) EditArea(id AreaID, name, icon string) error {
 	name, err := ValidName(name)
+	if err == nil {
+		err = validIcon(icon)
+	}
 	if err != nil {
 		return err
 	}
@@ -125,7 +132,7 @@ func (h *Home) RenameArea(id AreaID, name string) error {
 	if i < 0 {
 		return ErrNotFound
 	}
-	h.areas[i].Name = name
+	h.areas[i].Name, h.areas[i].Icon = name, icon
 	return h.areasChanged()
 }
 

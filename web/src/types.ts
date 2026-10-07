@@ -29,6 +29,7 @@ export interface Fn {
 export interface Area {
   id: string
   name: string
+  icon?: string // none: its header shows its Name alone
   hidden?: Target[] // tiles the dashboard folds away
   hiddenAggregates?: string[] // kinds whose Area Aggregate its header leaves out
   columns?: number // of its Layout; the dashboard's default when absent

@@ -31,7 +31,7 @@ func TestDeletesAndReplacesAreAnnouncedEvenWhenSavingFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	living, err := h.CreateArea("Living room")
+	living, err := h.CreateArea("Living room", "")
 	if err != nil {
 		t.Fatal(err)
 	}

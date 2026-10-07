@@ -456,20 +456,22 @@ func setArea(h *home.Home) http.HandlerFunc {
 	}
 }
 
-// defineArea creates an Area, or renames Area {id} when there is one.
+// defineArea creates an Area, or sets the Name and Icon of Area {id} when
+// there is one.
 func defineArea(h *home.Home) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Name string `json:"name"`
+			Icon string `json:"icon"`
 		}
 		if !decode(w, r, &req) {
 			return
 		}
 		if id := r.PathValue("id"); id != "" {
-			reply(w, h.RenameArea(home.AreaID(id), req.Name))
+			reply(w, h.EditArea(home.AreaID(id), req.Name, req.Icon))
 			return
 		}
-		_, err := h.CreateArea(req.Name)
+		_, err := h.CreateArea(req.Name, req.Icon)
 		reply(w, err)
 	}
 }

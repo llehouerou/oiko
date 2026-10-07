@@ -24,8 +24,8 @@ func TestAreaAggregatesFollowTheAreas(t *testing.T) {
 	h := opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{bulb, motion("0xm1"), motion("0xm2")})
 	bulbID, m1, m2 := idOf(t, h, "0xbulb"), idOf(t, h, "0xm1"), idOf(t, h, "0xm2")
-	living, _ := h.CreateArea("Living room")
-	office, _ := h.CreateArea("Office")
+	living, _ := h.CreateArea("Living room", "")
+	office, _ := h.CreateArea("Office", "")
 	if _, ok := derived(h, living, "light"); ok {
 		t.Fatal("an Area with no light has no light Aggregate")
 	}
@@ -56,7 +56,7 @@ func TestAreaAggregatesFollowTheAreas(t *testing.T) {
 		t.Fatalf("command: %v", err)
 	}
 
-	if err := h.RenameArea(living, "Lounge"); err != nil {
+	if err := h.EditArea(living, "Lounge", ""); err != nil {
 		t.Fatal(err)
 	}
 	if a, _ := derived(h, living, "light"); a.Name != "Lounge lights" {
@@ -101,7 +101,7 @@ var door = bridge.Device{NativeAddress: "0xdoor", Name: "0xdoor", Functions: []b
 func TestAreasAggregateDoorsAndClimate(t *testing.T) {
 	h := opened(t, t.TempDir())
 	port(h).SyncDevices([]bridge.Device{climate("0xc1"), climate("0xc2"), door})
-	living, _ := h.CreateArea("Living room")
+	living, _ := h.CreateArea("Living room", "")
 	for _, a := range []string{"0xc1", "0xc2", "0xdoor"} {
 		if err := h.SetArea(TargetDevice(idOf(t, h, a), ""), living); err != nil {
 			t.Fatal(err)
@@ -144,7 +144,7 @@ func snapshotValue(h *Home, r Ref) any {
 func TestAnAreaAggregateIsNotEditedByHand(t *testing.T) {
 	h := opened(t, t.TempDir())
 	port(h).SyncDevices([]bridge.Device{motion("0xm1")})
-	living, _ := h.CreateArea("Living room")
+	living, _ := h.CreateArea("Living room", "")
 	if err := h.SetArea(TargetDevice(idOf(t, h, "0xm1"), ""), living); err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestDeletingAnAreaDropsItsAggregatesFromOthers(t *testing.T) {
 	dir := t.TempDir()
 	h := opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{motion("0xm1"), motion("0xm2")})
-	living, _ := h.CreateArea("Living room")
+	living, _ := h.CreateArea("Living room", "")
 	if err := h.SetArea(TargetDevice(idOf(t, h, "0xm1"), ""), living); err != nil {
 		t.Fatal(err)
 	}

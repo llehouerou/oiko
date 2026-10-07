@@ -1,9 +1,40 @@
-// The pictures a light's tile may show, each under the Icon name Oiko keeps
-// for its Device or Aggregate: Material Design Icons, filled while the light
-// is on and outlined while it is off where the set has both.
+// The web client's own Icons, each under the name Oiko keeps for it: a light's, for its Device or
+// Aggregate, and an Area's. Material Design Icons; a light's filled while it is on and outlined
+// while it is off where the set has both.
 
 import {
+  mdiBalcony,
+  mdiBathtub,
+  mdiBedKing,
+  mdiBookshelf,
   mdiBulkheadLight,
+  mdiCancel,
+  mdiDesk,
+  mdiDoor,
+  mdiDumbbell,
+  mdiFlower,
+  mdiFridge,
+  mdiGamepadVariant,
+  mdiGarage,
+  mdiGrill,
+  mdiHanger,
+  mdiHome,
+  mdiHomeRoof,
+  mdiPiano,
+  mdiPool,
+  mdiShower,
+  mdiSilverwareForkKnife,
+  mdiSofa,
+  mdiStairs,
+  mdiStove,
+  mdiTableChair,
+  mdiTeddyBear,
+  mdiTelevision,
+  mdiToilet,
+  mdiTools,
+  mdiTree,
+  mdiWardrobe,
+  mdiWashingMachine,
   mdiCeilingFanLight,
   mdiCeilingLight,
   mdiCeilingLightMultiple,
@@ -63,6 +94,40 @@ const lightIcons: { name: string; label: string; on: string; off?: string }[] = 
   { name: 'string-lights', label: 'String lights', on: mdiStringLights },
 ]
 
+// An Area's Icon pictures what it is for; it has none by default.
+const areaIcons: { name: string; label: string; path: string }[] = [
+  { name: 'home', label: 'House', path: mdiHome },
+  { name: 'sofa', label: 'Sofa', path: mdiSofa },
+  { name: 'television', label: 'Television', path: mdiTelevision },
+  { name: 'table-chair', label: 'Dining table', path: mdiTableChair },
+  { name: 'silverware-fork-knife', label: 'Cutlery', path: mdiSilverwareForkKnife },
+  { name: 'stove', label: 'Stove', path: mdiStove },
+  { name: 'fridge', label: 'Fridge', path: mdiFridge },
+  { name: 'bed-king', label: 'Bed', path: mdiBedKing },
+  { name: 'teddy-bear', label: 'Teddy bear', path: mdiTeddyBear },
+  { name: 'wardrobe', label: 'Wardrobe', path: mdiWardrobe },
+  { name: 'hanger', label: 'Hanger', path: mdiHanger },
+  { name: 'shower', label: 'Shower', path: mdiShower },
+  { name: 'bathtub', label: 'Bathtub', path: mdiBathtub },
+  { name: 'toilet', label: 'Toilet', path: mdiToilet },
+  { name: 'washing-machine', label: 'Washing machine', path: mdiWashingMachine },
+  { name: 'desk', label: 'Desk', path: mdiDesk },
+  { name: 'bookshelf', label: 'Bookshelf', path: mdiBookshelf },
+  { name: 'gamepad-variant', label: 'Gamepad', path: mdiGamepadVariant },
+  { name: 'dumbbell', label: 'Dumbbell', path: mdiDumbbell },
+  { name: 'piano', label: 'Piano', path: mdiPiano },
+  { name: 'stairs', label: 'Stairs', path: mdiStairs },
+  { name: 'door', label: 'Door', path: mdiDoor },
+  { name: 'home-roof', label: 'Roof', path: mdiHomeRoof },
+  { name: 'garage', label: 'Garage', path: mdiGarage },
+  { name: 'tools', label: 'Tools', path: mdiTools },
+  { name: 'balcony', label: 'Balcony', path: mdiBalcony },
+  { name: 'flower', label: 'Flower', path: mdiFlower },
+  { name: 'tree', label: 'Tree', path: mdiTree },
+  { name: 'pool', label: 'Pool', path: mdiPool },
+  { name: 'grill', label: 'Grill', path: mdiGrill },
+]
+
 // A light shows a bulb by default, an Aggregate of lights several.
 const fallback = (group: boolean) => (group ? 'lightbulb-group' : 'lightbulb')
 
@@ -84,27 +149,49 @@ export function LightIcon({ icon, group, lit, className }: { icon?: string; grou
   return <Svg path={lit ? i.on : (i.off ?? i.on)} className={className} />
 }
 
-// Sets the Icon of a light's Device or Aggregate at once. Picking the default
-// clears it, so the light follows the default.
-export function IconPicker({ target, icon, group, onError }: { target: Target; icon?: string; group: boolean; onError: (e: string | null) => void }) {
-  const current = find(icon, group).name
+// An Area's Icon, or nothing when it has none, or none this web client knows.
+export function AreaIcon({ icon, className }: { icon?: string; className: string }) {
+  const path = areaIcons.find((i) => i.name === icon)?.path
+  return path ? <Svg path={path} className={className} /> : null
+}
+
+// A grid of Icons to pick one from, current highlighted.
+function IconGrid({ icons, current, onPick }: { icons: { name: string; label: string; path: string }[]; current: string; onPick: (name: string) => void }) {
   return (
     <section className="space-y-3">
       <h3 className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">Icon</h3>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))] gap-1">
-        {lightIcons.map((i) => (
+        {icons.map((i) => (
           <button
+            type="button"
             key={i.name}
             title={i.label}
             aria-label={i.label}
             aria-pressed={i.name === current}
-            onClick={async () => onError(await edit('PUT', 'icon', { target, icon: i.name === fallback(group) ? '' : i.name }))}
+            onClick={() => onPick(i.name)}
             className={`grid aspect-square place-items-center rounded-lg ${i.name === current ? 'bg-amber-400 text-neutral-900' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'}`}
           >
-            <Svg path={i.on} className="size-6" />
+            <Svg path={i.path} className="size-6" />
           </button>
         ))}
       </div>
     </section>
   )
+}
+
+// Sets the Icon of a light's Device or Aggregate at once. Picking the default
+// clears it, so the light follows the default.
+export function IconPicker({ target, icon, group, onError }: { target: Target; icon?: string; group: boolean; onError: (e: string | null) => void }) {
+  return (
+    <IconGrid
+      icons={lightIcons.map((i) => ({ ...i, path: i.on }))}
+      current={find(icon, group).name}
+      onPick={async (name) => onError(await edit('PUT', 'icon', { target, icon: name === fallback(group) ? '' : name }))}
+    />
+  )
+}
+
+// Picks an Area's Icon, or none, '' for which comes first.
+export function AreaIconPicker({ icon, onPick }: { icon: string; onPick: (icon: string) => void }) {
+  return <IconGrid icons={[{ name: '', label: 'No icon', path: mdiCancel }, ...areaIcons]} current={icon} onPick={onPick} />
 }

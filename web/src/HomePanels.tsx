@@ -6,14 +6,14 @@ import type { Aggregate, Area, Device, Flag, Fn, Target } from './types'
 import { aggregateTarget, deviceTarget, flagTarget, parseTarget, targetKind } from './targets'
 import { confirm } from './confirm'
 import { titleIfTruncated } from './truncated'
-import { IconPicker } from './icons'
+import { AreaIconPicker, IconPicker } from './icons'
 import { roles, type Roles } from './roles'
 import { aggregateSummary } from './tiles'
 import { Panel } from './Panel'
 import { CommandNote, Control, Reading } from './Tiles'
 
-// Creates an Area, or renames and deletes one and gathers Devices in it at once. Its place among the
-// others is arranged on the dashboard.
+// Creates an Area, or renames and deletes one and gathers Devices in it at once; its Icon is saved
+// with its Name. Its place among the others is arranged on the dashboard.
 export function AreaPanel({
   area,
   areas,
@@ -28,6 +28,7 @@ export function AreaPanel({
   onClose: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
+  const [icon, setIcon] = useState(area?.icon ?? '')
   // Its Devices first, then those without an Area; the order is the one at opening, so ticking a box does not move it.
   const [order] = useState(() => {
     const rank = (d: Device) => (d.area === area?.id ? 0 : d.area ? 2 : 1)
@@ -38,7 +39,7 @@ export function AreaPanel({
   })
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    const body = { name: new FormData(e.currentTarget).get('name') }
+    const body = { name: new FormData(e.currentTarget).get('name'), icon }
     const err = area ? await edit('PUT', `areas/${area.id}`, body) : await edit('POST', 'areas', body)
     if (err) setError(err)
     else onClose()
@@ -62,6 +63,7 @@ export function AreaPanel({
     >
       <form onSubmit={submit} className="space-y-4 text-sm">
         <input name="name" defaultValue={area?.name} placeholder="Name" aria-label="Name" className="w-full rounded bg-neutral-800 px-2 py-1" />
+        <AreaIconPicker icon={icon} onPick={setIcon} />
         {error && <p className="text-red-400">{error}</p>}
         <div className="flex flex-wrap gap-2">
           <button type="submit" className="rounded bg-amber-400 px-3 py-1 font-medium text-neutral-900 hover:bg-amber-300">

@@ -3,7 +3,7 @@ import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { mdiChevronDown, mdiCogOutline, mdiDrag, mdiGauge } from '@mdi/js'
 import type { Aggregate } from './types'
 import { aggregateTarget, parseTarget } from './targets'
-import { Svg } from './icons'
+import { AreaIcon, Svg } from './icons'
 import type { DashboardSection, TargetTile } from './dashboard'
 import { maxColumns, placements, reflow, resize, rows, type Arranged } from './layout'
 import { ArrangedTile, Cell, cells, Stepper, type TileNode } from './Arrange'
@@ -19,13 +19,13 @@ export interface Arranging {
 }
 
 // A Section of a Dashboard, drawn from what dashboard.ts derived of it: an Area's, or Others, that
-// of the tiles without one. An Area's header is a banner: its name large, its status
-// (climate, presence, doors) on a line under it, its light bar on the right, which a folded section
-// keeps. The bar has no chart: its ⋯ sheet has its History. An Area's tiles sit where its Layout
-// places them, gaps included, while its columns fit; narrower, they come one after another, as
-// Others' do. The tiles it hides wait behind a link; a tap on its name folds it all away. While
-// arranging, an Area's section is open, its header drags it among the others, and its grid shows
-// every cell, hidden tiles dimmed in theirs.
+// of the tiles without one. An Area's header is a banner: its Icon if it has one, then its name
+// large, its status (climate, presence, doors) on a line under it, its light bar on the right,
+// which a folded section keeps. The bar has no chart: its ⋯ sheet has its History. An Area's tiles
+// sit where its Layout places them, gaps included, while its columns fit; narrower, they come one
+// after another, as Others' do. The tiles it hides wait behind a link; a tap on its name folds it
+// all away. While arranging, an Area's section is open, its header drags it among the others, and
+// its grid shows every cell, hidden tiles dimmed in theirs.
 export function Section({
   section,
   title,
@@ -113,7 +113,13 @@ export function Section({
             )}
             <div className="min-w-0 flex-1 self-center">
               <div className="flex items-center gap-1">
-                <button onClick={onCollapse} disabled={!!arranging} aria-expanded={open} className="flex min-w-0 items-center enabled:hover:text-amber-200">
+                <button
+                  onClick={onCollapse}
+                  disabled={!!arranging}
+                  aria-expanded={open}
+                  className="flex min-w-0 items-center gap-2 enabled:hover:text-amber-200"
+                >
+                  <AreaIcon icon={section.area?.icon} className="size-6 shrink-0" />
                   <h2 className="truncate text-xl font-semibold tracking-tight">{title}</h2>
                 </button>
                 {onSettings && !arranging && (

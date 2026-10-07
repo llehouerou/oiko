@@ -2,6 +2,9 @@ package home
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -22,9 +25,9 @@ func TestAreasKeepTheirOrderAndSurviveARestart(t *testing.T) {
 	if snapshot(h).Areas == nil {
 		t.Fatal("no Area is [] in JSON, not null")
 	}
-	living, _ := h.CreateArea("Living room")
-	office, _ := h.CreateArea("Office")
-	if err := h.RenameArea(office, "Dave's office"); err != nil {
+	living, _ := h.CreateArea("Living room", "sofa")
+	office, _ := h.CreateArea("Office", "")
+	if err := h.EditArea(office, "Dave's office", "desk"); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.OrderAreas([]AreaID{office, living}); err != nil {
@@ -32,7 +35,7 @@ func TestAreasKeepTheirOrderAndSurviveARestart(t *testing.T) {
 	}
 	restarted := opened(t, dir)
 	got := snapshot(restarted).Areas
-	if !slices.Equal(areaIDs(got), []AreaID{office, living}) || got[0].Name != "Dave's office" {
+	if !slices.Equal(areaIDs(got), []AreaID{office, living}) || got[0].Name != "Dave's office" || got[0].Icon != "desk" || got[1].Icon != "sofa" {
 		t.Fatalf("after restart: %+v", got)
 	}
 	for _, order := range [][]AreaID{{office}, {office, living, living}, {office, "nope"}} {
@@ -40,8 +43,31 @@ func TestAreasKeepTheirOrderAndSurviveARestart(t *testing.T) {
 			t.Errorf("OrderAreas(%v) = %v, want ErrInvalid", order, err)
 		}
 	}
-	if _, err := h.CreateArea(" "); !errors.Is(err, ErrInvalid) {
+	if _, err := h.CreateArea(" ", ""); !errors.Is(err, ErrInvalid) {
 		t.Errorf("an empty name: %v", err)
+	}
+	for _, icon := range []string{"Sofa", "sofa bed", "../sofa"} {
+		if _, err := h.CreateArea("Den", icon); !errors.Is(err, ErrInvalid) {
+			t.Errorf("CreateArea with icon %q: %v, want ErrInvalid", icon, err)
+		}
+		if err := h.EditArea(living, "Living room", icon); !errors.Is(err, ErrInvalid) {
+			t.Errorf("EditArea with icon %q: %v, want ErrInvalid", icon, err)
+		}
+	}
+	if err := h.EditArea(living, "Living room", ""); err != nil || snapshot(h).Areas[1].Icon != "" {
+		t.Errorf("clearing its icon: %v, %+v", err, snapshot(h).Areas[1])
+	}
+}
+
+func TestAnAreasFileWrittenBeforeIconsLoadsUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	before := `{"format":1,"data":[{"id":"a1","name":"Office","hiddenAggregates":["co2"],"columns":2,"layout":[{"tile":"flag:f1","col":1,"row":0,"width":1}]}]}`
+	if err := os.WriteFile(filepath.Join(dir, "areas.json"), []byte(before), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	want := []Area{{ID: "a1", Name: "Office", HiddenAggregates: []string{"co2"}, Columns: 2, Layout: []Placement{{Tile: TargetFlag("f1"), Col: 1, Width: 1}}}}
+	if got := snapshot(opened(t, dir)).Areas; !reflect.DeepEqual(got, want) {
+		t.Errorf("loaded %+v, want %+v", got, want)
 	}
 }
 
@@ -50,8 +76,8 @@ func TestAreaAssignmentSurvivesSyncRestartAndReplace(t *testing.T) {
 	h := opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{bulb})
 	id := idOf(t, h, "0xbulb")
-	living, _ := h.CreateArea("Living room")
-	office, _ := h.CreateArea("Office")
+	living, _ := h.CreateArea("Living room", "")
+	office, _ := h.CreateArea("Office", "")
 	if err := h.SetArea(TargetDevice(id, ""), living); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +117,7 @@ func TestFlagsAndAggregatesHaveAnArea(t *testing.T) {
 	dir := t.TempDir()
 	h := opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{motion("0xm1")})
-	living, _ := h.CreateArea("Living room")
+	living, _ := h.CreateArea("Living room", "")
 	flag, _ := h.CreateFlag("Guests")
 	agg, _ := h.CreateAggregate("Motion", members(t, h, "0xm1"), Any, "")
 	for _, target := range []Target{TargetFlag(flag), TargetAggregate(agg)} {
@@ -114,8 +140,8 @@ func TestDeletingAnAreaLeavesWhatItHeldWithoutOne(t *testing.T) {
 	h := opened(t, dir)
 	port(h).SyncDevices([]bridge.Device{bulb, motion("0xm1")})
 	bulbID := idOf(t, h, "0xbulb")
-	living, _ := h.CreateArea("Living room")
-	office, _ := h.CreateArea("Office")
+	living, _ := h.CreateArea("Living room", "")
+	office, _ := h.CreateArea("Office", "")
 	flag, _ := h.CreateFlag("Guests")
 	agg, _ := h.CreateAggregate("Motion", members(t, h, "0xm1"), Any, "")
 	for _, target := range []Target{TargetDevice(bulbID, ""), TargetDevice(bulbID, "light"), TargetFlag(flag), TargetAggregate(agg)} {
@@ -152,12 +178,12 @@ func TestDeletingAnAreaLeavesWhatItHeldWithoutOne(t *testing.T) {
 func TestAreaDisplaySurvivesARestart(t *testing.T) {
 	dir := t.TempDir()
 	h := opened(t, dir)
-	living, _ := h.CreateArea("Living room")
+	living, _ := h.CreateArea("Living room", "")
 	hidden := []Target{TargetDevice("d1", ""), TargetFlag("f1")}
 	if err := h.SetAreaDisplay(living, hidden, []string{"occupancy"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.RenameArea(living, "Lounge"); err != nil {
+	if err := h.EditArea(living, "Lounge", ""); err != nil {
 		t.Fatal(err)
 	}
 	restarted := opened(t, dir)
@@ -176,7 +202,7 @@ func TestAreaDisplaySurvivesARestart(t *testing.T) {
 func TestAreaLayoutSurvivesARestart(t *testing.T) {
 	dir := t.TempDir()
 	h := opened(t, dir)
-	living, _ := h.CreateArea("Living room")
+	living, _ := h.CreateArea("Living room", "")
 	lamp, flag := TargetDevice("d1", ""), TargetFlag("f1")
 	layout := []Placement{{Tile: lamp, Col: 1, Row: 0, Width: 2, Height: 3}, {Tile: flag, Col: 0, Row: 2, Width: 1}}
 	if err := h.SetAreaLayout(living, 3, layout); err != nil {
@@ -214,7 +240,7 @@ func TestSetAreaRefusals(t *testing.T) {
 	h := opened(t, t.TempDir())
 	port(h).SyncDevices([]bridge.Device{bulb})
 	id := idOf(t, h, "0xbulb")
-	living, _ := h.CreateArea("Living room")
+	living, _ := h.CreateArea("Living room", "")
 	for _, c := range []struct {
 		target Target
 		area   AreaID
@@ -231,7 +257,7 @@ func TestSetAreaRefusals(t *testing.T) {
 			t.Errorf("SetArea(%s, %q) = %v, want %v", c.target, c.area, err, c.want)
 		}
 	}
-	for _, err := range []error{h.RenameArea("nope", "x"), h.DeleteArea("nope")} {
+	for _, err := range []error{h.EditArea("nope", "x", ""), h.DeleteArea("nope")} {
 		if !errors.Is(err, ErrNotFound) {
 			t.Errorf("unknown Area: %v", err)
 		}
