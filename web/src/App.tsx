@@ -674,49 +674,58 @@ function Section({
       {title && (
         <header className="flex flex-wrap items-stretch gap-x-4 gap-y-3 bg-linear-to-r from-neutral-800/60 to-transparent px-4 py-3">
           {/* the bar as tall as the header, beside the name; from sm, too narrow for both, it goes under it */}
-          <div className="min-w-0 flex-1 self-center sm:min-w-48">
-            <div className="flex items-center gap-1">
-              {arranging && (
-                <button
-                  {...drag.listeners}
-                  {...drag.attributes}
-                  aria-label={`Move ${title}`}
-                  title="Drag to move"
-                  className="-ml-2 grid size-8 shrink-0 cursor-grab touch-none place-items-center rounded-full text-amber-300 hover:bg-neutral-800"
-                >
-                  <Svg path={mdiDrag} className="size-5" />
-                </button>
-              )}
+          <div className="-ml-2 flex min-w-0 flex-1 gap-2 sm:min-w-48">
+            {/* on its left, as tall as the header: the fold, or while arranging the handle that drags it */}
+            {arranging ? (
+              <button
+                {...drag.listeners}
+                {...drag.attributes}
+                aria-label={`Move ${title}`}
+                title="Drag to move"
+                className="grid w-9 shrink-0 cursor-grab touch-none place-items-center rounded-xl text-amber-300 hover:bg-neutral-800"
+              >
+                <Svg path={mdiDrag} className="size-7" />
+              </button>
+            ) : (
+              // the name folds it too, and speaks for both
               <button
                 onClick={onCollapse}
-                disabled={!!arranging}
-                aria-expanded={open}
-                className="flex min-w-0 items-center gap-1.5 enabled:hover:text-amber-200"
+                tabIndex={-1}
+                aria-hidden
+                className="group grid w-9 shrink-0 place-items-center text-neutral-300 hover:text-amber-200"
               >
-                <h2 className="truncate text-xl font-semibold tracking-tight">{title}</h2>
-                {!arranging && <Svg path={mdiChevronDown} className={`size-5 shrink-0 text-neutral-500 transition-transform ${open ? '' : '-rotate-90'}`} />}
+                <span className="grid size-9 place-items-center rounded-full bg-neutral-800 group-hover:bg-neutral-700">
+                  <Svg path={mdiChevronDown} className={`size-6 transition-transform ${open ? '' : '-rotate-90'}`} />
+                </span>
               </button>
-              {onSettings && !arranging && (
-                <button
-                  onClick={onSettings}
-                  aria-label={`${title} settings`}
-                  title="Settings"
-                  className="grid size-7 shrink-0 place-items-center rounded-full text-neutral-500 hover:bg-neutral-800 hover:text-white"
-                >
-                  <Svg path={mdiCogOutline} className="size-5" />
+            )}
+            <div className="min-w-0 flex-1 self-center">
+              <div className="flex items-center gap-1">
+                <button onClick={onCollapse} disabled={!!arranging} aria-expanded={open} className="flex min-w-0 items-center enabled:hover:text-amber-200">
+                  <h2 className="truncate text-xl font-semibold tracking-tight">{title}</h2>
                 </button>
-              )}
-              {arranging && columns && (
-                <Stepper
-                  value={columns}
-                  max={maxColumns}
-                  label="columns"
-                  onChange={(n) => arranging.onLayout(n, reflow(layout, n))}
-                  className="ml-auto text-sm"
-                />
-              )}
+                {onSettings && !arranging && (
+                  <button
+                    onClick={onSettings}
+                    aria-label={`${title} settings`}
+                    title="Settings"
+                    className="grid size-7 shrink-0 place-items-center rounded-full text-neutral-500 hover:bg-neutral-800 hover:text-white"
+                  >
+                    <Svg path={mdiCogOutline} className="size-5" />
+                  </button>
+                )}
+                {arranging && columns && (
+                  <Stepper
+                    value={columns}
+                    max={maxColumns}
+                    label="columns"
+                    onChange={(n) => arranging.onLayout(n, reflow(layout, n))}
+                    className="ml-auto text-sm"
+                  />
+                )}
+              </div>
+              <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-1 text-sm empty:hidden">{status}</div>
             </div>
-            <div className="mt-0.5 flex flex-wrap gap-x-4 gap-y-1 text-sm empty:hidden">{status}</div>
           </div>
           {bar}
         </header>
