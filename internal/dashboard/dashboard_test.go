@@ -181,7 +181,8 @@ func TestASaveIsRefusedUnlessItHoldsTogether(t *testing.T) {
 
 func TestADeviceAndOneOfItsFunctionsAreTwoTiles(t *testing.T) {
 	l := aHome(t)
-	s := opened(t, t.TempDir(), l.h)
+	dir := t.TempDir()
+	s := opened(t, dir, l.h)
 	// The key is not checked against the Device: one it has, one it may have later.
 	id, err := s.Create(alice, parse(t, `{"name": "E", "sections": [{"columns": 3, "col": 0, "row": 0, "width": 1, "tiles": [
 		{"target": "`+l.lamp.Key()+`", "col": 0, "row": 0, "width": 1},
@@ -191,7 +192,7 @@ func TestADeviceAndOneOfItsFunctionsAreTwoTiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mine, _ := s.Dashboards(alice)
+	mine, _ := opened(t, dir, l.h).Dashboards(alice) // kept across a restart
 	var kept []string
 	for _, tile := range mine[0].Sections[0].Tiles {
 		kept = append(kept, tile.Target.Key())

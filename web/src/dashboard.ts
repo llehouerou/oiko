@@ -26,7 +26,7 @@ export const sectionKey = (s: AreaSection | OwnSection) => (s.area !== undefined
 export const tileKey = (t: TileRef) => t.target ?? `automation:${t.automation}`
 
 // A Tile to pick for an own Section, under its Area: what it is, and whether the Section holds it.
-// A Device with several Functions that have a Tile offers each alone, in fns.
+// A Device with several Functions that have a Tile offers each alone, in functions.
 export interface TileChoice {
   key: string
   tile: TileRef
@@ -34,7 +34,7 @@ export interface TileChoice {
   kind: 'Device' | 'Function' | 'Aggregate' | 'Flag' | 'Automation'
   area?: string // its Area's id
   taken: boolean
-  fns?: TileChoice[]
+  functions?: TileChoice[]
 }
 
 // A Target's Tile, resolved once: everything about it that does not change while it is shown.
@@ -94,11 +94,12 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
   // Every Device, Aggregate and Flag here is in the catalogue: both come from the same lists.
   const entry = (t: Target) => targets.get(t)!
   const resolved = (t: Omit<TargetTile, 'shape'>): TargetTile => ({ ...t, shape: tileShape(t.fns) })
-  // A Device's Tile shows fns, its Functions in one Area; its health, all of them.
-  const deviceTile = (device: Device, fns: Fn[]) =>
+  // A Device's Tile under name: it shows fns, some of its Functions (those in one Area, or one
+  // Function placed alone); its health, all of them.
+  const deviceTile = (device: Device, fns: Fn[], name = device.name) =>
     resolved({
       subject: deviceTarget(device.id),
-      name: device.name,
+      name,
       icon: device.icon,
       detached: !!device.detached,
       health: [deviceTarget(device.id), ...(device.functions ?? []).map((fn) => deviceTarget(device.id, fn.key))].flatMap((target) => {
@@ -183,7 +184,7 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
           const fns = (d.functions ?? []).filter((fn) => hasTile(fn) && (!p.function || fn.key === p.function))
           if (!fns.length) return []
           const name = p.function ? functionName(d, p.function) : d.name
-          return tile(name, { ...deviceTile(d, fns), name })
+          return tile(name, deviceTile(d, fns, name))
         })
     }
     if (p?.kind === 'aggregate') return aggregates.filter((a) => a.id === p.id).flatMap((a) => tile(a.name, aggregateTile(a)))
@@ -235,18 +236,22 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
       const deviceChoice = (d: Device): TileChoice[] => {
         const fns = (d.functions ?? []).filter(hasTile)
         const c = choice({ target: deviceTarget(d.id) }, d.name, 'Device', d.area)
-        if (fns.length < 2) return fns.length && matches(c.name) ? [c] : []
-        const each = fns.map((fn) => choice({ target: deviceTarget(d.id, fn.key) }, functionName(d, fn.key), 'Function', d.area)).filter((f) => matches(f.name))
-        return each.length || matches(c.name) ? [{ ...c, fns: each }] : []
+        if (fns.length < 2) return fns.length ? [c] : []
+        return [{ ...c, functions: fns.map((fn) => choice({ target: deviceTarget(d.id, fn.key) }, functionName(d, fn.key), 'Function', d.area)) }]
+      }
+      // A Device is found by its name or one of its Functions'; it then offers those found.
+      const found = (c: TileChoice): TileChoice[] => {
+        const functions = c.functions?.filter((f) => matches(f.name))
+        return matches(c.name) || functions?.length ? [{ ...c, functions }] : []
       }
       const all = [
         ...devices.flatMap(deviceChoice),
-        ...[
-          ...aggregates.map((a) => choice({ target: aggregateTarget(a.id) }, a.name, 'Aggregate', a.area)),
-          ...flags.map((f) => choice({ target: flagTarget(f.id) }, f.name, 'Flag', f.area)),
-          ...manual.map((a) => choice({ automation: a.id }, a.name, 'Automation')),
-        ].filter((c) => matches(c.name)),
-      ].sort((a, b) => a.name.localeCompare(b.name))
+        ...aggregates.map((a) => choice({ target: aggregateTarget(a.id) }, a.name, 'Aggregate', a.area)),
+        ...flags.map((f) => choice({ target: flagTarget(f.id) }, f.name, 'Flag', f.area)),
+        ...manual.map((a) => choice({ automation: a.id }, a.name, 'Automation')),
+      ]
+        .flatMap(found)
+        .sort((a, b) => a.name.localeCompare(b.name))
       const inArea = (c: TileChoice, area?: Area) => (area ? c.area === area.id : !areas.some((a) => a.id === c.area))
       return [...areas, undefined].flatMap((area) => {
         const tiles = all.filter((c) => inArea(c, area))

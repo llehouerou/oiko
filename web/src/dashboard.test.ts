@@ -271,11 +271,14 @@ test("the Tiles to pick for an own Section: the home's, grouped by Area, searche
     groups.map(
       (g) =>
         `${g.area?.name ?? '-'}: ${g.tiles
-          .map((t) => `${t.name}${t.taken ? ' (in it)' : ''}${t.fns ? ` [${t.fns.map((f) => `${f.name}${f.taken ? ' (in it)' : ''}`).join(', ')}]` : ''}`)
+          .map(
+            (t) =>
+              `${t.name}${t.taken ? ' (in it)' : ''}${t.functions ? ` [${t.functions.map((f) => `${f.name}${f.taken ? ' (in it)' : ''}`).join(', ')}]` : ''}`,
+          )
           .join(', ')}`,
     )
   // in the Areas' order, those without one last; a Device without a Tile is not there; a Device
-  // with several Functions that have a Tile offers each under it, in its own Area
+  // with several Functions that have a Tile offers each under it, in its Device's Area
   expect(short(home.choices('', ['device:lamp', 'automation:bedtime', 'device:plug/l2']))).toEqual([
     'Living room: lamp (in it), Living room lights',
     'Kitchen: fan, Guest, plug [plug · l1, plug · l2 (in it)]',
@@ -285,7 +288,7 @@ test("the Tiles to pick for an own Section: the home's, grouped by Area, searche
   // a Function is searched by its name, its Device's included
   expect(short(home.choices('l2', []))).toEqual(['Kitchen: plug [plug · l2]'])
   expect(short(home.choices('plug', []))).toEqual(['Kitchen: plug [plug · l1, plug · l2]'])
-  expect(home.choices('l1', [])[0]!.tiles[0]!.fns![0]).toMatchObject({ key: 'device:plug/l1', tile: { target: 'device:plug/l1' }, kind: 'Function' })
+  expect(home.choices('l1', [])[0]!.tiles[0]!.functions![0]).toMatchObject({ key: 'device:plug/l1', tile: { target: 'device:plug/l1' }, kind: 'Function' })
   expect(home.choices('bed', [])[0]!.tiles[0]).toMatchObject({ key: 'automation:bedtime', tile: { automation: 'bedtime' }, kind: 'Automation' })
   expect(home.choices('guest', [])[0]!.tiles[0]).toMatchObject({ key: 'flag:guest', tile: { target: 'flag:guest' }, kind: 'Flag' })
 })
