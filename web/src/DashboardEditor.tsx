@@ -1,15 +1,26 @@
 import { useState, type ReactNode } from 'react'
 import { DndContext, PointerSensor, useDraggable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
-import { mdiCheck, mdiDeleteOutline, mdiDrag, mdiMagnify, mdiPlus, mdiShapeOutline, mdiViewColumnOutline, mdiViewGridOutline } from '@mdi/js'
+import { mdiCheck, mdiDeleteOutline, mdiDrag, mdiMagnify, mdiShapeOutline, mdiViewColumnOutline, mdiViewGridOutline } from '@mdi/js'
 import { edit } from './store'
-import type { Area, CustomDashboard, TileRef } from './types'
-import type { DashboardSection, TileChoice } from './dashboard'
-import { addSection, layTiles, moveSection, nameSection, removeSection, resizeSection, setDashboardColumns, type SectionContent } from './editDashboard'
-import { cellsOf, defaultColumns, maxColumns, move, placements, reflow, rows, type Arranged } from './layout'
+import type { Area, CustomDashboard } from './types'
+import { sectionKey, tileKey, type DashboardSection, type TileChoice } from './dashboard'
+import {
+  addSection,
+  addTile,
+  layTiles,
+  moveSection,
+  nameSection,
+  removeSection,
+  removeTile,
+  resizeSection,
+  setDashboardColumns,
+  type SectionContent,
+} from './editDashboard'
+import { defaultColumns, maxColumns, move, placements, reflow, type Arranged } from './layout'
 import { confirm } from './confirm'
 import { AreaIcon, AreaIconPicker, Svg } from './icons'
 import { Panel } from './Panel'
-import { ArrangedGrid, Cell, cells, landing, SizeSteppers, Stepper } from './Arrange'
+import { ArrangedGrid, Cells, cells, landing, SizeSteppers, Stepper } from './Arrange'
 import { Section, tileNodes } from './Section'
 
 // A custom Dashboard turned into its editor, in place: everything live and at full size. A bar on
@@ -51,8 +62,8 @@ export function DashboardEditor({
     onDone()
     location.hash = '#'
   }
-  // own Section s's Tiles in columns, where layout places them, added among them if given.
-  const lay = (s: DashboardSection, columns: number, layout: Arranged[], added?: TileRef) => save(layTiles(d, s.key, columns, layout, added))
+  // own Section s's Tiles in columns, those it draws where layout places them.
+  const lay = (s: DashboardSection, columns: number, layout: Arranged[]) => save(layTiles(d, s.key, columns, layout))
   // A dragged Section takes the cell it lands on; a dragged Tile, the cell of its Section it lands on.
   const dropped = ({ active, over }: DragEndEvent) => {
     const from = active.data.current
@@ -62,9 +73,8 @@ export function DashboardEditor({
     const s = sections.find((s) => s.key === from.grid)
     if (s?.columns) lay(s, s.columns, move(placements(s.tiles), from.tile, to.col, to.row, s.columns))
   }
-  // every cell, one row more than the Sections take, for one to be added or land in
-  const height = Math.max(0, ...sections.map((s) => s.place!.row + rows(s.place!))) + 1
-  const taken = new Set(sections.flatMap((s) => cellsOf(s.place!, d.columns)))
+  // The keys of the Tiles own Section key holds, those showing nothing included.
+  const held = (key: string) => d.sections.flatMap((s) => (s.area === undefined && sectionKey(s) === key ? (s.tiles ?? []).map(tileKey) : []))
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-400/40 bg-neutral-900 p-3">
@@ -96,23 +106,14 @@ export function DashboardEditor({
       </div>
       <DndContext sensors={sensors} collisionDetection={landing} onDragEnd={dropped}>
         <div className="grid auto-rows-[minmax(5rem,auto)] items-start gap-6" style={{ gridTemplateColumns: `repeat(${d.columns}, minmax(0, 1fr))` }}>
-          {[...Array(height * d.columns).keys()].map((i) => {
-            const col = i % d.columns
-            const row = Math.floor(i / d.columns)
-            return (
-              <Cell key={i} grid="dashboard" data={{ type: 'section' }} col={col} row={row}>
-                {!taken.has(i) && (
-                  <button
-                    onClick={() => setAdding({ col, row })}
-                    aria-label={`Add a section at column ${col + 1}, row ${row + 1}`}
-                    className="grid size-10 place-items-center rounded-full text-neutral-500 hover:bg-neutral-800 hover:text-white"
-                  >
-                    <Svg path={mdiPlus} className="size-6" />
-                  </button>
-                )}
-              </Cell>
-            )
-          })}
+          <Cells
+            grid="dashboard"
+            type="section"
+            columns={d.columns}
+            layout={sections.map((s) => s.place!)}
+            what="a section"
+            onAdd={(col, row) => setAdding({ col, row })}
+          />
           {sections.map((s) => (
             <EditedSection
               key={s.key}
@@ -131,6 +132,7 @@ export function DashboardEditor({
                     tiles={tileNodes(s.tiles, onResult)}
                     onLayout={(n, layout) => lay(s, n, layout)}
                     onAdd={(col, row) => setAddingTile({ section: s.key, col, row })}
+                    onRemove={(tile) => save(removeTile(d, s.key, tile))}
                   />
                 </div>
               ) : (
@@ -150,20 +152,10 @@ export function DashboardEditor({
       )}
       {addingTile && tileSection && (
         <AddTile
-          choices={(query) =>
-            choices(
-              query,
-              tileSection.tiles.map((t) => t.key),
-            )
-          }
+          choices={(query) => choices(query, held(tileSection.key))}
           onAdd={(c) => {
             setAddingTile(null)
-            lay(
-              tileSection,
-              tileSection.columns!,
-              [...placements(tileSection.tiles), { key: c.key, col: addingTile.col, row: addingTile.row, width: 1 }],
-              c.tile,
-            )
+            save(addTile(d, tileSection.key, placements(tileSection.tiles), c.tile, addingTile.col, addingTile.row))
           }}
           onClose={() => setAddingTile(null)}
         />
@@ -192,7 +184,10 @@ function EditedSection({
   children: ReactNode
 }) {
   const [picking, setPicking] = useState(false)
-  const { setNodeRef, listeners, attributes, transform, isDragging } = useDraggable({ id: `edit:${s.key}`, data: { type: 'section', key: s.key } })
+  const { setNodeRef, listeners, attributes, transform, isDragging } = useDraggable({
+    id: `edit:${s.key}`,
+    data: { type: 'section', grid: 'dashboard', key: s.key },
+  })
   const place = s.place!
   const label = s.area?.name ?? (s.own?.name || 'Section')
   return (

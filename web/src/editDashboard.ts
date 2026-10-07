@@ -3,8 +3,8 @@
 // grid code of an Area's.
 
 import { sectionKey, tileKey } from './dashboard'
-import { move, resize, reflow, stored, type Arranged, type Place } from './layout'
-import type { AreaSection, CustomDashboard, CustomSection, OwnSection, TileRef } from './types'
+import { move, resize, reflow, settle, stored, type Arranged, type Place } from './layout'
+import type { AreaSection, CustomDashboard, CustomSection, OwnSection, PlacedTile, TileRef } from './types'
 
 // What a Section is, apart from its place.
 export type SectionContent = AreaSection | OwnSection
@@ -52,12 +52,28 @@ const changeOwn = (d: CustomDashboard, key: string, f: (s: OwnSection & Place) =
 // d with own Section key's Name or Icon changed.
 export const nameSection = (d: CustomDashboard, key: string, change: { name?: string; icon?: string }) => changeOwn(d, key, (s) => ({ ...s, ...change }))
 
-// d with own Section key's Tiles in columns, where layout places them; layout is theirs as the
-// Section draws them, which leaves out those that show nothing. The Tile added is one of layout's
-// that the Section did not hold.
-export const layTiles = (d: CustomDashboard, key: string, columns: number, layout: Arranged[], added?: TileRef) =>
+// tiles where layout places those an own Section draws, those it lacks show nothing: they keep
+// their place, or the first free cells after if one drawn took it, until removed (ADR 0045).
+function laid(tiles: PlacedTile[], columns: number, layout: Arranged[]) {
+  const drawn = new Set(layout.map((p) => p.key))
+  const dormant = layoutOf(
+    tiles.filter((t) => !drawn.has(tileKey(t))),
+    tileKey,
+  )
+  return placedAs(tiles, tileKey, settle([...layout, ...dormant], columns))
+}
+
+// d with own Section key's Tiles in columns, those it draws where layout places them.
+export const layTiles = (d: CustomDashboard, key: string, columns: number, layout: Arranged[]) =>
+  changeOwn(d, key, (s) => ({ ...s, columns, tiles: laid(s.tiles ?? [], columns, layout) }))
+
+// d with tile added to own Section key at col and row, beside those it draws where layout places them.
+export const addTile = (d: CustomDashboard, key: string, layout: Arranged[], tile: TileRef, col: number, row: number) =>
   changeOwn(d, key, (s) => ({
     ...s,
-    columns,
-    tiles: placedAs([...(s.tiles ?? []), ...(added ? [{ ...added, col: 0, row: 0, width: 1 }] : [])], tileKey, layout),
+    tiles: laid([...(s.tiles ?? []), { ...tile, col, row, width: 1 }], s.columns, [...layout, { key: tileKey(tile), col, row, width: 1 }]),
   }))
+
+// d without Tile tile in own Section key.
+export const removeTile = (d: CustomDashboard, key: string, tile: string) =>
+  changeOwn(d, key, (s) => ({ ...s, tiles: s.tiles?.filter((t) => tileKey(t) !== tile) }))

@@ -130,7 +130,7 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
   // The tiles of Area id, '' for Others: a Device's tile there gathers its Functions there. The
   // Area's own Aggregates and lone light are in its header instead.
   const tiles = (id: string, lone?: Target): DashboardTile[] => [
-    ...(id ? [] : manual.map((a) => ({ key: a.id, label: a.name, kind: 'manual' as const, automation: a }))),
+    ...(id ? [] : manual.map((a) => ({ key: tileKey({ automation: a.id }), label: a.name, kind: 'manual' as const, automation: a }))),
     ...flags
       .filter((f) => id && f.area === id) // those without one are pills
       .map((f) => ({ key: flagTarget(f.id), label: f.name, kind: 'target' as const, ...flagTile(f) })),
@@ -215,7 +215,8 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
     },
     // Every Tile of the home whose name holds query, by Area in their order, then those without
     // one; taken are the keys of those the Section holds already. A Device has a Tile if any of its
-    // Functions has one; an Aggregate, an Area's included, a Flag and a manual Automation always do.
+    // Functions has one; an Aggregate, an Area's included, a Flag and an Automation with a Manual
+    // trigger always do.
     choices: (query: string, taken: string[]) => {
       const choice = (tile: TileRef, name: string, kind: TileChoice['kind'], area?: string): TileChoice => ({
         key: tileKey(tile),

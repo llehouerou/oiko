@@ -75,7 +75,7 @@ function claim(p: Arranged, taken: Set<number>, columns: number): Arranged {
 
 // Places each of wanted in turn in a grid of columns: where it wants if those cells are still
 // free, otherwise in the first free ones after, in reading order.
-function settle(wanted: Arranged[], columns: number): Arranged[] {
+export function settle(wanted: Arranged[], columns: number): Arranged[] {
   const taken = new Set<number>()
   return wanted.map((w) => claim(w, taken, columns))
 }

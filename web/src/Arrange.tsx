@@ -25,10 +25,10 @@ export const landing: CollisionDetection = (args) => {
   return pointerWithin({ ...args, droppableContainers: args.droppableContainers.filter((d) => fits(d.data.current)) })
 }
 
-// The tiles of grid while arranging, in a grid of columns: every cell, one row more than they take,
-// for a tile to land in, and each tile under its veil, those hidden dimmed. Each change hands the
-// whole Layout to onLayout; a drop is the page's. With onAdd, an own Section's: a free cell has a +
-// adding a tile there, and a tile a button removing it.
+// The tiles of grid while arranging, in a grid of columns: every cell, for a tile to land in, and
+// each tile under its veil, those hidden dimmed. Each change hands the whole Layout to onLayout; a
+// drop is the page's. In an own Section, a free cell has a + adding a tile there (onAdd), and a
+// tile a button removing it (onRemove).
 export function ArrangedGrid({
   grid,
   columns,
@@ -36,6 +36,7 @@ export function ArrangedGrid({
   hidden = [],
   onLayout,
   onAdd,
+  onRemove,
 }: {
   grid: string
   columns: number
@@ -43,29 +44,12 @@ export function ArrangedGrid({
   hidden?: string[]
   onLayout: (columns: number, layout: Arranged[]) => void
   onAdd?: (col: number, row: number) => void
+  onRemove?: (key: string) => void
 }) {
   const layout = placements(tiles)
-  const taken = new Set(layout.flatMap((p) => cellsOf(p, columns)))
-  const height = Math.max(0, ...layout.map((p) => p.row + rows(p))) + 1
   return (
     <div className="grid auto-rows-[minmax(3.5rem,auto)] items-start gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-      {[...Array(height * columns).keys()].map((i) => {
-        const col = i % columns
-        const row = Math.floor(i / columns)
-        return (
-          <Cell key={i} grid={grid} data={{ type: 'tile', grid }} col={col} row={row}>
-            {onAdd && !taken.has(i) && (
-              <button
-                onClick={() => onAdd(col, row)}
-                aria-label={`Add a tile at column ${col + 1}, row ${row + 1}`}
-                className="grid size-9 place-items-center rounded-full text-neutral-500 hover:bg-neutral-800 hover:text-white"
-              >
-                <Svg path={mdiPlus} className="size-5" />
-              </button>
-            )}
-          </Cell>
-        )
-      })}
+      <Cells grid={grid} type="tile" columns={columns} layout={layout} what="a tile" onAdd={onAdd} />
       {tiles.map((t) => (
         <ArrangedTile
           key={t.key}
@@ -74,14 +58,7 @@ export function ArrangedGrid({
           hidden={hidden.includes(t.key)}
           columns={columns}
           onSize={(size) => onLayout(columns, resize(layout, t.key, size, columns))}
-          onRemove={
-            onAdd &&
-            (() =>
-              onLayout(
-                columns,
-                layout.filter((p) => p.key !== t.key),
-              ))
-          }
+          onRemove={onRemove && (() => onRemove(t.key))}
         />
       ))}
     </div>
@@ -95,10 +72,47 @@ export const cells = (p: Place): CSSProperties => ({
   ...(rows(p) > 1 && { alignSelf: 'stretch', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)' }),
 })
 
-// A cell of a Layout's grid while arranging, where what is dragged may land: grid names the Layout
-// among those on the page, data tells what lands there. A free one may hold a way to add to it.
-export function Cell({ grid, data, col, row, children }: { grid: string; data: Record<string, unknown>; col: number; row: number; children?: ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `cell:${grid}:${col}:${row}`, data: { ...data, col, row } })
+// Every cell of grid, a Layout of columns, one row more than layout takes, where what is dragged of
+// type may land. With onAdd, a free one has a + adding what there.
+export function Cells({
+  grid,
+  type,
+  columns,
+  layout,
+  what,
+  onAdd,
+}: {
+  grid: string
+  type: string
+  columns: number
+  layout: Place[]
+  what: string
+  onAdd?: (col: number, row: number) => void
+}) {
+  const taken = new Set(layout.flatMap((p) => cellsOf(p, columns)))
+  const height = Math.max(0, ...layout.map((p) => p.row + rows(p))) + 1
+  return [...Array(height * columns).keys()].map((i) => {
+    const col = i % columns
+    const row = Math.floor(i / columns)
+    return (
+      <Cell key={i} grid={grid} type={type} col={col} row={row}>
+        {onAdd && !taken.has(i) && (
+          <button
+            onClick={() => onAdd(col, row)}
+            aria-label={`Add ${what} at column ${col + 1}, row ${row + 1}`}
+            className="grid size-9 place-items-center rounded-full text-neutral-500 hover:bg-neutral-800 hover:text-white"
+          >
+            <Svg path={mdiPlus} className="size-5" />
+          </button>
+        )}
+      </Cell>
+    )
+  })
+}
+
+// A cell of grid while arranging, where what is dragged of type may land.
+function Cell({ grid, type, col, row, children }: { grid: string; type: string; col: number; row: number; children?: ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `cell:${grid}:${col}:${row}`, data: { type, grid, col, row } })
   return (
     <div
       ref={setNodeRef}

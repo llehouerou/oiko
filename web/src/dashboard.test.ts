@@ -137,7 +137,7 @@ test('Flags without an Area are pills; Others opens with the manual Automations 
     doors: undefined,
     presence: undefined,
     bar: undefined,
-    tiles: ['bedtime', 'aggregate:g', 'device:lamp'],
+    tiles: ['automation:bedtime', 'aggregate:g', 'device:lamp'],
   })
 })
 

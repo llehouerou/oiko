@@ -178,7 +178,7 @@ export function Section({
   )
 }
 
-// What a Tile's ⋯ opens: its Device's, Aggregate's or Flag's panel, an Admin's.
+// What a Tile's ⋯ opens, for an Admin, who alone has onOpen: its Device's, Aggregate's or Flag's panel.
 const opener = (t: TargetTile, onOpen?: (id: string, back?: () => void) => void) => onOpen && ((back?: () => void) => onOpen(parseTarget(t.subject)!.id, back))
 
 // tiles drawn: a Tile's ⋯ opens its Device's, Aggregate's or Flag's panel, a Manual trigger's
