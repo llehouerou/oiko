@@ -103,10 +103,7 @@ const maxColumns = 6
 
 // CreateArea defines a new Area, last in the order, and returns its ID.
 func (h *Home) CreateArea(name, icon string) (AreaID, error) {
-	name, err := ValidName(name)
-	if err == nil {
-		err = validIcon(icon)
-	}
+	name, err := validArea(name, icon)
 	if err != nil {
 		return "", err
 	}
@@ -117,12 +114,18 @@ func (h *Home) CreateArea(name, icon string) (AreaID, error) {
 	return id, h.areasChanged()
 }
 
+// validArea is name as ValidName gives it, when it and icon both suit an Area.
+func validArea(name, icon string) (string, error) {
+	name, err := ValidName(name)
+	if err != nil {
+		return "", err
+	}
+	return name, validIcon(icon)
+}
+
 // EditArea sets an Area's Name and Icon, "" for none.
 func (h *Home) EditArea(id AreaID, name, icon string) error {
-	name, err := ValidName(name)
-	if err == nil {
-		err = validIcon(icon)
-	}
+	name, err := validArea(name, icon)
 	if err != nil {
 		return err
 	}

@@ -94,8 +94,15 @@ const lightIcons: { name: string; label: string; on: string; off?: string }[] = 
   { name: 'string-lights', label: 'String lights', on: mdiStringLights },
 ]
 
+// A picture to pick: its Icon name, what it shows, and its Material Design path.
+interface Choice {
+  name: string
+  label: string
+  path: string
+}
+
 // An Area's Icon pictures what it is for; it has none by default.
-const areaIcons: { name: string; label: string; path: string }[] = [
+const areaIcons: Choice[] = [
   { name: 'home', label: 'House', path: mdiHome },
   { name: 'sofa', label: 'Sofa', path: mdiSofa },
   { name: 'television', label: 'Television', path: mdiTelevision },
@@ -156,7 +163,7 @@ export function AreaIcon({ icon, className }: { icon?: string; className: string
 }
 
 // A grid of Icons to pick one from, current highlighted.
-function IconGrid({ icons, current, onPick }: { icons: { name: string; label: string; path: string }[]; current: string; onPick: (name: string) => void }) {
+function IconGrid({ icons, current, onPick }: { icons: Choice[]; current: string; onPick: (name: string) => void }) {
   return (
     <section className="space-y-3">
       <h3 className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">Icon</h3>
@@ -191,7 +198,7 @@ export function IconPicker({ target, icon, group, onError }: { target: Target; i
   )
 }
 
-// Picks an Area's Icon, or none, '' for which comes first.
+// Picks an Area's Icon; the first choice, '', is none.
 export function AreaIconPicker({ icon, onPick }: { icon: string; onPick: (icon: string) => void }) {
   return <IconGrid icons={[{ name: '', label: 'No icon', path: mdiCancel }, ...areaIcons]} current={icon} onPick={onPick} />
 }

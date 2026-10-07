@@ -52,7 +52,7 @@ func (h *Home) SetIcon(t Target, icon string) error {
 		h.aggregates[id] = &changed
 		return h.aggregatesChanged()
 	}
-	return fmt.Errorf("%w: only a device or an aggregate has an icon", ErrInvalid)
+	return fmt.Errorf("%w: a device's or an aggregate's icon is set here, an area's with its name", ErrInvalid)
 }
 
 // validIcon refuses what cannot name an Icon. Like a Name it is a label only,

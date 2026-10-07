@@ -22,9 +22,16 @@ func TestAnAreasIconComesBackInItsUpdatesAndTheSnapshot(t *testing.T) {
 		t.Errorf("in a snapshot: %v", got)
 	}
 
+	read(t, do("PUT", "/api/areas/"+id, `{"name": "Office", "icon": "bookshelf"}`), http.StatusNoContent)
+	if got := icon(next(t, msgs, "areas")); got != "bookshelf" {
+		t.Errorf("edited to another Icon: %v", got)
+	}
 	read(t, do("PUT", "/api/areas/"+id, `{"name": "Office"}`), http.StatusNoContent)
 	if got := icon(next(t, msgs, "areas")); got != nil {
 		t.Errorf("saved without an Icon: %v", got)
+	}
+	if got := icon(next(t, stream(t, do), "snapshot")); got != nil {
+		t.Errorf("in a snapshot, without an Icon: %v", got)
 	}
 	read(t, do("PUT", "/api/areas/"+id, `{"name": "Office", "icon": "Desk lamp"}`), http.StatusBadRequest)
 	read(t, do("POST", "/api/areas", `{"name": "Den", "icon": "../sofa"}`), http.StatusBadRequest)
