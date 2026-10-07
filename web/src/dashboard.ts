@@ -2,7 +2,24 @@ import { roles } from './roles'
 import { aggregateTarget, catalogue, deviceTarget, flagTarget, fnOf, parseTarget } from './targets'
 import { aggregateSummary, memberLeaves, tileCaps, tileShape, titled, type Shape } from './tiles'
 import { arrange, defaultColumns, type Place } from './layout'
-import type { Aggregate, Area, AutomationStatus, Capability, CustomDashboard, CustomSection, Device, Flag, Fn, PlacedTile, Target } from './types'
+import type {
+  Aggregate,
+  Area,
+  AreaSection,
+  AutomationStatus,
+  Capability,
+  CustomDashboard,
+  CustomSection,
+  Device,
+  Flag,
+  Fn,
+  OwnSection,
+  PlacedTile,
+  Target,
+} from './types'
+
+// The key that names a Section on its Dashboard's Layout: an Area's by its Area, an own one by its id.
+export const sectionKey = (s: AreaSection | OwnSection) => (s.area !== undefined ? `area:${s.area}` : `own:${s.id}`)
 
 // A Target's Tile, resolved once: everything about it that does not change while it is shown.
 // Its Availability, Values and Commands are read live.
@@ -119,7 +136,7 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
       : undefined
     const columns = area.columns ?? defaultColumns
     return {
-      key: `area:${area.id}`,
+      key: sectionKey({ area: area.id }),
       area,
       columns,
       climate: climateKinds.flatMap((k) => areaAggregate(area, k) ?? []),
@@ -166,7 +183,7 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
       own.map(([d, t]) => at(d.key, t)),
       naturalRows,
     )
-    return [{ key: `own:${s.id}`, own: { name: s.name, icon: s.icon }, columns: s.columns, climate: [], tiles }]
+    return [{ key: sectionKey(s), own: { name: s.name, icon: s.icon }, columns: s.columns, climate: [], tiles }]
   }
   return {
     pills: flags.filter((f) => !f.area),

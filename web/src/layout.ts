@@ -16,7 +16,7 @@ export const maxRows = 6 // the tallest a tile gets
 // How many rows p spans.
 export const rows = (p: Place) => p.height ?? 1
 // The cells p covers in a grid of columns, each as row * columns + col.
-const cellsOf = (p: Place, columns: number) =>
+export const cellsOf = (p: Place, columns: number) =>
   [...Array(rows(p)).keys()].flatMap((r) => [...Array(p.width).keys()].map((c) => (p.row + r) * columns + p.col + c))
 
 // occupants with their place in a Layout of columns, in reading order. An occupant layout places

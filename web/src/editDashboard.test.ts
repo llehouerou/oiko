@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest'
-import { addSection, moveSection, removeSection, resizeSection, sectionKey, setColumns, setSectionColumns, updateSection } from './editDashboard'
+import { addSection, moveSection, nameSection, removeSection, resizeSection, setDashboardColumns, setSectionColumns, tileKey } from './editDashboard'
+import { sectionKey } from './dashboard'
 import type { CustomDashboard, OwnSection, PlacedTile } from './types'
 import type { Place } from './layout'
 
@@ -19,7 +20,6 @@ function check(columns: number, layout: (Place & { key: string })[]) {
       }
   }
 }
-const tileKey = (t: PlacedTile) => t.target ?? `automation ${t.automation}`
 function passes(d: CustomDashboard) {
   check(
     d.columns,
@@ -48,6 +48,12 @@ test("a Section added lands in the cell asked, one column wide and one row tall,
   expect(both).toMatchObject({ id: 'd', owner: 'alice', name: 'Evening', columns: 2 })
 })
 
+test('a Section added where the stored Layout still holds one it no longer shows takes its cell', () => {
+  // the Office is gone: the editor draws its cell free, a + in it
+  const d = { ...empty, sections: [{ area: 'office', col: 0, row: 0, width: 1 }] }
+  expect(short(passes(addSection(d, { area: 'living' }, 0, 0)))).toEqual(['area:living 001', 'area:office 101'])
+})
+
 test('moving, resizing and removing Sections keeps them apart, inside the columns', () => {
   let d = addSection(addSection(addSection(empty, own('fav'), 0, 0), { area: 'living' }, 1, 0), { area: 'office' }, 0, 1)
   // the Section in the way takes the moved one's former place
@@ -62,7 +68,7 @@ test('moving, resizing and removing Sections keeps them apart, inside the column
   d = passes(removeSection(d, 'own:fav'))
   expect(short(d)).toEqual(['area:office 0112', 'area:living 111'])
   // fewer columns pull the Sections in, those in the way moving on
-  d = passes(setColumns(d, 1))
+  d = passes(setDashboardColumns(d, 1))
   expect(d.columns).toBe(1)
   expect(short(d)).toEqual(['area:office 0112', 'area:living 031'])
 })
@@ -73,7 +79,7 @@ test("an own Section's Name, Icon and columns change, its Tiles pulled into its 
     { automation: 'night', col: 0, row: 1, width: 1 },
   ]
   let d = addSection(empty, own('fav', tiles), 0, 0)
-  d = passes(updateSection(d, 'own:fav', { name: 'Favourites', icon: 'sofa' }))
+  d = passes(nameSection(d, 'own:fav', { name: 'Favourites', icon: 'sofa' }))
   expect(d.sections[0]).toMatchObject({ name: 'Favourites', icon: 'sofa' })
   d = passes(setSectionColumns(d, 'own:fav', 1))
   expect(d.sections[0]).toMatchObject({

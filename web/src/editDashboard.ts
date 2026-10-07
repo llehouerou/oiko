@@ -1,14 +1,15 @@
 // Edits to a custom Dashboard's document, each giving the whole Dashboard to save (ADR 0043): its
 // Sections moved, sized, added and removed on its Layout with the grid code of an Area's.
 
-import { move, reflow, resize, stored, type Arranged, type Place } from './layout'
-import type { AreaSection, CustomDashboard, CustomSection, OwnSection } from './types'
-
-// The key of Section s on its Dashboard's Layout, as dashboard.ts names it.
-export const sectionKey = (s: CustomSection) => (s.area !== undefined ? `area:${s.area}` : `own:${s.id}`)
+import { sectionKey } from './dashboard'
+import { move, resize, reflow, stored, type Arranged, type Place } from './layout'
+import type { AreaSection, CustomDashboard, CustomSection, OwnSection, PlacedTile } from './types'
 
 // What a Section is, apart from its place.
 export type SectionContent = AreaSection | OwnSection
+
+// The key that names Tile t on its own Section's Layout.
+export const tileKey = (t: PlacedTile) => t.target ?? `automation ${t.automation}`
 
 // occupants as a Layout, keyed by key: a height nobody set is the occupant's own, one row.
 const layoutOf = <T extends Place>(occupants: T[], key: (o: T) => string): Arranged[] =>
@@ -27,9 +28,12 @@ const arranged = (d: CustomDashboard, f: (layout: Arranged[]) => Arranged[]): Cu
   sections: placedAs(d.sections, sectionKey, f(layoutOf(d.sections, sectionKey))).sort((a, b) => a.row - b.row || a.col - b.col),
 })
 
-// d with section added at col and row, one column wide and one row tall.
-export const addSection = (d: CustomDashboard, section: SectionContent, col: number, row: number) =>
-  arranged({ ...d, sections: [...d.sections, { ...section, col, row, width: 1 } as CustomSection] }, (l) => reflow(l, d.columns))
+// d with section added at col and row, one column wide and one row tall; whatever its stored
+// Layout still holds there moves on.
+export function addSection(d: CustomDashboard, section: SectionContent, col: number, row: number) {
+  const added = { ...section, col, row, width: 1 } as CustomSection
+  return arranged({ ...d, sections: [added, ...d.sections] }, (l) => move(l, sectionKey(added), col, row, d.columns))
+}
 
 export const moveSection = (d: CustomDashboard, key: string, col: number, row: number) => arranged(d, (l) => move(l, key, col, row, d.columns))
 
@@ -37,19 +41,17 @@ export const resizeSection = (d: CustomDashboard, key: string, size: { width?: n
 
 export const removeSection = (d: CustomDashboard, key: string) => ({ ...d, sections: d.sections.filter((s) => sectionKey(s) !== key) })
 
-export const setColumns = (d: CustomDashboard, columns: number) => arranged({ ...d, columns }, (l) => reflow(l, columns))
+export const setDashboardColumns = (d: CustomDashboard, columns: number) => arranged({ ...d, columns }, (l) => reflow(l, columns))
 
-// d with own Section key changed as change says.
-export const updateSection = (d: CustomDashboard, key: string, change: Partial<OwnSection>) => ({
+// d with own Section key as f makes it; an Area's Section has nothing of its own to change.
+const changeOwn = (d: CustomDashboard, key: string, f: (s: OwnSection & Place) => OwnSection & Place) => ({
   ...d,
-  sections: d.sections.map((s) => (sectionKey(s) === key ? ({ ...s, ...change } as CustomSection) : s)),
+  sections: d.sections.map((s) => (s.area === undefined && sectionKey(s) === key ? f(s) : s)),
 })
 
+// d with own Section key's Name or Icon changed.
+export const nameSection = (d: CustomDashboard, key: string, change: { name?: string; icon?: string }) => changeOwn(d, key, (s) => ({ ...s, ...change }))
+
 // d with own Section key in columns, its Tiles pulled in.
-export function setSectionColumns(d: CustomDashboard, key: string, columns: number) {
-  const s = d.sections.find((s) => sectionKey(s) === key)
-  if (!s || s.area !== undefined) return d
-  const tileKey = (t: NonNullable<typeof s.tiles>[number]) => t.target ?? `automation ${t.automation}`
-  const tiles = s.tiles && placedAs(s.tiles, tileKey, reflow(layoutOf(s.tiles, tileKey), columns))
-  return updateSection(d, key, { columns, tiles })
-}
+export const setSectionColumns = (d: CustomDashboard, key: string, columns: number) =>
+  changeOwn(d, key, (s) => ({ ...s, columns, tiles: s.tiles && placedAs(s.tiles, tileKey, reflow(layoutOf(s.tiles, tileKey), columns)) }))

@@ -29,15 +29,18 @@ export const cells = (p: Place): CSSProperties => ({
   ...(rows(p) > 1 && { alignSelf: 'stretch', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)' }),
 })
 
-// A cell of an Area's grid while arranging, where one of its tiles may land.
-export function Cell({ area, col, row }: { area: string; col: number; row: number }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `cell:${area}:${col}:${row}`, data: { type: 'tile', area, col, row } })
+// A cell of a Layout's grid while arranging, where what is dragged may land: grid names the Layout
+// among those on the page, data tells what lands there. A free one may hold a way to add to it.
+export function Cell({ grid, data, col, row, children }: { grid: string; data: Record<string, unknown>; col: number; row: number; children?: ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `cell:${grid}:${col}:${row}`, data: { ...data, col, row } })
   return (
     <div
       ref={setNodeRef}
       style={{ gridColumn: col + 1, gridRow: row + 1 }}
-      className={`min-h-14 self-stretch rounded-xl border border-dashed ${isOver ? 'border-amber-400 bg-amber-400/10' : 'border-neutral-700/60'}`}
-    />
+      className={`grid min-h-14 place-items-center self-stretch rounded-xl border border-dashed ${isOver ? 'border-amber-400 bg-amber-400/10' : 'border-neutral-700/60'}`}
+    >
+      {children}
+    </div>
   )
 }
 
@@ -74,24 +77,43 @@ export function ArrangedTile({
         aria-label={`Move ${tile.label}`}
         className="absolute inset-0 flex cursor-grab touch-none items-end justify-end gap-1 rounded-xl p-1.5 ring-1 ring-amber-400/50 hover:bg-amber-400/5"
       >
-        <Stepper
-          icon={mdiArrowExpandHorizontal}
-          value={place.width}
-          max={columns}
-          label="columns wide"
-          onChange={(width) => onSize({ width })}
-          className="bg-neutral-950/90 text-xs"
-        />
-        <Stepper
-          icon={mdiArrowExpandVertical}
-          value={rows(place)}
-          max={maxRows}
-          label="rows tall"
-          onChange={(height) => onSize({ height })}
-          className="bg-neutral-950/90 text-xs"
-        />
+        <SizeSteppers place={place} columns={columns} onSize={onSize} className="bg-neutral-950/90 text-xs" />
       </div>
     </div>
+  )
+}
+
+// The width of what sits at place, from one column to them all, and its height, from one row to maxRows.
+export function SizeSteppers({
+  place,
+  columns,
+  onSize,
+  className,
+}: {
+  place: Place
+  columns: number
+  onSize: (size: { width?: number; height?: number }) => void
+  className?: string
+}) {
+  return (
+    <>
+      <Stepper
+        icon={mdiArrowExpandHorizontal}
+        value={place.width}
+        max={columns}
+        label="columns wide"
+        onChange={(width) => onSize({ width })}
+        className={className}
+      />
+      <Stepper
+        icon={mdiArrowExpandVertical}
+        value={rows(place)}
+        max={maxRows}
+        label="rows tall"
+        onChange={(height) => onSize({ height })}
+        className={className}
+      />
+    </>
   )
 }
 

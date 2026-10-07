@@ -161,7 +161,7 @@ export function Section({
             <div className="grid auto-rows-[minmax(3.5rem,auto)] items-start gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
               {/* every cell, one row more than the tiles take, for a tile to land in */}
               {[...Array((Math.max(0, ...layout.map((p) => p.row + rows(p))) + 1) * columns).keys()].map((i) => (
-                <Cell key={i} area={area} col={i % columns} row={Math.floor(i / columns)} />
+                <Cell key={i} grid={area} data={{ type: 'tile', area }} col={i % columns} row={Math.floor(i / columns)} />
               ))}
               {tiles.map((t) => (
                 <ArrangedTile
