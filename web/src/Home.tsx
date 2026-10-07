@@ -63,7 +63,7 @@ export function Home({ hash }: { hash: string }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const editing = editable && editingId === (current?.id ?? 'builtin')
   const arrange = editing && !current
-  // Whether the Person is duplicating the current Dashboard into a new one of theirs.
+  // Whether the Person is duplicating the current Dashboard into a new one.
   const [duplicating, setDuplicating] = useState(false)
   return (
     <>

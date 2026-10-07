@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -275,4 +276,51 @@ func TestEachPersonSavesTheirListOfDashboards(t *testing.T) {
 	if _, has := next(t, stream(t, as["Kiosk"]), "snapshot")["list"]; has {
 		t.Error("a Kiosk's snapshot has a list")
 	}
+}
+
+// A duplicate is built by the web client from what its viewer got, and created
+// as any Dashboard is (ADR 0046).
+func TestADuplicateHoldsWhatItsViewerSaw(t *testing.T) {
+	as := identities(t)
+	alice, carol := as["Alice"], as["Carol"]
+	steps := `[{"id": "go", "kind": "manualTrigger", "name": "Go", "params": {}}]`
+	leave := decodeAs[struct{ ID string }](t, alice("POST", "/api/automations", `{"name": "Leave", "steps": `+steps+`}`), http.StatusCreated).ID
+	night := decodeAs[struct{ ID string }](t, alice("POST", "/api/automations", `{"name": "Night"}`), http.StatusCreated).ID
+	watch := stream(t, alice)
+	for m := next(t, watch, "snapshot"); len(m["automations"].([]any)) < 2; m = next(t, watch, "automations") {
+	}
+	sections := `[{"id": "both", "columns": 2, "col": 0, "row": 0, "width": 1, "tiles": [
+		{"automation": "` + leave + `", "col": 0, "row": 0, "width": 1},
+		{"automation": "` + night + `", "col": 1, "row": 0, "width": 1}]}]`
+	read(t, alice("POST", "/api/dashboards", `{"name": "Mine", "sections": `+sections+`}`), http.StatusCreated)
+
+	// An Admin duplicating their personal Dashboard into a shared one puts it in
+	// every Person's list.
+	read(t, alice("POST", "/api/dashboards", `{"shared": true, "name": "Evening", "sections": `+sections+`}`), http.StatusCreated)
+	for _, who := range []string{"Carol", "Bob", "Alice"} {
+		if got := listed(next(t, stream(t, as[who]), "snapshot")); !slices.Contains(got, "Evening") {
+			t.Errorf("%s's list: %v", who, got)
+		}
+	}
+
+	// A Guest duplicating it gets a personal one without what they could not see.
+	guest := stream(t, carol)
+	shared := next(t, guest, "snapshot")["dashboards"].([]any)[0].(map[string]any)
+	copied, err := json.Marshal(map[string]any{"name": "Carol's evening", "columns": shared["columns"], "sections": shared["sections"]})
+	if err != nil {
+		t.Fatal(err)
+	}
+	read(t, carol("POST", "/api/dashboards", string(copied)), http.StatusCreated)
+	for _, d := range next(t, guest, "dashboards")["dashboards"].([]any) {
+		d := d.(map[string]any)
+		if d["name"] != "Carol's evening" {
+			continue
+		}
+		tiles := d["sections"].([]any)[0].(map[string]any)["tiles"].([]any)
+		if d["owner"] == nil || d["shared"] != nil || len(tiles) != 1 || tiles[0].(map[string]any)["automation"] != leave {
+			t.Errorf("a Guest's duplicate: %v", d)
+		}
+		return
+	}
+	t.Error("a Guest's duplicate did not reach them")
 }
