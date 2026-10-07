@@ -357,7 +357,8 @@ func TestWhatIsGoneIsDroppedOnASave(t *testing.T) {
 }
 
 func TestEachPersonOrdersTheDashboardsTheySee(t *testing.T) {
-	s := opened(t, t.TempDir(), home.New(nil))
+	dir := t.TempDir()
+	s := opened(t, dir, home.New(nil))
 	want := func(p access.Identity, ids ...string) {
 		t.Helper()
 		if got := list(s, p); !slices.Equal(got, ids) {
@@ -415,6 +416,12 @@ func TestEachPersonOrdersTheDashboardsTheySee(t *testing.T) {
 		t.Fatal(err)
 	}
 	want(alice, Builtin, "-"+alices)
+	// and keeps it shown once another joins the end.
+	later := create(alice, Dashboard{Name: "Later"})
+	want(alice, Builtin, "-"+alices, later)
+	if got := list(opened(t, dir, home.New(nil)), alice); !slices.Equal(got, []string{Builtin, "-" + alices, later}) {
+		t.Errorf("Alice's list after a restart: %v", got)
+	}
 
 	// A Kiosk and a Program have no list.
 	for _, by := range []access.Identity{

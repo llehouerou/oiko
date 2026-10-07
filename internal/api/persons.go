@@ -93,7 +93,7 @@ func handlePersons(mux *http.ServeMux, acc *access.Store, dash *dashboard.Store,
 		if err := dash.RemovePerson(id); err != nil {
 			slog.Error("dashboards: dropping a removed Person's list", "err", err)
 		}
-		w.WriteHeader(http.StatusNoContent)
+		reply(w, nil)
 	})
 	// A new Sign-in link for Person {id}, an Admin's for anyone, or anyone's
 	// for themself: its secret, shown this once, and when it expires.

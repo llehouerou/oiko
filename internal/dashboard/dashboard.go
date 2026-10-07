@@ -178,18 +178,14 @@ func (s *Store) Dashboards(by access.Identity) ([]Dashboard, <-chan struct{}) {
 
 // List is by's list (ADR 0044): the Dashboards by sees, the built-in one
 // included, in their order, those missing from what by saved at the end,
-// shown; the first one shown again if none is. A Kiosk and a Program have
-// none.
+// shown. A Kiosk and a Program have none.
 func (s *Store) List(by access.Identity) []Entry {
 	if by.Kind != access.PersonKind {
 		return nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	list, shows := s.reconciled(by.ID, s.doc.Lists[by.ID])
-	if !shows {
-		list[0].Hidden = false
-	}
+	list, _ := reconciled(s.doc.Dashboards, by.ID, s.doc.Lists[by.ID])
 	return list
 }
 
@@ -201,7 +197,7 @@ func (s *Store) SaveList(by access.Identity, list []Entry) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	list, shows := s.reconciled(by.ID, list)
+	list, shows := reconciled(s.doc.Dashboards, by.ID, list)
 	if !shows {
 		return fmt.Errorf("%w: a list shows at least one dashboard", home.ErrInvalid)
 	}
@@ -223,13 +219,12 @@ func (s *Store) RemovePerson(p string) error {
 	return s.save(document{s.doc.Dashboards, lists}, func(string) bool { return false })
 }
 
-// reconciled is list as Person p's: each Dashboard p sees once, in list's
-// order, then those list misses, shown, the built-in one first; and whether
-// it shows any. An entry for a Dashboard deleted since is dropped here.
-// Callers hold s.mu.
-func (s *Store) reconciled(p string, list []Entry) ([]Entry, bool) {
+// reconciled is list as Person p's, ds the Dashboards: each Dashboard p sees
+// once, in list's order, then those list misses, shown, the built-in one
+// first; and whether it shows any.
+func reconciled(ds []Dashboard, p string, list []Entry) ([]Entry, bool) {
 	seen := []string{Builtin}
-	for _, d := range s.doc.Dashboards {
+	for _, d := range ds {
 		if d.seenBy(p) {
 			seen = append(seen, d.ID)
 		}
@@ -333,10 +328,20 @@ func (s *Store) editable(by access.Identity, id string) (int, error) {
 }
 
 // write saves ds, which are then the Dashboards, and tells whoever sees
-// changed: every Person if it is shared, its owner otherwise. Callers hold
-// s.mu.
+// changed: every Person if it is shared, its owner otherwise. Each list saved
+// follows in the same write (ADR 0044): a Dashboard created joins its end,
+// shown, one deleted leaves it, and if that leaves none shown, the first one
+// left is shown again. Callers hold s.mu.
 func (s *Store) write(ds []Dashboard, changed Dashboard) error {
-	return s.save(document{ds, s.doc.Lists}, changed.seenBy)
+	lists := map[string][]Entry{}
+	for p, l := range s.doc.Lists {
+		l, shows := reconciled(ds, p, l)
+		if !shows {
+			l[0].Hidden = false
+		}
+		lists[p] = l
+	}
+	return s.save(document{ds, lists}, changed.seenBy)
 }
 
 // save saves doc, which is then dashboards.json, and tells each Person tell
