@@ -1,8 +1,8 @@
 // Package dashboard keeps the custom Dashboards in dashboards.json (ADR 0040
 // to 0046): shared ones, an Admin's to edit and every Person's to see, and
-// personal ones, their owner's alone; and each Person's list of those they
-// see. It alone checks what a Dashboard may hold and who may save it; the
-// HTTP layer only names who asks.
+// personal ones, their owner's alone; each Person's list of those they see;
+// and each Kiosk's assigned Dashboard. It alone checks what a Dashboard may
+// hold and who may save it; the HTTP layer only names who asks.
 package dashboard
 
 import (
@@ -91,7 +91,8 @@ type Entry struct {
 // document is dashboards.json.
 type document struct {
 	Dashboards []Dashboard        `json:"dashboards"`
-	Lists      map[string][]Entry `json:"lists,omitempty"` // each Person's, as they last saved it, by Person id
+	Lists      map[string][]Entry `json:"lists,omitempty"`  // each Person's, as they last saved it, by Person id
+	Kiosks     map[string]string  `json:"kiosks,omitempty"` // each Kiosk's shared Dashboard, by Kiosk id; none: the built-in one
 }
 
 // Store holds the custom Dashboards, and follows the home to know what they
@@ -100,10 +101,27 @@ type Store struct {
 	file    string
 	mu      sync.Mutex
 	doc     document
-	changed map[string]chan struct{} // closed when the Dashboards a Person sees or their list change, by Person id
+	changed map[who]chan struct{} // closed when what an identity is given changes
 
 	kmu   sync.Mutex // under Home's lock: never held while calling Home
 	known known
+}
+
+// who is an identity told of changes: a Person, an Admin apart, or a Kiosk.
+type who struct {
+	kind  access.Kind
+	id    string
+	admin bool
+}
+
+func whoIs(by access.Identity) who {
+	return who{by.Kind, by.ID, admin(by)}
+}
+
+// admin reports whether by is an Admin Person: a Kiosk or a Program is none,
+// whatever its level.
+func admin(by access.Identity) bool {
+	return by.Kind == access.PersonKind && by.Level.Allows(access.Admin)
 }
 
 // known is what exists in the home, as last announced.
@@ -116,16 +134,21 @@ type known struct {
 }
 
 // Open loads the Dashboards from dir, dropping the lists of whoever is not
-// one of persons, by id, and follows h.
-func Open(dir string, h *home.Home, persons []string) (*Store, error) {
-	s := &Store{file: filepath.Join(dir, "dashboards.json"), changed: map[string]chan struct{}{}}
+// one of persons and the assignments of whatever is not one of kiosks, by
+// id, and follows h.
+func Open(dir string, h *home.Home, persons, kiosks []string) (*Store, error) {
+	s := &Store{file: filepath.Join(dir, "dashboards.json"), changed: map[who]chan struct{}{}}
 	if err := store.Load(s.file, Format, &s.doc); err != nil {
 		return nil, fmt.Errorf("loading %s: %w", s.file, err)
 	}
 	if s.doc.Lists == nil {
 		s.doc.Lists = map[string][]Entry{}
 	}
+	if s.doc.Kiosks == nil {
+		s.doc.Kiosks = map[string]string{}
+	}
 	maps.DeleteFunc(s.doc.Lists, func(p string, _ []Entry) bool { return !slices.Contains(persons, p) })
+	maps.DeleteFunc(s.doc.Kiosks, func(k, _ string) bool { return !slices.Contains(kiosks, k) })
 	// Held across Follow: an Update announced as it returns waits for the
 	// snapshot to be kept first, rather than be overwritten by it.
 	s.kmu.Lock()
@@ -153,27 +176,81 @@ func (s *Store) deliver(u home.Update) {
 	}
 }
 
-// Dashboards are those by sees, the shared ones and their own, and a channel
-// closed once they or by's list change. A Kiosk and a Program have none, and
-// are never told.
+// Dashboards are those by sees, and a channel closed once they, by's list, or
+// for an Admin the Kiosks' assignments change: for a Person the shared ones
+// and their own, for a Kiosk the one it is assigned, none for the built-in
+// one. A Program has none, and is never told.
 func (s *Store) Dashboards(by access.Identity) ([]Dashboard, <-chan struct{}) {
-	if by.Kind != access.PersonKind {
-		return nil, nil
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	seen := []Dashboard{}
-	for _, d := range s.doc.Dashboards {
-		if d.seenBy(by.ID) {
-			seen = append(seen, d)
+	switch by.Kind {
+	case access.PersonKind:
+		for _, d := range s.doc.Dashboards {
+			if d.seenBy(by.ID) {
+				seen = append(seen, d)
+			}
 		}
+	case access.KioskKind:
+		if i := s.index(s.doc.Kiosks[by.ID]); i >= 0 {
+			seen = append(seen, s.doc.Dashboards[i])
+		}
+	default:
+		return nil, nil
 	}
-	ch := s.changed[by.ID]
+	w := whoIs(by)
+	ch := s.changed[w]
 	if ch == nil {
 		ch = make(chan struct{})
-		s.changed[by.ID] = ch
+		s.changed[w] = ch
 	}
 	return seen, ch
+}
+
+// Assignments are each Kiosk's assigned Dashboard, by Kiosk id, those showing
+// the built-in one left out, for an Admin Person; nil for anyone else.
+func (s *Store) Assignments(by access.Identity) map[string]string {
+	if !admin(by) {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return maps.Clone(s.doc.Kiosks)
+}
+
+// Assign assigns Kiosk k Dashboard id, the built-in one or a shared one, for
+// an Admin Person (ADR 0045). It grants nothing: no step-up.
+func (s *Store) Assign(by access.Identity, k, id string) error {
+	if !admin(by) {
+		return fmt.Errorf("%w: only an admin assigns a kiosk its dashboard", access.ErrRefused)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	kiosks := maps.Clone(s.doc.Kiosks)
+	if id == Builtin {
+		delete(kiosks, k)
+	} else if i := s.index(id); i >= 0 && s.doc.Dashboards[i].Shared {
+		kiosks[k] = id
+	} else {
+		return fmt.Errorf("%w: a kiosk shows the built-in dashboard or a shared one", home.ErrInvalid)
+	}
+	doc := s.doc
+	doc.Kiosks = kiosks
+	return s.save(doc, func(w who) bool { return w.admin || w.kind == access.KioskKind && w.id == k })
+}
+
+// RemoveKiosk drops removed Kiosk k's assignment (ADR 0045); the Kiosks are
+// written first, and an assignment left behind is dropped on load.
+func (s *Store) RemoveKiosk(k string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.doc.Kiosks[k]; !ok {
+		return nil
+	}
+	doc := s.doc
+	doc.Kiosks = maps.Clone(s.doc.Kiosks)
+	delete(doc.Kiosks, k)
+	return s.save(doc, func(w who) bool { return w.admin })
 }
 
 // List is by's list (ADR 0044): the Dashboards by sees, the built-in one
@@ -201,9 +278,10 @@ func (s *Store) SaveList(by access.Identity, list []Entry) error {
 	if !shows {
 		return fmt.Errorf("%w: a list shows at least one dashboard", home.ErrInvalid)
 	}
-	lists := maps.Clone(s.doc.Lists)
-	lists[by.ID] = list
-	return s.save(document{s.doc.Dashboards, lists}, func(p string) bool { return p == by.ID })
+	doc := s.doc
+	doc.Lists = maps.Clone(s.doc.Lists)
+	doc.Lists[by.ID] = list
+	return s.save(doc, func(w who) bool { return w.kind == access.PersonKind && w.id == by.ID })
 }
 
 // RemovePerson drops removed Person p's list (ADR 0045); the Persons are
@@ -214,9 +292,10 @@ func (s *Store) RemovePerson(p string) error {
 	if _, ok := s.doc.Lists[p]; !ok {
 		return nil
 	}
-	lists := maps.Clone(s.doc.Lists)
-	delete(lists, p)
-	return s.save(document{s.doc.Dashboards, lists}, func(string) bool { return false })
+	doc := s.doc
+	doc.Lists = maps.Clone(s.doc.Lists)
+	delete(doc.Lists, p)
+	return s.save(doc, func(who) bool { return false })
 }
 
 // reconciled is list as Person p's, ds the Dashboards: each Dashboard p sees
@@ -311,10 +390,15 @@ func person(by access.Identity) error {
 	return nil
 }
 
+// index is the index of Dashboard id; -1 if there is none. Callers hold s.mu.
+func (s *Store) index(id string) int {
+	return slices.IndexFunc(s.doc.Dashboards, func(d Dashboard) bool { return d.ID == id })
+}
+
 // editable is the index of Dashboard id, if by may edit it. Callers hold
 // s.mu.
 func (s *Store) editable(by access.Identity, id string) (int, error) {
-	i := slices.IndexFunc(s.doc.Dashboards, func(d Dashboard) bool { return d.ID == id })
+	i := s.index(id)
 	if i < 0 {
 		return 0, fmt.Errorf("dashboard %q: %w", id, home.ErrNotFound)
 	}
@@ -328,10 +412,12 @@ func (s *Store) editable(by access.Identity, id string) (int, error) {
 }
 
 // write saves ds, which are then the Dashboards, and tells whoever sees
-// changed: every Person if it is shared, its owner otherwise. Each list saved
-// follows in the same write (ADR 0044): a Dashboard created joins its end,
-// shown, one deleted leaves it, and if that leaves none shown, the first one
-// left is shown again. Callers hold s.mu.
+// changed: every Person if it is shared, its owner otherwise, and the Kiosks
+// it was assigned. Each list saved follows in the same write (ADR 0044): a
+// Dashboard created joins its end, shown, one deleted leaves it, and if that
+// leaves none shown, the first one left is shown again. A Kiosk whose
+// Dashboard is deleted shows the built-in one again (ADR 0045). Callers hold
+// s.mu.
 func (s *Store) write(ds []Dashboard, changed Dashboard) error {
 	lists := map[string][]Entry{}
 	for p, l := range s.doc.Lists {
@@ -341,20 +427,33 @@ func (s *Store) write(ds []Dashboard, changed Dashboard) error {
 		}
 		lists[p] = l
 	}
-	return s.save(document{ds, lists}, changed.seenBy)
+	was := s.doc.Kiosks
+	kiosks := maps.Clone(was)
+	maps.DeleteFunc(kiosks, func(_, id string) bool {
+		return !slices.ContainsFunc(ds, func(d Dashboard) bool { return d.ID == id })
+	})
+	return s.save(document{ds, lists, kiosks}, func(w who) bool {
+		switch w.kind {
+		case access.PersonKind:
+			return changed.seenBy(w.id)
+		case access.KioskKind:
+			return was[w.id] == changed.ID
+		}
+		return false
+	})
 }
 
-// save saves doc, which is then dashboards.json, and tells each Person tell
+// save saves doc, which is then dashboards.json, and tells each identity tell
 // reports true for. Callers hold s.mu.
-func (s *Store) save(doc document, tell func(p string) bool) error {
+func (s *Store) save(doc document, tell func(who) bool) error {
 	if err := store.Save(s.file, Format, doc); err != nil {
 		return err
 	}
 	s.doc = doc
-	for p, ch := range s.changed {
-		if tell(p) {
+	for w, ch := range s.changed {
+		if tell(w) {
 			close(ch)
-			delete(s.changed, p)
+			delete(s.changed, w)
 		}
 	}
 	return nil

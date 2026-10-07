@@ -236,8 +236,11 @@ export interface Snapshot {
   events: { ref: Ref; value: Value }[]
   automations: AutomationStatus[]
   releases: ReleaseStatus[]
-  dashboards?: CustomDashboard[] // those a Person sees, as they see them; none for a Kiosk or a Program
+  // Those a Person sees, as they see them, or the one a Kiosk is assigned, none for the built-in one;
+  // none for a Program.
+  dashboards?: CustomDashboard[]
   list?: ListEntry[] // a Person's
+  kioskDashboards?: Record<string, string> // each Kiosk's shared Dashboard, by Kiosk id, to an Admin; none: the built-in one
 }
 
 // Sent again each time a check finds something else; not an Update.
@@ -246,12 +249,12 @@ export interface Releases {
   releases: ReleaseStatus[]
 }
 
-// The Dashboards a Person sees and their list, sent again whole each time either changes; not an
-// Update.
+// What a snapshot carries of Dashboards, sent again whole each time any of it changes; not an Update.
 export interface Dashboards {
   kind: 'dashboards'
   dashboards: CustomDashboard[]
-  list: ListEntry[]
+  list?: ListEntry[]
+  kioskDashboards?: Record<string, string>
 }
 
 // Mirrors dashboard.Entry: a Dashboard in a Person's list, by id ('builtin' for the built-in one),

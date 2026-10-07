@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -27,7 +28,7 @@ func identities(t *testing.T) map[string]requester {
 	srv := httptest.NewServer(hdl)
 	t.Cleanup(srv.Close)
 	alice, _ := acc.Resolve(cookies[access.Admin].Value)
-	_, kiosk := withKiosk(t, acc, alice, "Hall tablet", access.Member)
+	_, kiosk := withKiosk(t, acc, alice, "Hall tablet", access.Guest)
 	_, token := withProgram(t, acc, alice, "Script", access.Admin)
 	do := browser(t, srv, "https://oiko.example")
 	as := func(c *http.Cookie) requester {
@@ -96,12 +97,15 @@ func TestEachPersonKeepsTheirOwnDashboardsAndNothingElseDoes(t *testing.T) {
 func TestAPersonsDashboardsReachEachOfTheirStreamsAndOnlyTheirs(t *testing.T) {
 	as := identities(t)
 	bob, again, carol, kiosk := stream(t, as["Bob"]), stream(t, as["Bob"]), stream(t, as["Carol"]), stream(t, as["Kiosk"])
-	// Before any, a Person's snapshot has none, and a Kiosk's no place for them.
+	// Before any, a Person's snapshot has none, nor a Kiosk's showing the
+	// built-in one.
 	for name, msgs := range map[string]<-chan map[string]any{"Bob's": bob, "Bob's other": again, "Carol's": carol, "the Kiosk's": kiosk} {
-		ds, has := next(t, msgs, "snapshot")["dashboards"]
-		if want := name != "the Kiosk's"; has != want || has && len(ds.([]any)) != 0 {
+		if ds, has := next(t, msgs, "snapshot")["dashboards"]; !has || len(ds.([]any)) != 0 {
 			t.Fatalf("%s snapshot before any: %v %v", name, has, ds)
 		}
+	}
+	if _, has := next(t, stream(t, as["Program"]), "snapshot")["dashboards"]; has {
+		t.Error("a Program's snapshot has dashboards")
 	}
 
 	created := decodeAs[struct{ ID string }](t, as["Bob"]("POST", "/api/dashboards", `{"name": "Evening"}`), http.StatusCreated)
@@ -323,4 +327,87 @@ func TestADuplicateHoldsWhatItsViewerSaw(t *testing.T) {
 		return
 	}
 	t.Error("a Guest's duplicate did not reach them")
+}
+
+func TestAKioskShowsTheDashboardAnAdminAssignsIt(t *testing.T) {
+	as := identities(t)
+	alice := as["Alice"]
+	hall := decodeAs[[]struct{ ID string }](t, alice("GET", "/api/kiosks", ""), http.StatusOK)[0].ID
+	steps := `[{"id": "go", "kind": "manualTrigger", "name": "Go", "params": {}}]`
+	leave := decodeAs[struct{ ID string }](t, alice("POST", "/api/automations", `{"name": "Leave", "steps": `+steps+`}`), http.StatusCreated).ID
+	night := decodeAs[struct{ ID string }](t, alice("POST", "/api/automations", `{"name": "Night"}`), http.StatusCreated).ID
+	watch := stream(t, alice)
+	for m := next(t, watch, "snapshot"); len(m["automations"].([]any)) < 2; m = next(t, watch, "automations") {
+	}
+	sections := `[{"id": "both", "columns": 2, "col": 0, "row": 0, "width": 1, "tiles": [
+		{"automation": "` + leave + `", "col": 0, "row": 0, "width": 1},
+		{"automation": "` + night + `", "col": 1, "row": 0, "width": 1}]}]`
+	evening := decodeAs[struct{ ID string }](t, alice("POST", "/api/dashboards", `{"shared": true, "name": "Evening", "sections": `+sections+`}`), http.StatusCreated).ID
+	mine := decodeAs[struct{ ID string }](t, alice("POST", "/api/dashboards", `{"name": "Mine"}`), http.StatusCreated).ID
+
+	admin, kiosk := stream(t, alice), stream(t, as["Kiosk"])
+	if got := next(t, admin, "snapshot")["kioskDashboards"]; !reflect.DeepEqual(got, map[string]any{}) {
+		t.Errorf("an Admin's snapshot: %v", got)
+	}
+	next(t, kiosk, "snapshot")
+	for _, who := range []string{"Carol", "Bob", "Kiosk", "Program"} {
+		if _, has := next(t, stream(t, as[who]), "snapshot")["kioskDashboards"]; has {
+			t.Errorf("%s's snapshot has the Kiosks' Dashboards", who)
+		}
+	}
+
+	// An Admin's alone, a shared Dashboard or the built-in one only.
+	assign := func(do requester, kiosk, id string, status int) {
+		t.Helper()
+		read(t, do("PUT", "/api/kiosks/"+kiosk+"/dashboard", `{"dashboard": "`+id+`"}`), status)
+	}
+	for _, who := range []string{"Carol", "Bob", "Kiosk", "Program"} {
+		assign(as[who], hall, evening, http.StatusForbidden)
+	}
+	assign(alice, hall, mine, http.StatusBadRequest)
+	assign(alice, hall, "gone", http.StatusBadRequest)
+	assign(alice, "gone", evening, http.StatusNotFound)
+
+	// The Kiosk shows it at once, filtered at its level: a Guest's.
+	assign(alice, hall, evening, http.StatusNoContent)
+	shown := func(m map[string]any) string {
+		var s []string
+		for _, d := range m["dashboards"].([]any) {
+			d := d.(map[string]any)
+			s = append(s, d["name"].(string)+":")
+			for _, tile := range d["sections"].([]any)[0].(map[string]any)["tiles"].([]any) {
+				s = append(s, map[string]string{leave: "leave", night: "night"}[tile.(map[string]any)["automation"].(string)])
+			}
+		}
+		return strings.Join(s, " ")
+	}
+	if got := shown(next(t, kiosk, "dashboards")); got != "Evening: leave" {
+		t.Errorf("the Kiosk's stream once assigned one: %q", got)
+	}
+	if got := next(t, admin, "dashboards")["kioskDashboards"]; !reflect.DeepEqual(got, map[string]any{hall: evening}) {
+		t.Errorf("an Admin's stream once a Kiosk is assigned one: %v", got)
+	}
+	if got := shown(next(t, stream(t, as["Kiosk"]), "snapshot")); got != "Evening: leave" {
+		t.Errorf("the Kiosk's snapshot: %q", got)
+	}
+
+	// An edit reaches it, and so does a reassignment.
+	read(t, alice("PUT", "/api/dashboards/"+evening, `{"name": "Night", "sections": `+sections+`}`), http.StatusNoContent)
+	if got := shown(next(t, kiosk, "dashboards")); got != "Night: leave" {
+		t.Errorf("the Kiosk's stream once its Dashboard is edited: %q", got)
+	}
+	assign(alice, hall, "builtin", http.StatusNoContent)
+	if got := shown(next(t, kiosk, "dashboards")); got != "" {
+		t.Errorf("the Kiosk's stream once assigned the built-in one: %q", got)
+	}
+
+	// A removed Kiosk takes its assignment with it.
+	assign(alice, hall, evening, http.StatusNoContent)
+	next(t, admin, "dashboards") // Night
+	next(t, admin, "dashboards") // assigned the built-in one
+	next(t, admin, "dashboards") // assigned Night again
+	read(t, alice("DELETE", "/api/kiosks/"+hall, ""), http.StatusNoContent)
+	if got := next(t, admin, "dashboards")["kioskDashboards"]; !reflect.DeepEqual(got, map[string]any{}) {
+		t.Errorf("an Admin's stream once the Kiosk is removed: %v", got)
+	}
 }

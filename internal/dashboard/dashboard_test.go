@@ -1,9 +1,12 @@
 package dashboard
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -50,12 +53,16 @@ func aHome(t *testing.T) living {
 	return living{h, area, home.TargetDevice(snap.Devices[0].ID, ""), home.TargetFlag(flag), string(other)}
 }
 
-// persons are the Persons the tests' Dashboards know at load.
-var persons = []string{"alice", "bob", "carol"}
+// persons and kiosks are the Persons and Kiosks the tests' Dashboards know at
+// load.
+var (
+	persons = []string{"alice", "bob", "carol"}
+	kiosks  = []string{"hall", "kitchen"}
+)
 
 func opened(t *testing.T, dir string, h *home.Home) *Store {
 	t.Helper()
-	s, err := Open(dir, h, persons)
+	s, err := Open(dir, h, persons, kiosks)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,11 +461,164 @@ func TestARemovedPersonTakesTheirListWithThem(t *testing.T) {
 	}
 
 	// Carol, removed while her list was not, loses it on load.
-	again, err := Open(dir, home.New(nil), []string{"bob"})
+	again, err := Open(dir, home.New(nil), []string{"bob"}, kiosks)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := list(again, carol); !slices.Equal(got, []string{Builtin, shared}) {
 		t.Errorf("a list of a Person no longer known: %v", got)
+	}
+}
+
+var (
+	hall    = access.Identity{Kind: access.KioskKind, ID: "hall", Name: "Hall tablet", Level: access.Guest}
+	kitchen = access.Identity{Kind: access.KioskKind, ID: "kitchen", Name: "Kitchen tablet", Level: access.Member}
+)
+
+// shows is the id of the Dashboard Kiosk k shows: its own, or the built-in one.
+func shows(s *Store, k access.Identity) string {
+	switch ds, _ := s.Dashboards(k); len(ds) {
+	case 0:
+		return Builtin
+	case 1:
+		return ds[0].ID
+	default:
+		return fmt.Sprintf("%d dashboards", len(ds))
+	}
+}
+
+func TestAnAdminAssignsAKioskItsDashboard(t *testing.T) {
+	dir := t.TempDir()
+	s := opened(t, dir, home.New(nil))
+	evening, err := s.Create(bob, Dashboard{Shared: true, Name: "Evening"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bobs, err := s.Create(bob, Dashboard{Name: "Bob's"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := func(s *Store, assigned map[string]string) {
+		t.Helper()
+		if got := s.Assignments(bob); !maps.Equal(got, assigned) {
+			t.Errorf("the assignments: %v, want %v", got, assigned)
+		}
+		for _, k := range []access.Identity{hall, kitchen} {
+			if got, want := shows(s, k), cmp.Or(assigned[k.ID], Builtin); got != want {
+				t.Errorf("%s shows %s, want %s", k.Name, got, want)
+			}
+		}
+	}
+	want(s, map[string]string{})
+
+	// Only an Admin assigns one, and only the built-in one or a shared one.
+	for _, by := range []access.Identity{alice, carol, hall, {Kind: access.ProgramKind, ID: "script", Level: access.Admin}} {
+		if err := s.Assign(by, "hall", evening); !errors.Is(err, access.ErrRefused) {
+			t.Errorf("a %s %s assigning one: %v", by.Level, by.Kind, err)
+		}
+	}
+	for _, id := range []string{bobs, "gone"} {
+		if err := s.Assign(bob, "hall", id); !errors.Is(err, home.ErrInvalid) {
+			t.Errorf("assigning %s: %v", id, err)
+		}
+	}
+
+	// Several Kiosks share one; the Kiosk and every Admin are told.
+	_, hallTold := s.Dashboards(hall)
+	_, bobTold := s.Dashboards(bob)
+	_, carolTold := s.Dashboards(carol)
+	for _, k := range kiosks {
+		if err := s.Assign(bob, k, evening); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, ch := range map[string]<-chan struct{}{"the Kiosk": hallTold, "an Admin": bobTold, "a Member": carolTold} {
+		select {
+		case <-ch:
+			if name == "a Member" {
+				t.Errorf("%s is told", name)
+			}
+		default:
+			if name != "a Member" {
+				t.Errorf("%s is not told", name)
+			}
+		}
+	}
+	want(s, map[string]string{"hall": evening, "kitchen": evening})
+
+	// Its Dashboard edited reaches the Kiosk.
+	_, hallTold = s.Dashboards(hall)
+	if err := s.Save(bob, evening, Dashboard{Name: "Night"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-hallTold:
+	default:
+		t.Error("an edit does not tell the Kiosk")
+	}
+	if ds, _ := s.Dashboards(hall); ds[0].Name != "Night" {
+		t.Errorf("the Hall tablet shows %+v", ds)
+	}
+
+	// Assigned the built-in one again, a Kiosk has none of its own.
+	if err := s.Assign(bob, "hall", Builtin); err != nil {
+		t.Fatal(err)
+	}
+	want(s, map[string]string{"kitchen": evening})
+	want(opened(t, dir, home.New(nil)), map[string]string{"kitchen": evening})
+
+	// Deleted, a shared Dashboard sends its Kiosks back to the built-in one.
+	_, kitchenTold := s.Dashboards(kitchen)
+	if err := s.Delete(bob, evening); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-kitchenTold:
+	default:
+		t.Error("deleting its Dashboard does not tell the Kiosk")
+	}
+	want(s, map[string]string{})
+	want(opened(t, dir, home.New(nil)), map[string]string{})
+
+	// Only an Admin learns the assignments.
+	for _, by := range []access.Identity{alice, carol, hall} {
+		if got := s.Assignments(by); got != nil {
+			t.Errorf("a %s %s gets %v", by.Level, by.Kind, got)
+		}
+	}
+}
+
+func TestARemovedKioskTakesItsAssignmentWithIt(t *testing.T) {
+	dir := t.TempDir()
+	s := opened(t, dir, home.New(nil))
+	evening, err := s.Create(bob, Dashboard{Shared: true, Name: "Evening"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range kiosks {
+		if err := s.Assign(bob, k, evening); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, bobTold := s.Dashboards(bob)
+	if err := s.RemoveKiosk("hall"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-bobTold:
+	default:
+		t.Error("removing a Kiosk does not tell an Admin")
+	}
+	if got := opened(t, dir, home.New(nil)).Assignments(bob); !maps.Equal(got, map[string]string{"kitchen": evening}) {
+		t.Errorf("once the Hall tablet is removed: %v", got)
+	}
+
+	// The Kitchen tablet, removed while its assignment was not, loses it on load.
+	again, err := Open(dir, home.New(nil), persons, []string{"hall"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := again.Assignments(bob); len(got) != 0 {
+		t.Errorf("an assignment of a Kiosk no longer known: %v", got)
 	}
 }

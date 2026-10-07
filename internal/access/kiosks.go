@@ -246,6 +246,14 @@ func (s *Store) Kiosks(by Identity) ([]Kiosk, error) {
 	return ks, nil
 }
 
+// HostKiosks answers every Kiosk, oldest first, to Oiko itself: for the
+// Dashboards to know whose assignments to keep.
+func (s *Store) HostKiosks() []Kiosk {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.kiosks)
+}
+
 // EditKiosk renames Kiosk id and sets its Access level, for a fresh Admin
 // Person; a new level ends its open event stream.
 func (s *Store) EditKiosk(by Identity, id, name string, level Level) error {

@@ -274,7 +274,9 @@ const functionName = (d: Device, key: string) => `${d.name} · ${key}`
 // The Dashboard hash opens, undefined for the built-in one (ADR 0044): #dashboard/<id>, hidden from
 // the menu or not, if it is the built-in one or one of dashboards; any other address, a bare # or a
 // Dashboard the Person does not see, the first one shown in their list, the built-in one without any.
-export function shown(hash: string, dashboards: CustomDashboard[], list: ListEntry[]) {
+// A Kiosk ignores the address: it shows the one it is assigned, its only one, the built-in one without.
+export function shown(hash: string, dashboards: CustomDashboard[], list: ListEntry[], kiosk = false) {
+  if (kiosk) return dashboards[0]
   const id = hash.match(/^#dashboard\/(.+)$/)?.[1]
   if (id === 'builtin') return undefined
   const first = list.find((e) => !e.hidden)?.id
@@ -287,4 +289,13 @@ export function shown(hash: string, dashboards: CustomDashboard[], list: ListEnt
 export function copied(d: CustomDashboard | undefined, areas: Area[]): Pick<CustomDashboard, 'columns' | 'sections'> {
   if (d) return { columns: d.columns, sections: d.sections }
   return { columns: 2, sections: areas.map((a, i) => ({ area: a.id, col: i % 2, row: Math.floor(i / 2), width: 1 })) }
+}
+
+// What deleting Dashboard name asks, naming the Kiosks showing it, which then show the built-in one
+// (ADR 0045).
+export function deleting(name: string, kiosks: string[]) {
+  const question = `Delete "${name}"?`
+  if (kiosks.length === 0) return question
+  const [show, they] = kiosks.length > 1 ? ['show', 'they'] : ['shows', 'it']
+  return `${question} ${new Intl.ListFormat('en').format(kiosks)} ${show} it: ${they} will show Home, the built-in Dashboard, instead.`
 }

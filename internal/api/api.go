@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"math"
 	"net/http"
 	"net/url"
@@ -207,7 +208,7 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	handleAccess(mux, acc, public)
 	handlePasskeys(mux, acc, public)
 	handlePrograms(mux, acc)
-	handleKiosks(mux, acc, public)
+	handleKiosks(mux, acc, dash, public)
 	handlePersons(mux, acc, dash, public)
 	handleSessions(mux, acc)
 	handleAudit(mux, acc, hist)
@@ -333,11 +334,12 @@ func respond(w http.ResponseWriter, v any, err error) {
 // the identity's Access level lets it see them: a Guest sees only what it can
 // press, never who did what (ADR 0031). The Status of each module's Releases
 // comes to an Admin with the snapshot, and again, as a "releases" message,
-// each time it changes (ADR 0023). The Dashboards a Person sees come with the
-// snapshot too, as they see them, with their list, and again, whole, as a
-// "dashboards" message, each time what they see of them changes (ADR 0041,
-// 0044, 0046): one of them edited, their list saved, or for a Guest, the
-// Automations it may press. Updates available at
+// each time it changes (ADR 0023). The Dashboards an identity sees come with
+// the snapshot too, as it sees them: a Person's with their list, a Kiosk's
+// the one it is assigned, an Admin's with each Kiosk's assignment; and again,
+// whole, as a "dashboards" message, each time any of it changes (ADR 0041,
+// 0044, 0046): one of them edited, a list saved, a Kiosk reassigned, or for a
+// Guest, the Automations it may press. Updates available at
 // once are written together and flushed once. A client that stops reading
 // ends the stream, at the first write that does not go through within
 // streamWriteLimit. It counts as a use of its Session or Token at each
@@ -355,8 +357,8 @@ func updates(h *home.Home, acc *access.Store, dash *dashboard.Store, releases *r
 			statuses, changed = releases.Statuses()
 		}
 		dashboards, rearranged := dash.Dashboards(id)
-		list := dash.List(id) // after the channel: a list saved since closes it
-		shown, listed := dashboardsFor(id, dashboards, automations), list
+		list, kiosks := dash.List(id), dash.Assignments(id) // after the channel: a change since closes it
+		shown, listed, assigned := dashboardsFor(id, dashboards, automations), list, kiosks
 		w.Header().Set("Content-Type", "text/event-stream")
 		rc := http.NewResponseController(w)
 		defer rc.SetWriteDeadline(time.Time{}) // the connection may serve other requests
@@ -371,24 +373,26 @@ func updates(h *home.Home, acc *access.Store, dash *dashboard.Store, releases *r
 			Kind string `json:"kind"`
 			home.Snapshot
 			Releases   []release.Status      `json:"releases"`
-			Dashboards []dashboard.Dashboard `json:"dashboards,omitzero"` // none for a Kiosk or a Program, [] for a Person without any
-			List       []dashboard.Entry     `json:"list,omitzero"`       // a Person's
-		}{"snapshot", snap, statuses, shown, listed})) {
+			Dashboards []dashboard.Dashboard `json:"dashboards,omitzero"`      // none for a Program, [] for a Person without any or a Kiosk showing the built-in one
+			List       []dashboard.Entry     `json:"list,omitzero"`            // a Person's
+			Kiosks     map[string]string     `json:"kioskDashboards,omitzero"` // an Admin's
+		}{"snapshot", snap, statuses, shown, listed, assigned})) {
 			return
 		}
-		// writeDashboards writes the Dashboards as the identity sees them, and its
-		// list, if that changed.
+		// writeDashboards writes the Dashboards as the identity sees them, its
+		// list and the Kiosks' assignments, if any of it changed.
 		writeDashboards := func() bool {
 			now := dashboardsFor(id, dashboards, automations)
-			if reflect.DeepEqual(now, shown) && slices.Equal(list, listed) {
+			if reflect.DeepEqual(now, shown) && slices.Equal(list, listed) && maps.Equal(kiosks, assigned) {
 				return true
 			}
-			shown, listed = now, list
+			shown, listed, assigned = now, list, kiosks
 			return writeEvent(w, struct {
 				Kind       string                `json:"kind"`
 				Dashboards []dashboard.Dashboard `json:"dashboards"`
-				List       []dashboard.Entry     `json:"list"`
-			}{"dashboards", shown, listed}) == nil
+				List       []dashboard.Entry     `json:"list,omitzero"`
+				Kiosks     map[string]string     `json:"kioskDashboards,omitzero"`
+			}{"dashboards", shown, listed, assigned}) == nil
 		}
 		keepalive := time.NewTicker(keepaliveEvery)
 		defer keepalive.Stop()
@@ -418,7 +422,7 @@ func updates(h *home.Home, acc *access.Store, dash *dashboard.Store, releases *r
 				}
 			case <-rearranged:
 				dashboards, rearranged = dash.Dashboards(id)
-				list = dash.List(id)
+				list, kiosks = dash.List(id), dash.Assignments(id)
 				if !send(writeDashboards) {
 					return
 				}

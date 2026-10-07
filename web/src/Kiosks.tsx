@@ -1,11 +1,11 @@
 // The Admin page of Kiosks (#kiosks): shared screens signed in as themselves (ADR 0029), paired from
-// their own screen. Signing one out or removing it only takes access away, so it needs no step-up;
-// renaming it or changing its Access level does.
+// their own screen. Signing one out, removing it or choosing the Dashboard it shows only takes access
+// away or grants nothing, so it needs no step-up; renaming it or changing its Access level does.
 
 import { useEffect, useState } from 'react'
 import { AppBar } from './AppBar'
 import { confirm } from './confirm'
-import { edit } from './store'
+import { edit, useDashboards, useKioskDashboards } from './store'
 import { api, type Level } from './access'
 import { stepUp } from './passkeys'
 import { date, LevelSelect } from './manage'
@@ -33,6 +33,9 @@ export function Kiosks() {
   const define = async (k: Kiosk, edits: { name?: string; level?: Level }) =>
     (await stepUp()) && change(await edit('PUT', `kiosks/${k.id}`, { name: k.name, level: k.level, ...edits }))
   const button = 'rounded bg-neutral-800 px-3 py-1 hover:bg-neutral-700'
+  // A Kiosk shows the built-in Dashboard or a shared one (ADR 0045).
+  const shared = useDashboards().filter((d) => d.shared)
+  const assigned = useKioskDashboards()
   return (
     <>
       <AppBar />
@@ -59,6 +62,19 @@ export function Kiosks() {
                   className="min-w-0 flex-1 truncate rounded bg-transparent px-1 text-base font-medium hover:bg-neutral-800 focus:bg-neutral-800"
                 />
                 <LevelSelect value={k.level} only={['guest', 'member']} onChange={(level) => define(k, { level })} />
+                <select
+                  value={assigned[k.id] ?? 'builtin'}
+                  aria-label="Dashboard"
+                  onChange={async (e) => setError(await edit('PUT', `kiosks/${k.id}/dashboard`, { dashboard: e.target.value }))}
+                  className="rounded bg-neutral-800 px-2 py-1"
+                >
+                  <option value="builtin">Home</option>
+                  {shared.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <p className="text-neutral-400">
                 Paired by {k.pairedBy.name ?? 'a removed Person'} on {date(k.paired)}

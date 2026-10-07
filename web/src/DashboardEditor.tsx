@@ -1,9 +1,11 @@
 import { Fragment, useState, type ReactNode } from 'react'
 import { DndContext, PointerSensor, useDraggable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { mdiCheck, mdiContentCopy, mdiDeleteOutline, mdiDrag, mdiMagnify, mdiShapeOutline, mdiViewColumnOutline, mdiViewGridOutline } from '@mdi/js'
-import { edit } from './store'
+import { edit, useKioskDashboards } from './store'
+import { api } from './access'
+import type { Kiosk } from './Kiosks'
 import type { Area, CustomDashboard } from './types'
-import { sectionKey, tileKey, type DashboardSection, type TileChoice } from './dashboard'
+import { deleting, sectionKey, tileKey, type DashboardSection, type TileChoice } from './dashboard'
 import {
   addSection,
   addTile,
@@ -58,8 +60,16 @@ export function DashboardEditor({
     if (err) onResult({ text: err, error: true })
     return !err
   }
+  const assigned = useKioskDashboards()
   const remove = async () => {
-    if (!(await confirm(`Delete the dashboard ${d.name}?`, 'Delete'))) return
+    // The Kiosks showing d, by Name, which only GET /api/kiosks knows.
+    let kiosks: string[] = []
+    if (Object.values(assigned).includes(d.id)) {
+      const res = await api('/api/kiosks')
+      if (!res.ok) return onResult({ text: (await res.text()).trim(), error: true })
+      kiosks = ((await res.json()) as Kiosk[]).filter((k) => assigned[k.id] === d.id).map((k) => k.name)
+    }
+    if (!(await confirm(deleting(d.name, kiosks), 'Delete'))) return
     const err = await edit('DELETE', `dashboards/${d.id}`)
     if (err) return onResult({ text: err, error: true })
     onDone()

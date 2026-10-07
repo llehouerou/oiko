@@ -34,8 +34,9 @@ let areas: Area[] = []
 let automations: AutomationStatus[] = []
 let bridges: Record<string, boolean> = {}
 let releases: ReleaseStatus[] = []
-let dashboards: CustomDashboard[] = [] // those this Person sees: the shared ones and their own
+let dashboards: CustomDashboard[] = [] // those this Person sees, the shared ones and their own, or this Kiosk's
 let list: ListEntry[] = [] // this Person's: every Dashboard they see, in their order
+let kioskDashboards: Record<string, string> = {} // each Kiosk's shared Dashboard, to an Admin
 let connected = false
 let now = Date.now()
 const values = new Map<string, Value>()
@@ -83,6 +84,7 @@ function apply(msg: Snapshot | Update) {
       releases = msg.releases
       dashboards = msg.dashboards ?? []
       list = msg.list ?? []
+      kioskDashboards = msg.kioskDashboards ?? {}
       values.clear()
       for (const { ref, value } of msg.values) values.set(refKey(ref), value)
       events.clear()
@@ -192,7 +194,8 @@ export function connect() {
       }
       if (msg.kind === 'dashboards') {
         dashboards = msg.dashboards
-        list = msg.list
+        list = msg.list ?? []
+        kioskDashboards = msg.kioskDashboards ?? {}
         return notify('dashboards')
       }
       apply(msg)
@@ -354,12 +357,17 @@ export const useBridges = () => useSyncExternalStore(subscribeTo('connection'), 
 // What the module proxy lists of each module built into Oiko, Oiko's first.
 export const useReleases = () => useSyncExternalStore(subscribeTo('releases'), () => releases)
 
-// The custom Dashboards this Person sees: the shared ones and their own.
+// The custom Dashboards this Person sees, the shared ones and their own; for a Kiosk, the one it is
+// assigned, none for the built-in one.
 export const useDashboards = () => useSyncExternalStore(subscribeTo('dashboards'), () => dashboards)
 
 // This Person's list of the Dashboards they see, the built-in one included: their order, the hidden
 // ones, saved with edit('PUT', 'me/dashboards', list).
 export const useDashboardList = () => useSyncExternalStore(subscribeTo('dashboards'), () => list)
+
+// Each Kiosk's shared Dashboard, by Kiosk id, to an Admin; a Kiosk missing shows the built-in one.
+// Assigned with edit('PUT', `kiosks/${id}/dashboard`, { dashboard }).
+export const useKioskDashboards = () => useSyncExternalStore(subscribeTo('dashboards'), () => kioskDashboards)
 
 // 'disconnected', 'online', or the names of the Bridges offline.
 export const useConnection = () =>

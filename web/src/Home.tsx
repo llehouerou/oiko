@@ -16,7 +16,8 @@ import { AggregatePanel, AreaPanel, DevicePanel, FlagPanel } from './HomePanels'
 // The Home page: the Dashboard hash opens, at #dashboard/<id>, the Person's first one shown
 // otherwise, and the panels an Admin opens from it. The built-in Dashboard is drawn from the
 // Sections derived from the Areas, under the Flags without an Area as pills. A Person switches
-// Dashboards from the menu that takes the Home tab's place.
+// Dashboards from the menu that takes the Home tab's place; a Kiosk shows the one it is assigned
+// alone, whatever the address (ADR 0044).
 export function Home({ hash }: { hash: string }) {
   const devices = useDevices()
   const aggregates = useAggregates()
@@ -27,6 +28,7 @@ export function Home({ hash }: { hash: string }) {
   const list = useDashboardList()
   const identity = useMe()?.identity
   const person = !!identity && 'person' in identity
+  const kiosk = !!identity && 'kiosk' in identity
   const member = useAllows('member') // reads the home's past: its tiles' charts
   const admin = useAllows('admin') // edits the home: its panels, arranging it, creating in it
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null)
@@ -55,7 +57,7 @@ export function Home({ hash }: { hash: string }) {
   const openArea = areas.find((a) => a.id === openId)
   const home = dashboard(devices, aggregates, flags, areas, automations)
   const { pills, sections } = home
-  const current = shown(hash, dashboards, list) // undefined: the built-in Dashboard
+  const current = shown(hash, dashboards, list, kiosk) // undefined: the built-in Dashboard
   // Whether the viewer changes the current Dashboard: an Admin arranges the built-in one (the
   // Areas' order and their Layouts) and edits a shared one, a Person edits their own.
   const editable = current ? !current.shared || admin : admin

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { copied, dashboard, shown, type DashboardSection } from './dashboard'
+import { copied, dashboard, deleting, shown, type DashboardSection } from './dashboard'
 import type { Aggregate, Area, AutomationStatus, Capability, CustomDashboard, Device, Fn, Target } from './types'
 
 const on: Capability = { key: 'state', label: 'State', type: 'binary', access: { observable: true, settable: true, queryable: true }, category: 'primary' }
@@ -318,9 +318,25 @@ test('#dashboard/<id> opens a Dashboard the Person sees, hidden or not; any othe
   expect(shown('#dashboard/evening', mine, list)?.name).toBe('Evening')
   expect(shown('#dashboard/builtin', mine, list)).toBeUndefined()
   for (const hash of ['', '#', '#dashboard/someone-elses', '#dashboard/']) expect(shown(hash, mine, list)?.name, hash).toBe('Night')
-  // the built-in Dashboard first, or no list at all (a Kiosk's), opens it
+  // the built-in Dashboard first, or no list at all, opens it
   expect(shown('#', mine, [{ id: 'builtin' }, { id: 'night' }])).toBeUndefined()
   expect(shown('#', mine, [])).toBeUndefined()
+})
+
+test('a Kiosk shows the Dashboard it is assigned, whatever the address', () => {
+  const night = { id: 'night', shared: true as const, name: 'Night', columns: 2, sections: [] }
+  for (const hash of ['#', '#dashboard/builtin', '#dashboard/evening']) {
+    expect(shown(hash, [night], [], true), hash).toBe(night)
+    expect(shown(hash, [], [], true), hash).toBeUndefined() // the built-in one
+  }
+})
+
+test('deleting a Dashboard names the Kiosks showing it', () => {
+  expect(deleting('Evening', [])).toBe('Delete "Evening"?')
+  expect(deleting('Evening', ['Hall tablet'])).toBe('Delete "Evening"? Hall tablet shows it: it will show Home, the built-in Dashboard, instead.')
+  expect(deleting('Evening', ['Hall tablet', 'Kitchen tablet'])).toBe(
+    'Delete "Evening"? Hall tablet and Kitchen tablet show it: they will show Home, the built-in Dashboard, instead.',
+  )
 })
 
 test('a copy of the built-in Dashboard holds its Areas two per row, in order, without Others; of a custom one, what its viewer sees', () => {

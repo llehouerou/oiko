@@ -58,11 +58,14 @@ func handlerIn(t *testing.T, dir string, public *url.URL, now func() time.Time) 
 	h := home.New(store.Command)
 	e := automation.New(h, nil, nil, store.Record)
 	h.Follow(store.Follow)
-	var persons []string
+	var persons, kiosks []string
 	for _, p := range acc.HostPersons() {
 		persons = append(persons, p.ID)
 	}
-	dash, err := dashboard.Open(dir, h, persons)
+	for _, k := range acc.HostKiosks() {
+		kiosks = append(kiosks, k.ID)
+	}
+	dash, err := dashboard.Open(dir, h, persons, kiosks)
 	if err != nil {
 		t.Fatal(err)
 	}

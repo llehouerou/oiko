@@ -1,11 +1,16 @@
 package api
 
 import (
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"time"
 
 	"github.com/llehouerou/oiko/internal/access"
+	"github.com/llehouerou/oiko/internal/dashboard"
+	"github.com/llehouerou/oiko/internal/home"
 )
 
 // pairingCookie holds a pairing request's claim secret, on the screen that
@@ -18,8 +23,9 @@ const pairingCookie = "__Host-oiko-pairing"
 const kioskCookieAge = 400 * 24 * time.Hour
 
 // handleKiosks serves Kiosk pairing, from the screen and to the approving
-// Admin, and the Kiosks to an Admin Person; access refuses anyone else.
-func handleKiosks(mux *http.ServeMux, acc *access.Store, public *url.URL) {
+// Admin, and the Kiosks to an Admin Person; access refuses anyone else. dash
+// keeps each Kiosk's Dashboard.
+func handleKiosks(mux *http.ServeMux, acc *access.Store, dash *dashboard.Store, public *url.URL) {
 	by := func(r *http.Request) access.Identity {
 		id, _ := identity(r)
 		return id
@@ -121,8 +127,39 @@ func handleKiosks(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 			reply(w, acc.EditKiosk(by(r), r.PathValue("id"), req.Name, req.Level))
 		}
 	})
+	// A removed Kiosk's assignment goes with it; left behind, it is dropped on
+	// load.
 	mux.HandleFunc("DELETE /api/kiosks/{id}", func(w http.ResponseWriter, r *http.Request) {
-		reply(w, acc.RemoveKiosk(by(r), r.PathValue("id")))
+		id := r.PathValue("id")
+		if err := acc.RemoveKiosk(by(r), id); err != nil {
+			reply(w, err)
+			return
+		}
+		if err := dash.RemoveKiosk(id); err != nil {
+			slog.Error("dashboards: dropping a removed Kiosk's assignment", "err", err)
+		}
+		reply(w, nil)
+	})
+	// The Dashboard Kiosk {id} shows: "builtin" or a shared one's id, an
+	// Admin's to assign, with no step-up: it grants nothing (ADR 0046).
+	mux.HandleFunc("PUT /api/kiosks/{id}/dashboard", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Dashboard string `json:"dashboard"`
+		}
+		if !decode(w, r, &req) {
+			return
+		}
+		ks, err := acc.Kiosks(by(r))
+		if err != nil {
+			reply(w, err)
+			return
+		}
+		id := r.PathValue("id")
+		if !slices.ContainsFunc(ks, func(k access.Kiosk) bool { return k.ID == id }) {
+			reply(w, fmt.Errorf("kiosk %q: %w", id, home.ErrNotFound))
+			return
+		}
+		reply(w, dash.Assign(by(r), id, req.Dashboard))
 	})
 	mux.HandleFunc("DELETE /api/kiosks/{id}/session", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, acc.SignOutKiosk(by(r), r.PathValue("id")))

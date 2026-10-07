@@ -354,11 +354,14 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 	if secret, ok := acc.Setup(); ok {
 		log.Printf("oiko: no Admin yet: open %s/setup#%s to claim this Oiko", setupOrigin(listen, public), secret)
 	}
-	var persons []string // whose lists of Dashboards are kept
+	var persons, kiosks []string // whose lists of Dashboards and assignments are kept
 	for _, p := range acc.HostPersons() {
 		persons = append(persons, p.ID)
 	}
-	dash, err := dashboard.Open(dataDir, h, persons)
+	for _, k := range acc.HostKiosks() {
+		kiosks = append(kiosks, k.ID)
+	}
+	dash, err := dashboard.Open(dataDir, h, persons, kiosks)
 	if err != nil {
 		log.Fatalf("dashboards: %v", err)
 	}
