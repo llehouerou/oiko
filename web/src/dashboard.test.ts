@@ -221,6 +221,34 @@ test("a custom Dashboard's Area Sections are the built-in Dashboard's, its own S
   expect(home.custom(evening, true).map((s) => `${s.key} ${s.tiles.length}`)).toEqual(['own:favourites 4', 'area:kitchen 1', 'own:empty 0'])
 })
 
+test("a Function's Tile shows it alone, named after its Device and its key, with the whole Device's health", () => {
+  const battery = reading('battery')
+  const plug: Device = { ...device('plug', 'kitchen', fn('switch/l1'), fn('switch/l2'), fn('switch/l3')), name: 'Kitchen plug', capabilities: [battery] }
+  const home = dashboard([plug], [], [], [area('kitchen')], [])
+  const tiles = (...targets: string[]) => ({
+    id: 'mine',
+    owner: 'alice',
+    name: 'Mine',
+    columns: 1,
+    sections: [{ id: 'own', columns: 3, col: 0, row: 0, width: 1, tiles: targets.map((target, col) => ({ target, col, row: 0, width: 1 })) }],
+  })
+  // two gangs of three: two Tiles, each driving its own gang; beside them, the Device's own Tile
+  const [own] = home.custom(tiles('device:plug/switch/l1', 'device:plug/switch/l3', 'device:plug', 'device:plug/gone'))
+  expect(own!.tiles).toMatchObject([
+    {
+      key: 'device:plug/switch/l1',
+      label: 'Kitchen plug · switch/l1',
+      name: 'Kitchen plug · switch/l1',
+      subject: 'device:plug',
+      health: [{ target: 'device:plug', cap: battery }],
+      shape: { kind: 'bar', target: 'device:plug/switch/l1', toggle: 'state' },
+    },
+    { key: 'device:plug/switch/l3', name: 'Kitchen plug · switch/l3', shape: { kind: 'bar', target: 'device:plug/switch/l3' } },
+    { key: 'device:plug', name: 'Kitchen plug' },
+  ])
+  expect(own!.tiles[2]!.kind === 'target' && own!.tiles[2]!.fns.length).toBe(3)
+})
+
 test("the Tiles to pick for an own Section: the home's, grouped by Area, searched by name, those it holds greyed out", () => {
   const nothing: Fn = { key: 'config', kind: 'config', capabilities: [{ ...on, category: 'config' }] }
   const devices = [
@@ -228,6 +256,7 @@ test("the Tiles to pick for an own Section: the home's, grouped by Area, searche
     device('fan', 'kitchen', fn('switch')),
     device('config', 'living', nothing),
     device('radio', undefined, fn('switch')),
+    device('plug', 'kitchen', fn('l1'), fn('l2', 'living'), nothing),
   ]
   const aggregates: Aggregate[] = [
     { ...derived('living', 'light', 'device:lamp/light'), name: 'Living room lights' },
@@ -239,14 +268,24 @@ test("the Tiles to pick for an own Section: the home's, grouped by Area, searche
   const areas = [area('living', { name: 'Living room' }), area('office', { name: 'Office' }), area('kitchen', { name: 'Kitchen' })]
   const home = dashboard(devices, aggregates, flags, areas, [bedtime, night])
   const short = (groups: ReturnType<typeof home.choices>) =>
-    groups.map((g) => `${g.area?.name ?? '-'}: ${g.tiles.map((t) => `${t.name}${t.taken ? ' (in it)' : ''}`).join(', ')}`)
-  // in the Areas' order, those without one last; a Device without a Tile is not there
-  expect(short(home.choices('', ['device:lamp', 'automation:bedtime']))).toEqual([
+    groups.map(
+      (g) =>
+        `${g.area?.name ?? '-'}: ${g.tiles
+          .map((t) => `${t.name}${t.taken ? ' (in it)' : ''}${t.fns ? ` [${t.fns.map((f) => `${f.name}${f.taken ? ' (in it)' : ''}`).join(', ')}]` : ''}`)
+          .join(', ')}`,
+    )
+  // in the Areas' order, those without one last; a Device without a Tile is not there; a Device
+  // with several Functions that have a Tile offers each under it, in its own Area
+  expect(short(home.choices('', ['device:lamp', 'automation:bedtime', 'device:plug/l2']))).toEqual([
     'Living room: lamp (in it), Living room lights',
-    'Kitchen: fan, Guest',
+    'Kitchen: fan, Guest, plug [plug · l1, plug · l2 (in it)]',
     '-: Bedtime (in it), Downstairs, radio',
   ])
   expect(short(home.choices(' LI ', []))).toEqual(['Living room: Living room lights'])
+  // a Function is searched by its name, its Device's included
+  expect(short(home.choices('l2', []))).toEqual(['Kitchen: plug [plug · l2]'])
+  expect(short(home.choices('plug', []))).toEqual(['Kitchen: plug [plug · l1, plug · l2]'])
+  expect(home.choices('l1', [])[0]!.tiles[0]!.fns![0]).toMatchObject({ key: 'device:plug/l1', tile: { target: 'device:plug/l1' }, kind: 'Function' })
   expect(home.choices('bed', [])[0]!.tiles[0]).toMatchObject({ key: 'automation:bedtime', tile: { automation: 'bedtime' }, kind: 'Automation' })
   expect(home.choices('guest', [])[0]!.tiles[0]).toMatchObject({ key: 'flag:guest', tile: { target: 'flag:guest' }, kind: 'Flag' })
 })

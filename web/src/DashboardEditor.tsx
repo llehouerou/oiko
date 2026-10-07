@@ -340,17 +340,19 @@ function AddTile({
               <AreaIcon icon={g.area?.icon} className="size-4" />
               {g.area?.name ?? 'No area'}
             </h3>
-            {g.tiles.map((c) => (
-              <button
-                key={c.key}
-                disabled={c.taken}
-                onClick={() => onAdd(c)}
-                className="flex w-full items-baseline gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-neutral-800 disabled:text-neutral-600 disabled:hover:bg-transparent"
-              >
-                <span className="min-w-0 flex-1 truncate">{c.name}</span>
-                <span className="text-xs text-neutral-500">{c.taken ? 'In this section' : c.kind}</span>
-              </button>
-            ))}
+            {g.tiles
+              .flatMap((c) => [c, ...(c.fns ?? [])])
+              .map((c) => (
+                <button
+                  key={c.key}
+                  disabled={c.taken}
+                  onClick={() => onAdd(c)}
+                  className={`flex w-full items-baseline gap-2 rounded-lg py-2 pr-2.5 text-left hover:bg-neutral-800 disabled:text-neutral-600 disabled:hover:bg-transparent ${c.kind === 'Function' ? 'pl-7' : 'pl-2.5'}`}
+                >
+                  <span className="min-w-0 flex-1 truncate">{c.name}</span>
+                  <span className="text-xs text-neutral-500">{c.taken ? 'In this section' : c.kind}</span>
+                </button>
+              ))}
           </section>
         ))}
         {!groups.length && <p className="px-2.5 py-2 text-neutral-500">No tile matches.</p>}

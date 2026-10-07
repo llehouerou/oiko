@@ -165,6 +165,7 @@ func TestASaveIsRefusedUnlessItHoldsTogether(t *testing.T) {
 		"a Section name long":   `{"name": "E", "sections": [{"name": "` + strings.Repeat("x", 101) + `", "columns": 1, "col": 0, "row": 0, "width": 1}]}`,
 		"no columns of its own": `{"name": "E", "sections": [{"col": 0, "row": 0, "width": 1}]}`,
 		"a Tile twice":          `{"name": "E", "sections": [{"columns": 2, "col": 0, "row": 0, "width": 1, "tiles": [{` + lamp + `, "col": 0, "row": 0, "width": 1}, {` + lamp + `, "col": 1, "row": 0, "width": 1}]}]}`,
+		"a Function twice":      `{"name": "E", "sections": [{"columns": 2, "col": 0, "row": 0, "width": 1, "tiles": [{"target": "` + l.lamp.Key() + `/light", "col": 0, "row": 0, "width": 1}, {"target": "` + l.lamp.Key() + `/light", "col": 1, "row": 0, "width": 1}]}]}`,
 		"overlapping Tiles":     `{"name": "E", "sections": [{"columns": 2, "col": 0, "row": 0, "width": 1, "tiles": [{` + lamp + `, "col": 0, "row": 0, "width": 2}, {"automation": "night", "col": 1, "row": 0, "width": 1}]}]}`,
 		"too many of its own":   `{"name": "E", "sections": [{"columns": 7, "col": 0, "row": 0, "width": 1}]}`,
 		"a Tile outside":        `{"name": "E", "sections": [{"columns": 1, "col": 0, "row": 0, "width": 1, "tiles": [{` + lamp + `, "col": 0, "row": 0, "width": 2}]}]}`,
@@ -175,6 +176,29 @@ func TestASaveIsRefusedUnlessItHoldsTogether(t *testing.T) {
 		if _, err := s.Create(alice, parse(t, doc)); !errors.Is(err, home.ErrInvalid) {
 			t.Errorf("%s: %v, want ErrInvalid", name, err)
 		}
+	}
+}
+
+func TestADeviceAndOneOfItsFunctionsAreTwoTiles(t *testing.T) {
+	l := aHome(t)
+	s := opened(t, t.TempDir(), l.h)
+	// The key is not checked against the Device: one it has, one it may have later.
+	id, err := s.Create(alice, parse(t, `{"name": "E", "sections": [{"columns": 3, "col": 0, "row": 0, "width": 1, "tiles": [
+		{"target": "`+l.lamp.Key()+`", "col": 0, "row": 0, "width": 1},
+		{"target": "`+l.lamp.Key()+`/light", "col": 1, "row": 0, "width": 1},
+		{"target": "`+l.lamp.Key()+`/switch/l2", "col": 2, "row": 0, "width": 1}
+	]}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine, _ := s.Dashboards(alice)
+	var kept []string
+	for _, tile := range mine[0].Sections[0].Tiles {
+		kept = append(kept, tile.Target.Key())
+	}
+	want := []string{l.lamp.Key(), l.lamp.Key() + "/light", l.lamp.Key() + "/switch/l2"}
+	if mine[0].ID != id || !reflect.DeepEqual(kept, want) {
+		t.Errorf("its Tiles kept: %v, want %v", kept, want)
 	}
 }
 
