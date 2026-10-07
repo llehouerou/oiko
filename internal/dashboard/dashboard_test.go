@@ -17,6 +17,7 @@ import (
 var (
 	alice = access.Identity{Kind: access.PersonKind, ID: "alice", Name: "Alice", Level: access.Guest}
 	bob   = access.Identity{Kind: access.PersonKind, ID: "bob", Name: "Bob", Level: access.Admin}
+	carol = access.Identity{Kind: access.PersonKind, ID: "carol", Name: "Carol", Level: access.Member}
 )
 
 type nopBridge struct{}
@@ -132,6 +133,98 @@ func TestAPersonCreatesSavesAndDeletesTheirOwn(t *testing.T) {
 	}
 	if mine, _ := opened(t, dir, l.h).Dashboards(alice); len(mine) != 0 {
 		t.Errorf("after deleting it: %+v", mine)
+	}
+}
+
+func TestAnAdminKeepsSharedDashboardsAndEveryPersonSeesThem(t *testing.T) {
+	l := aHome(t)
+	dir := t.TempDir()
+	s := opened(t, dir, l.h)
+	told := map[string]<-chan struct{}{}
+	listen := func() {
+		for _, p := range []access.Identity{alice, bob, carol} {
+			_, told[p.Name] = s.Dashboards(p)
+		}
+	}
+	everyoneTold := func(what string) {
+		t.Helper()
+		for name, ch := range told {
+			select {
+			case <-ch:
+			default:
+				t.Errorf("%s: %s is not told", what, name)
+			}
+		}
+		listen()
+	}
+	listen()
+
+	// A Member or a Guest creates none; an Admin does.
+	for _, by := range []access.Identity{alice, carol} {
+		if _, err := s.Create(by, Dashboard{Shared: true, Name: "Evening"}); !errors.Is(err, access.ErrRefused) {
+			t.Errorf("a %s creating one: %v", by.Level, err)
+		}
+	}
+	id, err := s.Create(bob, Dashboard{Shared: true, Owner: "bob", Name: "Evening"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	everyoneTold("creating one")
+	for _, p := range []access.Identity{alice, bob, carol} {
+		if ds, _ := s.Dashboards(p); len(ds) != 1 || ds[0].ID != id || !ds[0].Shared || ds[0].Owner != "" {
+			t.Errorf("%s sees %+v", p.Name, ds)
+		}
+	}
+
+	// A Member or a Guest neither saves nor deletes it; an Admin saves it,
+	// shared still, whatever the document says.
+	for _, by := range []access.Identity{alice, carol} {
+		if err := s.Save(by, id, Dashboard{Name: "Mine"}); !errors.Is(err, access.ErrRefused) {
+			t.Errorf("a %s saving it: %v", by.Level, err)
+		}
+		if err := s.Delete(by, id); !errors.Is(err, access.ErrRefused) {
+			t.Errorf("a %s deleting it: %v", by.Level, err)
+		}
+	}
+	if err := s.Save(bob, id, Dashboard{Name: "Night"}); err != nil {
+		t.Fatal(err)
+	}
+	everyoneTold("saving one")
+	if ds, _ := opened(t, dir, l.h).Dashboards(alice); len(ds) != 1 || !ds[0].Shared || ds[0].Owner != "" || ds[0].Name != "Night" {
+		t.Errorf("after a restart: %+v", ds)
+	}
+
+	// Personal ones stay their owner's, beside the shared ones.
+	if _, err := s.Create(alice, Dashboard{Name: "Alice's"}); err != nil {
+		t.Fatal(err)
+	}
+	if ds, _ := s.Dashboards(carol); len(ds) != 1 {
+		t.Errorf("Carol sees %+v", ds)
+	}
+	listen()
+	if err := s.Delete(bob, id); err != nil {
+		t.Fatal(err)
+	}
+	everyoneTold("deleting one")
+	if ds, _ := s.Dashboards(bob); len(ds) != 0 {
+		t.Errorf("after deleting it: %+v", ds)
+	}
+}
+
+func TestWhoEditsADashboard(t *testing.T) {
+	shared, alices := Dashboard{Shared: true}, Dashboard{Owner: "alice"}
+	kiosk := access.Identity{Kind: access.KioskKind, ID: "hall", Level: access.Admin}
+	for _, c := range []struct {
+		d    Dashboard
+		by   access.Identity
+		want bool
+	}{
+		{shared, bob, true}, {shared, carol, false}, {shared, alice, false}, {shared, kiosk, false},
+		{alices, alice, true}, {alices, bob, false}, {alices, carol, false},
+	} {
+		if got := c.d.EditableBy(c.by); got != c.want {
+			t.Errorf("%+v by %s: %v, want %v", c.d, c.by.ID, got, c.want)
+		}
 	}
 }
 

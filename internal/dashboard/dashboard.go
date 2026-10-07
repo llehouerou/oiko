@@ -1,5 +1,6 @@
 // Package dashboard keeps the custom Dashboards in dashboards.json (ADR 0040
-// to 0046): each a Person's own, here. It alone checks what a Dashboard may
+// to 0046): shared ones, an Admin's to edit and every Person's to see, and
+// personal ones, their owner's alone. It alone checks what a Dashboard may
 // hold and who may save it; the HTTP layer only names who asks.
 package dashboard
 
@@ -22,14 +23,27 @@ var Format store.Format
 // defaultColumns are a Dashboard's when it is not given any.
 const defaultColumns = 2
 
-// Dashboard is a custom Dashboard: whose it is, its Name, and its Sections on
-// a Layout of its columns.
+// Dashboard is a custom Dashboard: shared or whose it is, fixed at creation,
+// its Name, and its Sections on a Layout of its columns.
 type Dashboard struct {
 	ID       string    `json:"id"`
-	Owner    string    `json:"owner"` // the Person whose personal Dashboard it is
+	Shared   bool      `json:"shared,omitempty"`
+	Owner    string    `json:"owner,omitempty"` // the Person whose personal Dashboard it is
 	Name     string    `json:"name"`
 	Columns  int       `json:"columns"`
 	Sections []Section `json:"sections"`
+}
+
+// EditableBy reports whether by may edit d (ADR 0041): an Admin a shared one,
+// its owner a personal one; a Kiosk or a Program none.
+func (d Dashboard) EditableBy(by access.Identity) bool {
+	if by.Kind != access.PersonKind {
+		return false
+	}
+	if d.Shared {
+		return by.Level.Allows(access.Admin)
+	}
+	return d.Owner == by.ID
 }
 
 // Section is an Area's, by its id, which shows what the built-in Dashboard
@@ -66,7 +80,7 @@ type Store struct {
 	file    string
 	mu      sync.Mutex
 	doc     document
-	changed map[string]chan struct{} // closed when a Person's Dashboards change, by Person id
+	changed map[string]chan struct{} // closed when the Dashboards a Person sees change, by Person id
 
 	kmu   sync.Mutex // under Home's lock: never held while calling Home
 	known known
@@ -114,18 +128,19 @@ func (s *Store) deliver(u home.Update) {
 	}
 }
 
-// Dashboards are those by sees, and a channel closed once they change. A
-// Kiosk and a Program have none, and are never told.
+// Dashboards are those by sees, the shared ones and their own, and a channel
+// closed once they change. A Kiosk and a Program have none, and are never
+// told.
 func (s *Store) Dashboards(by access.Identity) ([]Dashboard, <-chan struct{}) {
 	if by.Kind != access.PersonKind {
 		return nil, nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	mine := []Dashboard{}
+	seen := []Dashboard{}
 	for _, d := range s.doc.Dashboards {
-		if d.Owner == by.ID {
-			mine = append(mine, d)
+		if d.Shared || d.Owner == by.ID {
+			seen = append(seen, d)
 		}
 	}
 	ch := s.changed[by.ID]
@@ -133,25 +148,33 @@ func (s *Store) Dashboards(by access.Identity) ([]Dashboard, <-chan struct{}) {
 		ch = make(chan struct{})
 		s.changed[by.ID] = ch
 	}
-	return mine, ch
+	return seen, ch
 }
 
-// Create adds d as by's personal Dashboard, and answers its id.
+// Create adds d, shared if it says so, which only an Admin creates, or by's
+// personal Dashboard, and answers its id.
 func (s *Store) Create(by access.Identity, d Dashboard) (string, error) {
 	if err := person(by); err != nil {
 		return "", err
+	}
+	d.ID, d.Owner = uuid.NewV7().String(), ""
+	if !d.Shared {
+		d.Owner = by.ID
+	}
+	if !d.EditableBy(by) {
+		return "", fmt.Errorf("%w: only an admin creates a shared dashboard", access.ErrRefused)
 	}
 	d, err := s.valid(d)
 	if err != nil {
 		return "", err
 	}
-	d.ID, d.Owner = uuid.NewV7().String(), by.ID
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return d.ID, s.write(append(slices.Clone(s.doc.Dashboards), d), d.Owner)
+	return d.ID, s.write(append(slices.Clone(s.doc.Dashboards), d), d)
 }
 
-// Save replaces Dashboard id with d, whole, for its owner.
+// Save replaces Dashboard id with d, whole, for whoever edits it; shared or
+// personal it stays.
 func (s *Store) Save(by access.Identity, id string, d Dashboard) error {
 	if err := person(by); err != nil {
 		return err
@@ -165,13 +188,14 @@ func (s *Store) Save(by access.Identity, id string, d Dashboard) error {
 	if d, err = s.valid(d); err != nil {
 		return err
 	}
-	d.ID, d.Owner = id, s.doc.Dashboards[i].Owner
+	was := s.doc.Dashboards[i]
+	d.ID, d.Shared, d.Owner = id, was.Shared, was.Owner
 	ds := slices.Clone(s.doc.Dashboards)
 	ds[i] = d
-	return s.write(ds, d.Owner)
+	return s.write(ds, d)
 }
 
-// Delete deletes Dashboard id, for its owner.
+// Delete deletes Dashboard id, for whoever edits it.
 func (s *Store) Delete(by access.Identity, id string) error {
 	if err := person(by); err != nil {
 		return err
@@ -182,8 +206,7 @@ func (s *Store) Delete(by access.Identity, id string) error {
 	if err != nil {
 		return err
 	}
-	owner := s.doc.Dashboards[i].Owner
-	return s.write(slices.Delete(slices.Clone(s.doc.Dashboards), i, i+1), owner)
+	return s.write(slices.Delete(slices.Clone(s.doc.Dashboards), i, i+1), s.doc.Dashboards[i])
 }
 
 // person refuses whoever is not a Person: a Kiosk or a Program has no
@@ -195,29 +218,35 @@ func person(by access.Identity) error {
 	return nil
 }
 
-// editable is the index of Dashboard id, if by may edit it: its owner alone
-// (ADR 0041). Callers hold s.mu.
+// editable is the index of Dashboard id, if by may edit it. Callers hold
+// s.mu.
 func (s *Store) editable(by access.Identity, id string) (int, error) {
 	i := slices.IndexFunc(s.doc.Dashboards, func(d Dashboard) bool { return d.ID == id })
 	if i < 0 {
 		return 0, fmt.Errorf("dashboard %q: %w", id, home.ErrNotFound)
 	}
-	if s.doc.Dashboards[i].Owner != by.ID {
+	if d := s.doc.Dashboards[i]; !d.EditableBy(by) {
+		if d.Shared {
+			return 0, fmt.Errorf("%w: only an admin edits a shared dashboard", access.ErrRefused)
+		}
 		return 0, fmt.Errorf("%w: only its owner edits a personal dashboard", access.ErrRefused)
 	}
 	return i, nil
 }
 
-// write saves ds, which are then the Dashboards, and tells owner. Callers
-// hold s.mu.
-func (s *Store) write(ds []Dashboard, owner string) error {
+// write saves ds, which are then the Dashboards, and tells whoever sees
+// changed: every Person if it is shared, its owner otherwise. Callers hold
+// s.mu.
+func (s *Store) write(ds []Dashboard, changed Dashboard) error {
 	if err := store.Save(s.file, Format, document{ds}); err != nil {
 		return err
 	}
 	s.doc.Dashboards = ds
-	if ch := s.changed[owner]; ch != nil {
-		close(ch)
-		delete(s.changed, owner)
+	for p, ch := range s.changed {
+		if changed.Shared || p == changed.Owner {
+			close(ch)
+			delete(s.changed, p)
+		}
 	}
 	return nil
 }

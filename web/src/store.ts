@@ -33,7 +33,7 @@ let areas: Area[] = []
 let automations: AutomationStatus[] = []
 let bridges: Record<string, boolean> = {}
 let releases: ReleaseStatus[] = []
-let dashboards: CustomDashboard[] = [] // this Person's own
+let dashboards: CustomDashboard[] = [] // those this Person sees: the shared ones and their own
 let connected = false
 let now = Date.now()
 const values = new Map<string, Value>()
@@ -350,7 +350,7 @@ export const useBridges = () => useSyncExternalStore(subscribeTo('connection'), 
 // What the module proxy lists of each module built into Oiko, Oiko's first.
 export const useReleases = () => useSyncExternalStore(subscribeTo('releases'), () => releases)
 
-// This Person's own custom Dashboards.
+// The custom Dashboards this Person sees: the shared ones and their own.
 export const useDashboards = () => useSyncExternalStore(subscribeTo('dashboards'), () => dashboards)
 
 // 'disconnected', 'online', or the names of the Bridges offline.

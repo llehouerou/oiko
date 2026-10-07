@@ -13,7 +13,7 @@ import { DashboardEditor } from './DashboardEditor'
 import { FlagPill } from './Tiles'
 import { AggregatePanel, AreaPanel, DevicePanel, FlagPanel } from './HomePanels'
 
-// The Home page: the Dashboard hash opens, a Person's own at #dashboard/<id>, the built-in one
+// The Home page: the Dashboard hash opens, a shared one or a Person's own at #dashboard/<id>, the built-in one
 // otherwise, and the panels an Admin opens from it. The built-in Dashboard is drawn from the
 // Sections derived from the Areas, under the Flags without an Area as pills. A Person switches
 // Dashboards from the menu that takes the Home tab's place.
@@ -55,10 +55,12 @@ export function Home({ hash }: { hash: string }) {
   const home = dashboard(devices, aggregates, flags, areas, automations)
   const { pills, sections } = home
   const current = shown(hash, dashboards) // undefined: the built-in Dashboard
-  // The Dashboard being changed, by id, if one is: an Admin arranges the built-in one (the Areas'
-  // order and their Layouts), a Person edits their own. Leaving it, or its going, ends the change.
+  // Whether the viewer changes the current Dashboard: an Admin arranges the built-in one (the
+  // Areas' order and their Layouts) and edits a shared one, a Person edits their own.
+  const editable = current ? !current.shared || admin : admin
+  // The Dashboard being changed, by id, if one is. Leaving it, or its going, ends the change.
   const [editingId, setEditingId] = useState<string | null>(null)
-  const editing = editingId === (current?.id ?? 'builtin')
+  const editing = editable && editingId === (current?.id ?? 'builtin')
   const arrange = editing && !current
   return (
     <>
@@ -66,11 +68,10 @@ export function Home({ hash }: { hash: string }) {
         page="#"
         home={person && <DashboardMenu current={current} dashboards={dashboards} />}
         settings={
-          (member || current) && (
+          (member || editable) && (
             <>
               {member && <ChartsSetting charts={charts} onCharts={toggleCharts} />}
-              {admin && !current && <EditSetting label="Arrange dashboard" onEdit={() => setEditingId('builtin')} />}
-              {current && <EditSetting label="Edit dashboard" onEdit={() => setEditingId(current.id)} />}
+              {editable && <EditSetting label={current ? 'Edit dashboard' : 'Arrange dashboard'} onEdit={() => setEditingId(current?.id ?? 'builtin')} />}
             </>
           )
         }

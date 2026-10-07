@@ -221,6 +221,22 @@ test("a custom Dashboard's Area Sections are the built-in Dashboard's, its own S
   expect(home.custom(evening, true).map((s) => `${s.key} ${s.tiles.length}`)).toEqual(['own:favourites 4', 'area:kitchen 1', 'own:empty 0'])
 })
 
+test('an own Section a Guest sees nothing of, its Tiles left out by Oiko, leaves its cells empty', () => {
+  const home = dashboard([device('lamp', 'kitchen', fn('light'))], [], [], [area('kitchen')], [])
+  const shared: CustomDashboard = {
+    id: 'evening',
+    shared: true,
+    name: 'Evening',
+    columns: 2,
+    sections: [
+      { id: 'automations', name: 'Automations', columns: 1, col: 0, row: 0, width: 1 }, // as Oiko sends it: no Tiles
+      { area: 'kitchen', col: 1, row: 0, width: 1 },
+      { id: 'lamp', columns: 1, col: 0, row: 1, width: 1, tiles: [{ target: 'device:lamp', col: 0, row: 0, width: 1 }] },
+    ],
+  }
+  expect(home.custom(shared).map((s) => `${s.key} ${s.place?.col}${s.place?.row}`)).toEqual(['area:kitchen 10', 'own:lamp 01'])
+})
+
 test("a Function's Tile shows it alone, named after its Device and its key, with the whole Device's health", () => {
   const battery = reading('battery')
   const plug: Device = { ...device('plug', 'kitchen', fn('switch/l1'), fn('switch/l2'), fn('switch/l3')), name: 'Kitchen plug', capabilities: [battery] }

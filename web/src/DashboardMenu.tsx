@@ -1,10 +1,10 @@
 // The Home tab of the bar, for a Person: the current Dashboard's Name, opening a menu of the
-// Dashboards they see (the built-in one, then their own) and an entry to create one.
+// Dashboards they see (the built-in one, the shared ones, then their own) and an entry to create one.
 
 import { useRef, useState, type FormEvent } from 'react'
 import { mdiChevronDown, mdiPlus, mdiViewDashboardOutline } from '@mdi/js'
 import type { CustomDashboard } from './types'
-import { api } from './access'
+import { api, useAllows } from './access'
 import { Svg } from './icons'
 import { Panel } from './Panel'
 
@@ -49,7 +49,7 @@ export function DashboardMenu({ current, dashboards }: { current?: CustomDashboa
         className="inset-auto m-0 w-64 rounded-xl border border-neutral-800 bg-neutral-900 p-1.5 text-sm text-neutral-100 shadow-2xl"
       >
         {item('builtin', 'Home')}
-        {dashboards.map((d) => item(d.id, d.name))}
+        {[...dashboards.filter((d) => d.shared), ...dashboards.filter((d) => !d.shared)].map((d) => item(d.id, d.name))}
         <button
           popoverTarget="dashboards"
           popoverTargetAction="hide"
@@ -65,15 +65,18 @@ export function DashboardMenu({ current, dashboards }: { current?: CustomDashboa
   )
 }
 
-// Asks for a Name, creates an empty personal Dashboard of it, and opens it.
+// Asks for a Name, and an Admin whether it is shared or their own, creates an empty Dashboard of
+// it, and opens it.
 function NewDashboard({ onClose }: { onClose: () => void }) {
+  const admin = useAllows('admin')
   const [error, setError] = useState<string | null>(null)
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    const form = new FormData(e.currentTarget)
     const res = await api('/api/dashboards', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: new FormData(e.currentTarget).get('name'), sections: [] }),
+      body: JSON.stringify({ shared: form.get('shared') === 'shared', name: form.get('name'), sections: [] }),
     })
     if (!res.ok) return setError((await res.text()).trim())
     const { id }: { id: string } = await res.json()
@@ -84,6 +87,12 @@ function NewDashboard({ onClose }: { onClose: () => void }) {
     <Panel title={<h2 className="text-lg font-medium">New dashboard</h2>} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4 text-sm">
         <input name="name" placeholder="Name" aria-label="Name" autoFocus className="w-full rounded bg-neutral-800 px-2 py-1" />
+        {admin && (
+          <select name="shared" aria-label="Who sees it" defaultValue="personal" className="w-full rounded bg-neutral-800 px-2 py-1">
+            <option value="personal">Personal: you alone see it</option>
+            <option value="shared">Shared: everyone sees it, Admins edit it</option>
+          </select>
+        )}
         {error && <p className="text-red-400">{error}</p>}
         <button type="submit" className="rounded bg-amber-400 px-3 py-1 font-medium text-neutral-900 hover:bg-amber-300">
           Create

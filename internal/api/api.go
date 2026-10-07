@@ -14,6 +14,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"time"
 
@@ -46,8 +47,9 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	// triggers, which the event stream carries as Automation statuses.
 	handle(guest, "GET /api/updates", updates(h, acc, dash, releases))
 	handle(guest, "POST /api/commands", command(h))
-	// A Person's own Dashboards, a Guest's too; the dashboards module refuses
-	// a Kiosk and a Program, and whoever is not their owner (ADR 0041, 0046).
+	// A Person's own Dashboards, a Guest's too, and an Admin's shared ones; the
+	// dashboards module refuses a Kiosk and a Program, and whoever may not edit
+	// one (ADR 0041, 0046).
 	handle(guest, "POST /api/dashboards", func(w http.ResponseWriter, r *http.Request) {
 		var d dashboard.Dashboard
 		if !decode(w, r, &d) {
@@ -321,18 +323,20 @@ func respond(w http.ResponseWriter, v any, err error) {
 // the identity's Access level lets it see them: a Guest sees only what it can
 // press, never who did what (ADR 0031). The Status of each module's Releases
 // comes to an Admin with the snapshot, and again, as a "releases" message,
-// each time it changes (ADR 0023). A Person's own Dashboards come with the
-// snapshot too, and again, whole, as a "dashboards" message, each time they
-// change (ADR 0046). Updates available at once are written together and
-// flushed once. A client that stops reading ends the stream, at the first
-// write that does not go through within streamWriteLimit. It counts as a use
-// of its Session or Token at each keepalive, and ends at once when either
-// ends, or the identity's access changes: the client reconnects and gets what
-// its level sees now.
+// each time it changes (ADR 0023). The Dashboards a Person sees come with the
+// snapshot too, as they see them, and again, whole, as a "dashboards" message,
+// each time what they see of them changes (ADR 0041, 0046): one of them
+// edited, or for a Guest, the Automations it may press. Updates available at
+// once are written together and flushed once. A client that stops reading
+// ends the stream, at the first write that does not go through within
+// streamWriteLimit. It counts as a use of its Session or Token at each
+// keepalive, and ends at once when either ends, or the identity's access
+// changes: the client reconnects and gets what its level sees now.
 func updates(h *home.Home, acc *access.Store, dash *dashboard.Store, releases *release.Checker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := identity(r)
 		snap, ch, cancel := h.Subscribe()
+		automations := snap.Automations // all of them: what a Dashboard is filtered by
 		snap = snapshotFor(id.Level, snap)
 		defer cancel()
 		statuses, changed := []release.Status{}, (<-chan struct{})(nil) // nil: never
@@ -340,6 +344,7 @@ func updates(h *home.Home, acc *access.Store, dash *dashboard.Store, releases *r
 			statuses, changed = releases.Statuses()
 		}
 		dashboards, rearranged := dash.Dashboards(id)
+		shown := dashboardsFor(id, dashboards, automations)
 		w.Header().Set("Content-Type", "text/event-stream")
 		rc := http.NewResponseController(w)
 		defer rc.SetWriteDeadline(time.Time{}) // the connection may serve other requests
@@ -355,8 +360,21 @@ func updates(h *home.Home, acc *access.Store, dash *dashboard.Store, releases *r
 			home.Snapshot
 			Releases   []release.Status      `json:"releases"`
 			Dashboards []dashboard.Dashboard `json:"dashboards,omitzero"` // none for a Kiosk or a Program, [] for a Person without any
-		}{"snapshot", snap, statuses, dashboards})) {
+		}{"snapshot", snap, statuses, shown})) {
 			return
+		}
+		// writeDashboards writes the Dashboards as the identity sees them, if that
+		// changed.
+		writeDashboards := func() bool {
+			now := dashboardsFor(id, dashboards, automations)
+			if reflect.DeepEqual(now, shown) {
+				return true
+			}
+			shown = now
+			return writeEvent(w, struct {
+				Kind       string                `json:"kind"`
+				Dashboards []dashboard.Dashboard `json:"dashboards"`
+			}{"dashboards", shown}) == nil
 		}
 		keepalive := time.NewTicker(keepaliveEvery)
 		defer keepalive.Stop()
@@ -365,7 +383,14 @@ func updates(h *home.Home, acc *access.Store, dash *dashboard.Store, releases *r
 			case u, ok := <-ch:
 				// Closed: this observer fell too far behind. Ending the stream makes the
 				// browser reconnect and start over from a fresh snapshot.
-				if !ok || !send(func() bool { return writeBatch(w, u, ch, id.Level) }) {
+				if !ok || !send(func() bool {
+					refilter := false
+					return writeBatch(w, u, ch, id.Level, func(u home.Update) {
+						if u.Kind == home.AutomationsChanged {
+							automations, refilter = u.Automations, true
+						}
+					}) && (!refilter || writeDashboards())
+				}) {
 					return
 				}
 			case <-changed:
@@ -378,10 +403,7 @@ func updates(h *home.Home, acc *access.Store, dash *dashboard.Store, releases *r
 				}
 			case <-rearranged:
 				dashboards, rearranged = dash.Dashboards(id)
-				if !send(event(struct {
-					Kind       string                `json:"kind"`
-					Dashboards []dashboard.Dashboard `json:"dashboards"`
-				}{"dashboards", dashboards})) {
+				if !send(writeDashboards) {
 					return
 				}
 			case <-keepalive.C:
@@ -401,9 +423,11 @@ func updates(h *home.Home, acc *access.Store, dash *dashboard.Store, releases *r
 }
 
 // writeBatch writes u and every Update already queued behind it, each as
-// level l sees it, if it does; it reports false if the stream must end.
-func writeBatch(w http.ResponseWriter, u home.Update, ch <-chan home.Update, l access.Level) bool {
+// level l sees it, if it does, once seen with it; it reports false if the
+// stream must end.
+func writeBatch(w http.ResponseWriter, u home.Update, ch <-chan home.Update, l access.Level, seen func(home.Update)) bool {
 	for {
+		seen(u)
 		if v, ok := updateFor(l, u); ok && writeEvent(w, v) != nil {
 			return false
 		}

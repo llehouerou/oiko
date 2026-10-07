@@ -1,9 +1,12 @@
 package api
 
 import (
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -117,5 +120,103 @@ func TestAPersonsDashboardsReachEachOfTheirStreamsAndOnlyTheirs(t *testing.T) {
 				break quiet
 			}
 		}
+	}
+}
+
+func TestAnAdminKeepsSharedDashboardsForEveryPerson(t *testing.T) {
+	as := identities(t)
+	persons := []string{"Carol", "Bob", "Alice"}
+	streams := map[string]<-chan map[string]any{}
+	for _, who := range persons {
+		streams[who] = stream(t, as[who])
+		next(t, streams[who], "snapshot")
+	}
+	everyoneGets := func(what string, want ...string) {
+		t.Helper()
+		for _, who := range persons {
+			if ns := names(next(t, streams[who], "dashboards")); !slices.Equal(ns, want) {
+				t.Errorf("%s's stream after %s: %v, want %v", who, what, ns, want)
+			}
+		}
+	}
+
+	// Only an Admin creates one; shared or personal, a document decides once.
+	for _, who := range []string{"Carol", "Bob", "Kiosk", "Program"} {
+		read(t, as[who]("POST", "/api/dashboards", `{"shared": true, "name": "Evening"}`), http.StatusForbidden)
+	}
+	created := decodeAs[struct{ ID string }](t, as["Alice"]("POST", "/api/dashboards", `{"shared": true, "name": "Evening"}`), http.StatusCreated)
+	everyoneGets("creating one", "Evening")
+
+	// Only an Admin saves or deletes it.
+	for _, who := range []string{"Carol", "Bob", "Kiosk", "Program"} {
+		read(t, as[who]("PUT", "/api/dashboards/"+created.ID, `{"name": "Mine"}`), http.StatusForbidden)
+		read(t, as[who]("DELETE", "/api/dashboards/"+created.ID, ""), http.StatusForbidden)
+	}
+	read(t, as["Alice"]("PUT", "/api/dashboards/"+created.ID, `{"shared": false, "name": "Night"}`), http.StatusNoContent)
+	everyoneGets("saving it", "Night")
+	for _, who := range persons {
+		snap := next(t, stream(t, as[who]), "snapshot")
+		if d := snap["dashboards"].([]any)[0].(map[string]any); d["shared"] != true || d["owner"] != nil {
+			t.Errorf("%s's snapshot: %v", who, d)
+		}
+	}
+	read(t, as["Alice"]("DELETE", "/api/dashboards/"+created.ID, ""), http.StatusNoContent)
+	everyoneGets("deleting it")
+}
+
+func TestAGuestSeesOfASharedDashboardWhatTheyMayPress(t *testing.T) {
+	as := identities(t)
+	alice, carol := as["Alice"], as["Carol"]
+	steps := func(trigger string) string {
+		return `[{"id": "go", "kind": "` + trigger + `", "name": "Go", "params": {}}]`
+	}
+	leave := decodeAs[struct{ ID string }](t, alice("POST", "/api/automations", `{"name": "Leave", "steps": `+steps("manualTrigger")+`}`), http.StatusCreated).ID
+	night := decodeAs[struct{ ID string }](t, alice("POST", "/api/automations", `{"name": "Night"}`), http.StatusCreated).ID
+	watch := stream(t, alice) // once both reach a stream, the Dashboards know them too
+	for m := next(t, watch, "snapshot"); len(m["automations"].([]any)) < 2; m = next(t, watch, "automations") {
+	}
+	section := `{"name": "E", "sections": [
+		{"id": "both", "columns": 2, "col": 0, "row": 0, "width": 1, "tiles": [
+			{"automation": "` + leave + `", "col": 0, "row": 0, "width": 1},
+			{"automation": "` + night + `", "col": 1, "row": 0, "width": 1}]},
+		{"id": "night", "columns": 1, "col": 1, "row": 0, "width": 1, "tiles": [
+			{"automation": "` + night + `", "col": 0, "row": 0, "width": 1}]}]}`
+	shared := strings.Replace(section, `"name": "E"`, `"shared": true, "name": "Shared"`, 1)
+	read(t, alice("POST", "/api/dashboards", shared), http.StatusCreated)
+	read(t, carol("POST", "/api/dashboards", strings.Replace(section, `"E"`, `"Carol's"`, 1)), http.StatusCreated)
+
+	// tiles are the Automations of each Section of each Dashboard, by Name.
+	tiles := func(m map[string]any) map[string]string {
+		byName := map[string]string{}
+		for _, d := range m["dashboards"].([]any) {
+			var s []string
+			for _, sec := range d.(map[string]any)["sections"].([]any) {
+				sec := sec.(map[string]any)
+				s = append(s, sec["id"].(string)+":")
+				ts, _ := sec["tiles"].([]any)
+				for _, tile := range ts {
+					s = append(s, map[string]string{leave: "leave", night: "night"}[tile.(map[string]any)["automation"].(string)])
+				}
+			}
+			byName[d.(map[string]any)["name"].(string)] = strings.Join(s, " ")
+		}
+		return byName
+	}
+	whole := "both: leave night night: night"
+	if got := tiles(next(t, stream(t, carol), "snapshot")); !maps.Equal(got, map[string]string{"Shared": "both: leave night:", "Carol's": whole}) {
+		t.Errorf("a Guest's snapshot: %v", got)
+	}
+	for _, who := range []string{"Bob", "Alice"} {
+		if got := tiles(next(t, stream(t, as[who]), "snapshot")); !maps.Equal(got, map[string]string{"Shared": whole}) {
+			t.Errorf("%s's snapshot: %v", who, got)
+		}
+	}
+
+	// An Automation given a Manual trigger shows to a Guest at once.
+	guest := stream(t, carol)
+	next(t, guest, "snapshot")
+	read(t, alice("PUT", "/api/automations/"+night, `{"name": "Night", "steps": `+steps("manualTrigger")+`}`), http.StatusNoContent)
+	if got := tiles(next(t, guest, "dashboards")); got["Shared"] != whole {
+		t.Errorf("a Guest's stream once Night has a Manual trigger: %v", got)
 	}
 }

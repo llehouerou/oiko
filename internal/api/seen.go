@@ -1,7 +1,10 @@
 package api
 
 import (
+	"slices"
+
 	"github.com/llehouerou/oiko/internal/access"
+	"github.com/llehouerou/oiko/internal/dashboard"
 	"github.com/llehouerou/oiko/internal/home"
 )
 
@@ -56,6 +59,34 @@ func runEndFor(l access.Level, end home.RunEnd) home.RunEnd {
 		end.Trigger.By = nil
 	}
 	return end
+}
+
+// dashboardsFor is ds as by sees them (ADR 0041): those by edits whole, so
+// that saving one never erases what by no longer sees; from the others, the
+// Tiles by's level may not see are left out without a trace, an own Section
+// left empty kept, its cells empty. automations are all of the home's.
+func dashboardsFor(by access.Identity, ds []dashboard.Dashboard, automations []home.AutomationStatus) []dashboard.Dashboard {
+	if by.Level.Allows(access.Member) {
+		return ds
+	}
+	seen := map[string]bool{}
+	for _, a := range pressable(automations) {
+		seen[a.ID] = true
+	}
+	ds = slices.Clone(ds)
+	for i, d := range ds {
+		if d.EditableBy(by) {
+			continue
+		}
+		d.Sections = slices.Clone(d.Sections)
+		for j, sec := range d.Sections {
+			d.Sections[j].Tiles = slices.DeleteFunc(slices.Clone(sec.Tiles), func(t dashboard.Tile) bool {
+				return t.Automation != "" && !seen[t.Automation]
+			})
+		}
+		ds[i] = d
+	}
+	return ds
 }
 
 // pressable is what a Guest sees of the Automations: their Tiles, those with

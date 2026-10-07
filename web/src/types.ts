@@ -236,7 +236,7 @@ export interface Snapshot {
   events: { ref: Ref; value: Value }[]
   automations: AutomationStatus[]
   releases: ReleaseStatus[]
-  dashboards?: CustomDashboard[] // a Person's own; none for a Kiosk or a Program
+  dashboards?: CustomDashboard[] // those a Person sees, as they see them; none for a Kiosk or a Program
 }
 
 // Sent again each time a check finds something else; not an Update.
@@ -245,16 +245,18 @@ export interface Releases {
   releases: ReleaseStatus[]
 }
 
-// A Person's own Dashboards, sent again whole each time one changes; not an Update.
+// The Dashboards a Person sees, sent again whole each time what they see of them changes; not an Update.
 export interface Dashboards {
   kind: 'dashboards'
   dashboards: CustomDashboard[]
 }
 
-// Mirrors dashboard.Dashboard: a custom Dashboard, its Sections on a Layout of its columns.
+// Mirrors dashboard.Dashboard: a custom Dashboard, shared (an Admin's to edit, every Person's to
+// see) or personal, its Sections on a Layout of its columns.
 export interface CustomDashboard {
   id: string
-  owner: string // the Person whose personal Dashboard it is
+  shared?: true
+  owner?: string // the Person whose personal Dashboard it is
   name: string
   columns: number
   sections: CustomSection[]
