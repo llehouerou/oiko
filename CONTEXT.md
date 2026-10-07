@@ -156,7 +156,7 @@ Aggregate Oiko derives for an Area and an aggregated kind (lights, occupancy, do
 _Avoid_: Room, Zone
 
 **Dashboard**:
-A view of the home in the web client: an ordered list of Sections. The built-in one, derived from the Areas, is always complete; the others are custom, shared or personal to one Person (a Guest's included), and an Admin may assign one to a Kiosk, which never edits it. A Dashboard only arranges what its viewer may see: it grants nothing.
+A view of the home in the web client: an ordered list of Sections. The built-in one, derived from the Areas, is always complete and edited by nobody; the others are custom, with a Name: shared, which an Admin edits and every Person sees, or personal to one Person (a Guest's included), who alone sees and edits it. An Admin may assign the built-in one or a shared one to a Kiosk, which never edits it. A Dashboard only arranges what its viewer may see: it grants nothing, and what its viewer may not see is left out.
 _Avoid_: view, page, board, panel; the dashboard (for the web client as a whole)
 
 **Section**:
@@ -175,7 +175,7 @@ Where an Area's Tiles sit on the built-in Dashboard: a grid of a few columns, an
 _Avoid_: arrangement, position, grid (as the term)
 
 **Name**:
-Display label of a Device, an Aggregate, a Flag, an Area, a Section, a Person, a Kiosk or a Program. A new Device takes its Bridge's label; afterwards it is freely editable in Oiko, never used as a reference, and never written back to the Bridge. A Function has no Name of its own: it shows its Device's, followed by its key when the Device has several (e.g. `Kitchen plug · switch/l2`).
+Display label of a Device, an Aggregate, a Flag, an Area, a Dashboard, a Section, a Person, a Kiosk or a Program. A new Device takes its Bridge's label; afterwards it is freely editable in Oiko, never used as a reference, and never written back to the Bridge. A Function has no Name of its own: it shows its Device's, followed by its key when the Device has several (e.g. `Kitchen plug · switch/l2`).
 _Avoid_: entity_id, slug as identifier
 
 **Icon**:
@@ -201,7 +201,7 @@ External software, such as Node-RED or a script, calling Oiko's HTTP API under i
 _Avoid_: Integration, API client, service account, app, token (its credential, not its identity)
 
 **Access level**:
-What a Person, a Kiosk or a Program may do in Oiko: Guest, Member or Admin, a list fixed by Oiko, each allowing everything the one below it does; whoever holds one is called by it (a Guest, an Admin). A Guest observes the home as it is now, issues Commands except on configuration Capabilities, and starts Manual triggers, seeing of the Automations only the Tiles of those with a Manual trigger, never why one does not run, nor any Run; a Member also reads the home's past (History, Traces, the Commands issued) and how its Automations are built; an Admin also edits the home (Devices, configuration Capabilities, Areas, Layouts, Aggregates, Flags, Automations), sees the Build and Releases, and manages access: Persons, Kiosks, Programs, their credentials and Access levels. A Kiosk is a Guest or a Member, never an Admin; a Program may be an Admin but never manages access, which only a Person does; the last Admin Person can be neither demoted nor removed. Everyone signed in manages their own credentials and Name, never their own Access level. A Guest may have an end date set by an Admin, after which they can no longer sign in while the Person stays; promotion to Member clears it.
+What a Person, a Kiosk or a Program may do in Oiko: Guest, Member or Admin, a list fixed by Oiko, each allowing everything the one below it does; whoever holds one is called by it (a Guest, an Admin). A Guest observes the home as it is now, issues Commands except on configuration Capabilities, and starts Manual triggers, seeing of the Automations only the Tiles of those with a Manual trigger, never why one does not run, nor any Run; a Member also reads the home's past (History, Traces, the Commands issued) and how its Automations are built; an Admin also edits the home (Devices, configuration Capabilities, Areas, Layouts, shared Dashboards, Aggregates, Flags, Automations), sees the Build and Releases, and manages access: Persons, Kiosks, Programs, their credentials and Access levels. A Kiosk is a Guest or a Member, never an Admin; a Program may be an Admin but never manages access, which only a Person does; the last Admin Person can be neither demoted nor removed. Everyone signed in manages their own credentials and Name, never their own Access level. A Guest may have an end date set by an Admin, after which they can no longer sign in while the Person stays; promotion to Member clears it.
 _Avoid_: role (reserved for a Capability's), permission, group, right
 
 **Passkey**:
