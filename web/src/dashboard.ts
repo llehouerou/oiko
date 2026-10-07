@@ -122,7 +122,12 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
       doors: areaAggregate(area, 'contact'),
       presence: areaAggregate(area, 'occupancy'),
       bar: bulb ?? (lights && aggregateTile(lights)),
-      tiles: arrange(tiles(area.id, lone), columns, area.layout, naturalRows),
+      tiles: arrange(
+        tiles(area.id, lone),
+        columns,
+        area.layout?.map(({ tile, ...p }) => ({ key: tile, ...p })),
+        naturalRows,
+      ),
     }
   }
   const others: DashboardSection = { climate: [], tiles: tiles('') }

@@ -1,12 +1,18 @@
-// An Area's Layout: where its tiles sit in a grid of a few columns, gaps included (ADR 0015).
+// A Layout: where its occupants sit in a grid of a few columns, gaps included (ADR 0015). An
+// occupant is anything with a key: a Tile in an Area's Layout, a Section in a Dashboard's (ADR 0043).
 
-import type { Placement } from './types'
-
-// A tile's Placement as arranged: its height always known, and auto while an Admin has not set
-// it, so that it stays the tile's own and is never stored.
-export type Arranged = Placement & { auto?: boolean }
-// Where a tile sits in its Area's Layout.
-export type Place = Omit<Arranged, 'tile'>
+// Where an occupant sits: its first cell, from 0, and how many columns and rows it spans. Its
+// height is always known once arranged, and auto while nobody has set it, so that it stays the
+// occupant's own and is never stored.
+export interface Place {
+  col: number
+  row: number
+  width: number
+  height?: number
+  auto?: boolean
+}
+// An occupant in its place.
+export type Arranged = Place & { key: string }
 
 export const defaultColumns = 3
 export const maxColumns = 6
@@ -18,41 +24,41 @@ export const rows = (p: Place) => p.height ?? 1
 const cellsOf = (p: Place, columns: number) =>
   [...Array(rows(p)).keys()].flatMap((r) => [...Array(p.width).keys()].map((c) => (p.row + r) * columns + p.col + c))
 
-// tiles with their place in a Layout of columns, in reading order. A tile layout places keeps its
-// place, any other takes the next free cells after the last one placed, one column wide. A tile
-// whose height an Admin never set is rowsOf it, at its width; one that no longer fits where it
-// was, under a tile grown taller, moves on to the next free cells.
+// occupants with their place in a Layout of columns, in reading order. An occupant layout places
+// keeps its place, any other takes the next free cells after the last one placed, one column
+// wide. One whose height nobody set is rowsOf it, at its width; one that no longer fits where it
+// was, under one grown taller, moves on to the next free cells.
 export function arrange<T extends { key: string }>(
-  tiles: T[],
+  occupants: T[],
   columns: number,
-  layout: Placement[] = [],
-  rowsOf: (tile: T, width: number) => number = () => 1,
+  layout: Arranged[] = [],
+  rowsOf: (occupant: T, width: number) => number = () => 1,
 ) {
   const taken = new Set<number>()
   const placed = layout
     .flatMap((p): Arranged[] => {
-      const t = tiles.find((t) => t.key === p.tile)
-      return !t ? [] : p.height === undefined ? [{ ...p, height: rowsOf(t, p.width), auto: true }] : [p]
+      const o = occupants.find((o) => o.key === p.key)
+      return !o ? [] : p.height === undefined ? [{ ...p, height: rowsOf(o, p.width), auto: true }] : [p]
     })
     .sort(byReading)
     .map((p) => claim(p, taken, columns))
   const next = Math.max(0, ...placed.map((p) => p.row * columns + p.col + p.width))
-  return tiles
-    .map((t) => {
+  return occupants
+    .map((o) => {
       const p =
-        placed.find((p) => p.tile === t.key) ??
-        claim({ tile: t.key, col: next % columns, row: Math.floor(next / columns), width: 1, height: rowsOf(t, 1), auto: true }, taken, columns)
+        placed.find((p) => p.key === o.key) ??
+        claim({ key: o.key, col: next % columns, row: Math.floor(next / columns), width: 1, height: rowsOf(o, 1), auto: true }, taken, columns)
       const place: Place = { col: p.col, row: p.row, width: p.width, height: p.height, auto: p.auto }
-      return { ...t, place }
+      return { ...o, place }
     })
     .sort((a, b) => byReading(a.place, b.place))
 }
 
-// The Layout of tiles as arranged, each in its place.
-export const placements = (tiles: { key: string; place?: Place }[]): Arranged[] => tiles.flatMap((t) => (t.place ? [{ tile: t.key, ...t.place }] : []))
+// The Layout of occupants as arranged, each in its place.
+export const placements = (occupants: { key: string; place?: Place }[]): Arranged[] => occupants.flatMap((o) => (o.place ? [{ key: o.key, ...o.place }] : []))
 
-// The Layout to store: the heights an Admin set, never a tile's own.
-export const stored = (layout: Arranged[]): Placement[] => layout.map(({ auto, height, ...p }) => (auto ? p : { ...p, height }))
+// The Layout to store: the heights someone set, never an occupant's own.
+export const stored = (layout: Arranged[]): Arranged[] => layout.map(({ auto, height, ...p }) => (auto ? p : { ...p, height }))
 
 const byReading = (a: Place, b: Place) => a.row - b.row || a.col - b.col
 const overlap = (a: Place, b: Place) => a.row < b.row + rows(b) && b.row < a.row + rows(a) && a.col < b.col + b.width && b.col < a.col + a.width
@@ -79,9 +85,9 @@ function settle(wanted: Arranged[], columns: number): Arranged[] {
   return wanted.map((w) => claim(w, taken, columns))
 }
 
-// layout with tile moved to col and row; a tile in its way takes its former place.
-export function move(layout: Arranged[], tile: string, col: number, row: number, columns: number) {
-  const from = layout.find((p) => p.tile === tile)
+// layout with occupant key moved to col and row; one in its way takes its former place.
+export function move(layout: Arranged[], key: string, col: number, row: number, columns: number) {
+  const from = layout.find((p) => p.key === key)
   if (!from) return layout
   const to = fit({ ...from, col, row }, columns)
   const others = layout.filter((p) => p !== from).sort(byReading)
@@ -89,10 +95,10 @@ export function move(layout: Arranged[], tile: string, col: number, row: number,
   return settle([to, ...others.filter((p) => !inWay.includes(p)), ...inWay.map((p) => ({ ...p, col: from.col, row: from.row }))], columns)
 }
 
-// layout with tile resized, in columns and rows; a tile in its way moves on to the next free cells.
-// The height an Admin sets is kept from then on.
-export function resize(layout: Arranged[], tile: string, size: { width?: number; height?: number }, columns: number) {
-  const p = layout.find((p) => p.tile === tile)
+// layout with occupant key resized, in columns and rows; one in its way moves on to the next free
+// cells. The height someone sets is kept from then on.
+export function resize(layout: Arranged[], key: string, size: { width?: number; height?: number }, columns: number) {
+  const p = layout.find((p) => p.key === key)
   if (!p) return layout
   const resized = {
     ...p,
@@ -103,5 +109,5 @@ export function resize(layout: Arranged[], tile: string, size: { width?: number;
   return settle([resized, ...layout.filter((o) => o !== p).sort(byReading)], columns)
 }
 
-// layout in a grid of columns: a tile past the edge is pulled in, and those in its way move on.
+// layout in a grid of columns: an occupant past the edge is pulled in, and those in its way move on.
 export const reflow = (layout: Arranged[], columns: number) => settle([...layout].sort(byReading), columns)
