@@ -108,12 +108,15 @@ type Store struct {
 }
 
 // who is an identity told of changes: a Person, an Admin apart, or a Kiosk.
+// A Person changing level is not followed: that ends their streams, which
+// listen again under their new level.
 type who struct {
 	kind  access.Kind
 	id    string
 	admin bool
 }
 
+// whoIs is by, as told of changes.
 func whoIs(by access.Identity) who {
 	return who{by.Kind, by.ID, admin(by)}
 }

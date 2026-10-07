@@ -111,6 +111,9 @@ func TestADashboardIsFilteredForWhoeverCannotEditIt(t *testing.T) {
 		{access.Identity{Kind: access.PersonKind, ID: "carol", Level: access.Guest}, []string{"mixed:", "flag:away", "leave", "night only:"}, all},
 		{access.Identity{Kind: access.PersonKind, ID: "bob", Level: access.Member}, all, all},
 		{access.Identity{Kind: access.PersonKind, ID: "alice", Level: access.Admin}, all, all},
+		// A Kiosk edits none: it gets its Dashboard at its level.
+		{access.Identity{Kind: access.KioskKind, ID: "hall", Level: access.Guest}, []string{"mixed:", "flag:away", "leave", "night only:"}, []string{"mixed:", "flag:away", "leave", "night only:"}},
+		{access.Identity{Kind: access.KioskKind, ID: "kitchen", Level: access.Member}, all, all},
 	} {
 		got := dashboardsFor(c.by, ds, automations)
 		if s := tiles(got[0]); !slices.Equal(s, c.shared) {

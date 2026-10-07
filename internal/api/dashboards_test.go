@@ -402,10 +402,14 @@ func TestAKioskShowsTheDashboardAnAdminAssignsIt(t *testing.T) {
 	}
 
 	// A removed Kiosk takes its assignment with it.
+	// Changes in a row may reach a stream as one message: wait for each.
+	assigned := func(want map[string]any) {
+		for !reflect.DeepEqual(next(t, admin, "dashboards")["kioskDashboards"], want) {
+		}
+	}
+	assigned(map[string]any{})
 	assign(alice, hall, evening, http.StatusNoContent)
-	next(t, admin, "dashboards") // Night
-	next(t, admin, "dashboards") // assigned the built-in one
-	next(t, admin, "dashboards") // assigned Night again
+	assigned(map[string]any{hall: evening})
 	read(t, alice("DELETE", "/api/kiosks/"+hall, ""), http.StatusNoContent)
 	if got := next(t, admin, "dashboards")["kioskDashboards"]; !reflect.DeepEqual(got, map[string]any{}) {
 		t.Errorf("an Admin's stream once the Kiosk is removed: %v", got)
