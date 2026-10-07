@@ -217,8 +217,8 @@ test("a custom Dashboard's Area Sections are the built-in Dashboard's, its own S
   // a Device's Tile shows each of its Functions that has one, whatever their Areas
   const relay = own!.tiles[0]!
   expect(relay.kind === 'target' && relay.fns.map((f) => f.target)).toEqual(['device:relay/l1', 'device:relay/l2'])
-  // while editing, an own Section with nothing to show is there to edit
-  expect(home.custom(evening, true).map((s) => `${s.key} ${s.tiles.length}`)).toEqual(['own:favourites 4', 'area:kitchen 1', 'own:empty 0'])
+  // while editing, an own Section with nothing to show is there to edit, and what shows nothing too
+  expect(home.custom(evening, true).map((s) => `${s.key} ${s.tiles.length}`)).toEqual(['own:favourites 6', 'area:kitchen 1', 'own:empty 1'])
 })
 
 test('an own Section a Guest sees nothing of, its Tiles left out by Oiko, leaves its cells empty', () => {
@@ -263,6 +263,43 @@ test("a Function's Tile shows it alone, named after its Device and its key, with
     { key: 'device:plug', name: 'Kitchen plug' },
   ])
   expect(own!.tiles[2]!.kind === 'target' && own!.tiles[2]!.fns.length).toBe(3)
+})
+
+test('a placement showing nothing leaves its cells empty, but in the editor: a card naming it, saying why it is empty', () => {
+  const plug: Device = { ...device('plug', 'kitchen', fn('switch/l1')), name: 'Kitchen plug' }
+  const bare: Device = { ...device('bare', 'kitchen'), name: 'Bare' }
+  const night: AutomationStatus = { id: 'night', name: 'Night', status: 'enabled' }
+  const home = dashboard([plug, bare], [], [], [area('kitchen')], [night])
+  const placed = ['device:plug/switch/l2', 'device:bare', 'automation:night', 'device:gone']
+  const mine: CustomDashboard = {
+    id: 'mine',
+    owner: 'alice',
+    name: 'Mine',
+    columns: 2,
+    sections: [
+      { id: 'kept', columns: 1, col: 0, row: 0, width: 1, tiles: [{ target: 'device:plug/switch/l1', col: 0, row: 0, width: 1 }] },
+      {
+        id: 'dormant',
+        columns: 4,
+        col: 1,
+        row: 0,
+        width: 1,
+        tiles: placed.map((key, col) =>
+          key.startsWith('automation:') ? { automation: key.slice('automation:'.length), col, row: 0, width: 1 } : { target: key, col, row: 0, width: 1 },
+        ),
+      },
+    ],
+  }
+  // viewers see none of it, nor the Section it leaves empty
+  expect(home.custom(mine).map((s) => s.key)).toEqual(['own:kept'])
+  // the editor shows each in its cells, named, with why
+  const [, dormant] = home.custom(mine, true)
+  expect(dormant!.tiles.map((t) => (t.kind === 'dormant' ? `${t.key} ${t.place?.col} ${t.label}: ${t.why}` : t.key))).toEqual([
+    'device:plug/switch/l2 0 Kitchen plug · switch/l2: Its device has no function switch/l2 with a tile now. It shows again if the function comes back.',
+    'device:bare 1 Bare: Its device has no function with a tile now. It shows again if one comes back.',
+    'automation:night 2 Night: Its automation has no manual trigger now. It shows again if one comes back.',
+    'device:gone 3 Unavailable: What it showed is gone, or hidden from you.',
+  ])
 })
 
 test("the Tiles to pick for an own Section: the home's, grouped by Area, searched by name, those it holds greyed out", () => {

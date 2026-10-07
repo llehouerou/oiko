@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/llehouerou/oiko/bridge"
 	"github.com/llehouerou/oiko/internal/access"
+	"github.com/llehouerou/oiko/internal/home"
 )
 
 // requester does a request as one identity.
@@ -327,6 +329,32 @@ func TestADuplicateHoldsWhatItsViewerSaw(t *testing.T) {
 		return
 	}
 	t.Error("a Guest's duplicate did not reach them")
+}
+
+func TestADeviceDeletedLeavesTheDashboardsItIsOn(t *testing.T) {
+	h, alice := server(t)
+	port := h.Attach("z2m", nopBridge{})
+	port.SyncDevices([]bridge.Device{{NativeAddress: "0x1", Name: "Lamp", Functions: []bridge.Function{{Key: "light", Kind: "light", Capabilities: []home.Capability{
+		{Key: "state", Type: home.Binary, Category: home.Primary, Access: home.Access{Observable: true, Settable: true}}}}}}})
+	snap, _, cancel := h.Subscribe()
+	cancel()
+	lamp := home.TargetDevice(snap.Devices[0].ID, "")
+	read(t, alice("POST", "/api/dashboards", `{"name": "Evening", "sections": [{"id": "own", "columns": 1, "col": 0, "row": 0, "width": 1, "tiles": [
+		{"target": "`+lamp.Key()+`", "col": 0, "row": 0, "width": 1}]}]}`), http.StatusCreated)
+	msgs := stream(t, alice)
+	// tiles are the Tiles of the one Section of the one Dashboard m carries.
+	tiles := func(m map[string]any) []any {
+		ts, _ := m["dashboards"].([]any)[0].(map[string]any)["sections"].([]any)[0].(map[string]any)["tiles"].([]any)
+		return ts
+	}
+	if got := tiles(next(t, msgs, "snapshot")); len(got) != 1 {
+		t.Fatalf("before the Device is deleted: %v", got)
+	}
+	port.SyncDevices(nil) // Detached: only then deleted
+	read(t, alice("DELETE", "/api/devices/"+string(lamp.Device()), ""), http.StatusNoContent)
+	if got := tiles(next(t, msgs, "dashboards")); len(got) != 0 {
+		t.Errorf("once the Device is deleted: %v", got)
+	}
 }
 
 func TestAKioskShowsTheDashboardAnAdminAssignsIt(t *testing.T) {

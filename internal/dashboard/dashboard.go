@@ -7,6 +7,7 @@ package dashboard
 
 import (
 	"fmt"
+	"log"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -99,12 +100,10 @@ type document struct {
 // may refer to.
 type Store struct {
 	file    string
-	mu      sync.Mutex
+	mu      sync.Mutex // under Home's lock: never held while calling Home
 	doc     document
 	changed map[who]chan struct{} // closed when what an identity is given changes
-
-	kmu   sync.Mutex // under Home's lock: never held while calling Home
-	known known
+	known   known
 }
 
 // who is an identity told of changes: a Person, an Admin apart, or a Kiosk.
@@ -136,9 +135,9 @@ type known struct {
 	automations []home.AutomationStatus
 }
 
-// Open loads the Dashboards from dir, dropping the lists of whoever is not
-// one of persons and the assignments of whatever is not one of kiosks, by
-// id, and follows h.
+// Open loads the Dashboards from dir, dropping the personal Dashboards and
+// lists of whoever is not one of persons and the assignments of whatever is
+// not one of kiosks, by id, and follows h.
 func Open(dir string, h *home.Home, persons, kiosks []string) (*Store, error) {
 	s := &Store{file: filepath.Join(dir, "dashboards.json"), changed: map[who]chan struct{}{}}
 	if err := store.Load(s.file, Format, &s.doc); err != nil {
@@ -150,21 +149,30 @@ func Open(dir string, h *home.Home, persons, kiosks []string) (*Store, error) {
 	if s.doc.Kiosks == nil {
 		s.doc.Kiosks = map[string]string{}
 	}
+	s.doc.Dashboards = slices.DeleteFunc(s.doc.Dashboards, func(d Dashboard) bool { return !d.Shared && !slices.Contains(persons, d.Owner) })
 	maps.DeleteFunc(s.doc.Lists, func(p string, _ []Entry) bool { return !slices.Contains(persons, p) })
 	maps.DeleteFunc(s.doc.Kiosks, func(k, _ string) bool { return !slices.Contains(kiosks, k) })
 	// Held across Follow: an Update announced as it returns waits for the
 	// snapshot to be kept first, rather than be overwritten by it.
-	s.kmu.Lock()
-	defer s.kmu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	snap, _ := h.Follow(s.deliver)
 	s.known = known{snap.Devices, snap.Aggregates, snap.Flags, snap.Areas, snap.Automations}
 	return s, nil
 }
 
-// deliver keeps what exists. It runs under Home's lock.
+// deliver keeps what exists, and drops from every Dashboard what no longer
+// does (ADR 0045): a Device deleted or given up in a Replace, an Aggregate,
+// a Flag, an Area or an Automation. Each Update that deletes one is followed
+// by the list it is gone from. It runs under Home's lock.
 func (s *Store) deliver(u home.Update) {
-	s.kmu.Lock()
-	defer s.kmu.Unlock()
+	switch u.Kind {
+	case home.DevicesChanged, home.AggregatesChanged, home.FlagsChanged, home.AreasChanged, home.AutomationsChanged:
+	default:
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	switch u.Kind {
 	case home.DevicesChanged:
 		s.known.devices = u.Devices
@@ -176,6 +184,22 @@ func (s *Store) deliver(u home.Update) {
 		s.known.areas = u.Areas
 	case home.AutomationsChanged:
 		s.known.automations = u.Automations
+	}
+	ds := slices.Clone(s.doc.Dashboards)
+	var changed []Dashboard
+	for i, d := range ds {
+		if kept, ok := s.known.pruned(d); ok {
+			ds[i] = kept
+			changed = append(changed, kept)
+		}
+	}
+	if changed == nil {
+		return
+	}
+	// Nothing is recorded (ADR 0045); a failed write is retried by the next
+	// one, which drops what is gone again.
+	if err := s.write(ds, s.doc.Lists, changed...); err != nil {
+		log.Printf("dashboards: %v", err)
 	}
 }
 
@@ -287,18 +311,19 @@ func (s *Store) SaveList(by access.Identity, list []Entry) error {
 	return s.save(doc, func(w who) bool { return w.kind == access.PersonKind && w.id == by.ID })
 }
 
-// RemovePerson drops removed Person p's list (ADR 0045); the Persons are
-// written first, and a list left behind is dropped on load.
+// RemovePerson drops removed Person p's personal Dashboards and list (ADR
+// 0045); the Persons are written first, and what is left behind is dropped
+// on load.
 func (s *Store) RemovePerson(p string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.doc.Lists[p]; !ok {
+	mine := func(d Dashboard) bool { return !d.Shared && d.Owner == p }
+	if _, ok := s.doc.Lists[p]; !ok && !slices.ContainsFunc(s.doc.Dashboards, mine) {
 		return nil
 	}
-	doc := s.doc
-	doc.Lists = maps.Clone(s.doc.Lists)
-	delete(doc.Lists, p)
-	return s.save(doc, func(who) bool { return false })
+	lists := maps.Clone(s.doc.Lists)
+	delete(lists, p)
+	return s.write(slices.DeleteFunc(slices.Clone(s.doc.Dashboards), mine), lists)
 }
 
 // reconciled is list as Person p's, ds the Dashboards: each Dashboard p sees
@@ -339,13 +364,13 @@ func (s *Store) Create(by access.Identity, d Dashboard) (string, error) {
 	if !d.EditableBy(by) {
 		return "", fmt.Errorf("%w: only an admin creates a shared dashboard", access.ErrRefused)
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	d, err := s.valid(d)
 	if err != nil {
 		return "", err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return d.ID, s.write(append(slices.Clone(s.doc.Dashboards), d), d)
+	return d.ID, s.write(append(slices.Clone(s.doc.Dashboards), d), s.doc.Lists, d)
 }
 
 // Save replaces Dashboard id with d, whole, for whoever edits it; shared or
@@ -367,7 +392,7 @@ func (s *Store) Save(by access.Identity, id string, d Dashboard) error {
 	d.ID, d.Shared, d.Owner = id, was.Shared, was.Owner
 	ds := slices.Clone(s.doc.Dashboards)
 	ds[i] = d
-	return s.write(ds, d)
+	return s.write(ds, s.doc.Lists, d)
 }
 
 // Delete deletes Dashboard id, for whoever edits it.
@@ -381,7 +406,7 @@ func (s *Store) Delete(by access.Identity, id string) error {
 	if err != nil {
 		return err
 	}
-	return s.write(slices.Delete(slices.Clone(s.doc.Dashboards), i, i+1), s.doc.Dashboards[i])
+	return s.write(slices.Delete(slices.Clone(s.doc.Dashboards), i, i+1), s.doc.Lists, s.doc.Dashboards[i])
 }
 
 // person refuses whoever is not a Person: a Kiosk or a Program has no
@@ -414,35 +439,37 @@ func (s *Store) editable(by access.Identity, id string) (int, error) {
 	return i, nil
 }
 
-// write saves ds, which are then the Dashboards, and tells whoever sees
-// changed: every Person if it is shared, its owner otherwise, and the Kiosks
-// it was assigned. Each list saved follows in the same write (ADR 0044): a
-// Dashboard created joins its end, shown, one deleted leaves it, and if that
-// leaves none shown, the first one left is shown again. A Kiosk whose
-// Dashboard is deleted shows the built-in one again (ADR 0045). Callers hold
-// s.mu.
-func (s *Store) write(ds []Dashboard, changed Dashboard) error {
-	lists := map[string][]Entry{}
-	for p, l := range s.doc.Lists {
+// write saves ds, which are then the Dashboards, and lists, the lists of
+// Dashboards, and tells whoever sees one of changed: every Person if it is
+// shared, its owner otherwise, and the Kiosks it was assigned. Each list
+// follows in the same write (ADR 0044): a Dashboard created joins its end,
+// shown, one deleted leaves it, and if that leaves none shown, the first one
+// left is shown again. A Kiosk whose Dashboard is deleted shows the built-in
+// one again (ADR 0045). Callers hold s.mu.
+func (s *Store) write(ds []Dashboard, lists map[string][]Entry, changed ...Dashboard) error {
+	reconciledLists := map[string][]Entry{}
+	for p, l := range lists {
 		l, shows := reconciled(ds, p, l)
 		if !shows {
 			l[0].Hidden = false
 		}
-		lists[p] = l
+		reconciledLists[p] = l
 	}
 	was := s.doc.Kiosks
 	kiosks := maps.Clone(was)
 	maps.DeleteFunc(kiosks, func(_, id string) bool {
 		return !slices.ContainsFunc(ds, func(d Dashboard) bool { return d.ID == id })
 	})
-	return s.save(document{ds, lists, kiosks}, func(w who) bool {
-		switch w.kind {
-		case access.PersonKind:
-			return changed.seenBy(w.id)
-		case access.KioskKind:
-			return was[w.id] == changed.ID
-		}
-		return false
+	return s.save(document{ds, reconciledLists, kiosks}, func(w who) bool {
+		return slices.ContainsFunc(changed, func(d Dashboard) bool {
+			switch w.kind {
+			case access.PersonKind:
+				return d.seenBy(w.id)
+			case access.KioskKind:
+				return was[w.id] == d.ID
+			}
+			return false
+		})
 	})
 }
 
@@ -464,11 +491,8 @@ func (s *Store) save(doc document, tell func(who) bool) error {
 
 // valid is d as saved (ADR 0045): its Name trimmed, two columns if it has
 // none, an id for each own Section without one, and what no longer exists
-// dropped; refused unless it holds together.
+// dropped; refused unless it holds together. Callers hold s.mu.
 func (s *Store) valid(d Dashboard) (Dashboard, error) {
-	s.kmu.Lock()
-	k := s.known
-	s.kmu.Unlock()
 	var err error
 	if d.Name, err = home.ValidName(d.Name); err != nil {
 		return d, err
@@ -476,23 +500,32 @@ func (s *Store) valid(d Dashboard) (Dashboard, error) {
 	if d.Columns == 0 {
 		d.Columns = defaultColumns
 	}
-	sections := []Section{}
-	for _, sec := range d.Sections {
+	d.Sections = slices.Clone(d.Sections)
+	for i, sec := range d.Sections {
 		if sec.Area != "" {
 			if sec.ID != "" || sec.Name != "" || sec.Icon != "" || sec.Columns != 0 || sec.Tiles != nil {
 				return d, fmt.Errorf("%w: an area's section has nothing of its own", home.ErrInvalid)
 			}
-			if k.area(sec.Area) {
-				sections = append(sections, sec)
-			}
 			continue
 		}
-		if sec, err = k.own(sec); err != nil {
+		if d.Sections[i], err = own(sec); err != nil {
 			return d, err
 		}
-		sections = append(sections, sec)
 	}
-	d.Sections = sections
+	d, _ = s.known.pruned(d)
+	for _, sec := range d.Sections {
+		if sec.Area != "" {
+			continue
+		}
+		if err := home.CheckLayout(sec.Columns, sec.Tiles, func(t Tile) (string, home.Place) {
+			if t.Automation != "" {
+				return "automation " + t.Automation, t.Place
+			}
+			return t.Target.Key(), t.Place
+		}); err != nil {
+			return d, err
+		}
+	}
 	return d, home.CheckLayout(d.Columns, d.Sections, func(sec Section) (string, home.Place) {
 		if sec.Area != "" {
 			return "area " + string(sec.Area), sec.Place
@@ -501,9 +534,9 @@ func (s *Store) valid(d Dashboard) (Dashboard, error) {
 	})
 }
 
-// own is own Section sec as saved: its Name trimmed, an id, and its Tiles of
-// what still exists, each of one Target or Automation, on its Layout.
-func (k known) own(sec Section) (Section, error) {
+// own is own Section sec as saved: its Name trimmed, an id, and each Tile of
+// one Target or Automation.
+func own(sec Section) (Section, error) {
 	var err error
 	if sec.Name != "" {
 		if sec.Name, err = home.ValidName(sec.Name); err != nil {
@@ -516,22 +549,35 @@ func (k known) own(sec Section) (Section, error) {
 	if sec.ID == "" {
 		sec.ID = uuid.NewV7().String()
 	}
-	tiles := []Tile{}
 	for _, t := range sec.Tiles {
 		if t.Target.IsZero() == (t.Automation == "") {
 			return sec, fmt.Errorf("%w: a tile is a target's or an automation's", home.ErrInvalid)
 		}
-		if k.target(t.Target) || k.automation(t.Automation) {
-			tiles = append(tiles, t)
-		}
 	}
-	sec.Tiles = tiles
-	return sec, home.CheckLayout(sec.Columns, sec.Tiles, func(t Tile) (string, home.Place) {
-		if t.Automation != "" {
-			return "automation " + t.Automation, t.Place
+	return sec, nil
+}
+
+// pruned is d without what no longer exists, and whether it held any: the
+// Sections of Areas gone, and the Tiles of Targets and Automations gone. An
+// own Section left without Tiles stays; a Function whose key its Device no
+// longer has stays placed, showing nothing until the key comes back.
+func (k known) pruned(d Dashboard) (Dashboard, bool) {
+	gone := false
+	sections := []Section{}
+	for _, sec := range d.Sections {
+		if sec.Area != "" && !k.area(sec.Area) {
+			gone = true
+			continue
 		}
-		return t.Target.Key(), t.Place
-	})
+		if sec.Area == "" {
+			tiles := slices.DeleteFunc(slices.Clone(sec.Tiles), func(t Tile) bool { return !k.target(t.Target) && !k.automation(t.Automation) })
+			gone = gone || len(tiles) != len(sec.Tiles)
+			sec.Tiles = tiles
+		}
+		sections = append(sections, sec)
+	}
+	d.Sections = sections
+	return d, gone
 }
 
 func (k known) area(id home.AreaID) bool {

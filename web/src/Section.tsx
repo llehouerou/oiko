@@ -182,7 +182,7 @@ export function Section({
 const opener = (t: TargetTile, onOpen?: (id: string, back?: () => void) => void) => onOpen && ((back?: () => void) => onOpen(parseTarget(t.subject)!.id, back))
 
 // tiles drawn: a Tile's ⋯ opens its Device's, Aggregate's or Flag's panel, a Manual trigger's
-// result is told.
+// result is told; one showing nothing, in the editor alone, is a dashed card saying why.
 export const tileNodes = (
   tiles: DashboardTile[],
   onResult: (r: { text: string; error?: boolean }) => void,
@@ -191,7 +191,16 @@ export const tileNodes = (
   tiles.map((t) => ({
     ...t,
     node:
-      t.kind === 'manual' ? <ManualTile key={t.key} automation={t.automation} onResult={onResult} /> : <Tile key={t.key} tile={t} onOpen={opener(t, onOpen)} />,
+      t.kind === 'manual' ? (
+        <ManualTile key={t.key} automation={t.automation} onResult={onResult} />
+      ) : t.kind === 'dormant' ? (
+        <div key={t.key} className="space-y-1 rounded-xl border border-dashed border-neutral-600 p-4 pr-10 text-neutral-400">
+          <p className="truncate font-medium">{t.label}</p>
+          <p className="text-xs text-neutral-500">{t.why}</p>
+        </div>
+      ) : (
+        <Tile key={t.key} tile={t} onOpen={opener(t, onOpen)} />
+      ),
   }))
 
 // An Area's presence or doors in its header: the state of its Aggregate of occupancy or of contacts.

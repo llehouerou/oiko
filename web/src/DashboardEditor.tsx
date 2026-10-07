@@ -256,7 +256,7 @@ function EditedSection({
         </>
       ) : (
         <>
-          {!s.tiles.length && <p className="px-1 text-xs text-neutral-500">Nobody sees this section until it has tiles.</p>}
+          {s.tiles.every((t) => t.kind === 'dormant') && <p className="px-1 text-xs text-neutral-500">Nobody sees this section until it has tiles.</p>}
           {children}
         </>
       )}

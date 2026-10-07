@@ -33,6 +33,7 @@ func (nopBridge) Send(context.Context, string, string, map[string]any, time.Dura
 // living is a home with an Area, a Device in it, a Flag and an Automation.
 type living struct {
 	h          *home.Home
+	port       *home.Port
 	area       home.AreaID
 	lamp, flag home.Target
 	otherArea  string
@@ -45,12 +46,17 @@ func aHome(t *testing.T) living {
 	other, _ := h.CreateArea("Office", "")
 	flag, _ := h.CreateFlag("Away")
 	port := h.Attach("z2m", nopBridge{})
-	light := home.Capability{Key: "state", Label: "State", Type: home.Binary, Category: home.Primary, Access: home.Access{Observable: true, Settable: true}}
-	port.SyncDevices([]bridge.Device{{NativeAddress: "0x1", Name: "Lamp", Functions: []bridge.Function{{Key: "light", Kind: "light", Capabilities: []home.Capability{light}}}}})
+	port.SyncDevices([]bridge.Device{lampAt("0x1")})
 	h.SetAutomationStatus([]home.AutomationStatus{{ID: "night", Name: "Night"}})
 	snap, _, cancel := h.Subscribe()
 	cancel()
-	return living{h, area, home.TargetDevice(snap.Devices[0].ID, ""), home.TargetFlag(flag), string(other)}
+	return living{h, port, area, home.TargetDevice(snap.Devices[0].ID, ""), home.TargetFlag(flag), string(other)}
+}
+
+// lampAt is a lamp at Native Address address.
+func lampAt(address string) bridge.Device {
+	light := home.Capability{Key: "state", Label: "State", Type: home.Binary, Category: home.Primary, Access: home.Access{Observable: true, Settable: true}}
+	return bridge.Device{NativeAddress: address, Name: "Lamp", Functions: []bridge.Function{{Key: "light", Kind: "light", Capabilities: []home.Capability{light}}}}
 }
 
 // persons and kiosks are the Persons and Kiosks the tests' Dashboards know at
@@ -441,7 +447,7 @@ func TestEachPersonOrdersTheDashboardsTheySee(t *testing.T) {
 	}
 }
 
-func TestARemovedPersonTakesTheirListWithThem(t *testing.T) {
+func TestARemovedPersonTakesTheirDashboardsAndListWithThem(t *testing.T) {
 	dir := t.TempDir()
 	s := opened(t, dir, home.New(nil))
 	shared, err := s.Create(bob, Dashboard{Shared: true, Name: "Evening"})
@@ -449,18 +455,36 @@ func TestARemovedPersonTakesTheirListWithThem(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, p := range []access.Identity{alice, carol} {
+		if _, err := s.Create(p, Dashboard{Name: p.Name + "'s"}); err != nil {
+			t.Fatal(err)
+		}
 		if err := s.SaveList(p, []Entry{{ID: shared}, {ID: Builtin, Hidden: true}}); err != nil {
 			t.Fatal(err)
 		}
 	}
+	// names are the Names of the Dashboards p sees.
+	names := func(s *Store, p access.Identity) []string {
+		var ns []string
+		for _, d := range must(s.Dashboards(p)) {
+			ns = append(ns, d.Name)
+		}
+		return ns
+	}
 	if err := s.RemovePerson("alice"); err != nil {
 		t.Fatal(err)
 	}
-	if got := list(opened(t, dir, home.New(nil)), alice); !slices.Equal(got, []string{Builtin, shared}) {
+	reopened := opened(t, dir, home.New(nil))
+	if got := list(reopened, alice); !slices.Equal(got, []string{Builtin, shared}) {
 		t.Errorf("a removed Person's list: %v", got)
 	}
+	if got := names(reopened, alice); !slices.Equal(got, []string{"Evening"}) {
+		t.Errorf("a removed Person's Dashboards: %v", got)
+	}
+	if got := names(reopened, carol); !slices.Equal(got, []string{"Evening", "Carol's"}) {
+		t.Errorf("another Person's Dashboards: %v", got)
+	}
 
-	// Carol, removed while her list was not, loses it on load.
+	// Carol, removed while her Dashboards and list were not, loses them on load.
 	again, err := Open(dir, home.New(nil), []string{"bob"}, kiosks)
 	if err != nil {
 		t.Fatal(err)
@@ -468,6 +492,138 @@ func TestARemovedPersonTakesTheirListWithThem(t *testing.T) {
 	if got := list(again, carol); !slices.Equal(got, []string{Builtin, shared}) {
 		t.Errorf("a list of a Person no longer known: %v", got)
 	}
+	if got := names(again, carol); !slices.Equal(got, []string{"Evening"}) {
+		t.Errorf("the Dashboards of a Person no longer known: %v", got)
+	}
+}
+
+// must is ds, without the channel Dashboards answers with them.
+func must(ds []Dashboard, _ <-chan struct{}) []Dashboard { return ds }
+
+// held is what Dashboard d holds: each Area's Section as "area:<id>", and
+// each own Section as "<id>:" then its Tiles' keys.
+func held(d Dashboard) []string {
+	var h []string
+	for _, sec := range d.Sections {
+		if sec.Area != "" {
+			h = append(h, "area:"+string(sec.Area))
+			continue
+		}
+		h = append(h, sec.ID+":")
+		for _, t := range sec.Tiles {
+			h = append(h, t.Target.Key()+t.Automation)
+		}
+	}
+	return h
+}
+
+func TestWhatIsDeletedLeavesEveryDashboard(t *testing.T) {
+	l := aHome(t)
+	dir := t.TempDir()
+	s := opened(t, dir, l.h)
+	l.port.SyncDevices([]bridge.Device{lampAt("0x1"), lampAt("0x2")})
+	var fresh home.Target // the second lamp
+	snap, _, cancel := l.h.Subscribe()
+	cancel()
+	for _, d := range snap.Devices {
+		if d.ID != l.lamp.Device() {
+			fresh = home.TargetDevice(d.ID, "")
+		}
+	}
+	groupID, err := l.h.CreateAggregate("Lamps", []home.Target{home.TargetDevice(l.lamp.Device(), "light")}, home.Any, home.Mean)
+	if err != nil {
+		t.Fatal(err)
+	}
+	group := home.TargetAggregate(groupID)
+	officeLights := "aggregate:" + l.otherArea + ".light"
+
+	// Alice's own Dashboard and a shared one hold the same, the shared one
+	// shown by a Kiosk.
+	doc := `{"name": "E", "sections": [
+		{"area": "` + l.otherArea + `", "col": 1, "row": 0, "width": 1},
+		{"id": "all", "columns": 4, "col": 0, "row": 0, "width": 1, "tiles": [
+			{"target": "` + l.lamp.Key() + `", "col": 0, "row": 0, "width": 1},
+			{"target": "` + l.lamp.Key() + `/light", "col": 1, "row": 0, "width": 1},
+			{"target": "` + l.lamp.Key() + `/gone", "col": 2, "row": 0, "width": 1},
+			{"target": "` + fresh.Key() + `", "col": 3, "row": 0, "width": 1},
+			{"target": "` + group.Key() + `", "col": 0, "row": 1, "width": 1},
+			{"target": "` + officeLights + `", "col": 1, "row": 1, "width": 1},
+			{"automation": "night", "col": 2, "row": 1, "width": 1}]},
+		{"id": "flag", "columns": 1, "col": 0, "row": 1, "width": 1, "tiles": [
+			{"target": "` + l.flag.Key() + `", "col": 0, "row": 0, "width": 1}]}]}`
+	alices, err := s.Create(alice, parse(t, doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared, err := s.Create(bob, parse(t, strings.Replace(doc, `{"name"`, `{"shared": true, "name"`, 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Assign(bob, "hall", shared); err != nil {
+		t.Fatal(err)
+	}
+	mine := func(s *Store, id string) Dashboard {
+		for _, d := range must(s.Dashboards(bob)) {
+			if d.ID == id {
+				return d
+			}
+		}
+		for _, d := range must(s.Dashboards(alice)) {
+			if d.ID == id {
+				return d
+			}
+		}
+		t.Fatalf("no dashboard %s", id)
+		return Dashboard{}
+	}
+	// after checks that each deletion left both Dashboards holding want,
+	// across a restart too, and told their Persons and the Kiosk.
+	after := func(what string, del func() error, want ...string) {
+		t.Helper()
+		told := map[string]<-chan struct{}{}
+		for _, by := range []access.Identity{alice, bob, hall} {
+			_, told[by.Name] = s.Dashboards(by)
+		}
+		if err := del(); err != nil {
+			t.Fatalf("%s: %v", what, err)
+		}
+		for _, id := range []string{alices, shared} {
+			if got := held(mine(s, id)); !slices.Equal(got, want) {
+				t.Errorf("%s:\n got %v\nwant %v", what, got, want)
+			}
+			if got := held(mine(opened(t, dir, home.New(nil)), id)); !slices.Equal(got, want) {
+				t.Errorf("%s, after a restart: %v", what, got)
+			}
+		}
+		for name, ch := range told {
+			select {
+			case <-ch:
+			default:
+				t.Errorf("%s: %s is not told", what, name)
+			}
+		}
+	}
+	all := []string{"area:" + l.otherArea, "all:", l.lamp.Key(), l.lamp.Key() + "/light", l.lamp.Key() + "/gone", fresh.Key(), group.Key(), officeLights, "night", "flag:", l.flag.Key()}
+	if got := held(mine(s, alices)); !slices.Equal(got, all) {
+		t.Fatalf("before any deletion:\n got %v\nwant %v", got, all)
+	}
+	without := func(gone ...string) []string {
+		all = slices.DeleteFunc(all, func(h string) bool { return slices.Contains(gone, h) })
+		return all
+	}
+
+	// A Replace drops the Device given up, and leaves the kept one alone,
+	// Detached, its Function's key gone included.
+	l.port.SyncDevices([]bridge.Device{lampAt("0x2")})
+	after("a Replace", func() error { return l.h.Replace(l.lamp.Device(), fresh.Device()) }, without(fresh.Key())...)
+	l.port.SyncDevices(nil)
+	after("a Device deleted", func() error { return l.h.Delete(l.lamp.Device()) },
+		without(l.lamp.Key(), l.lamp.Key()+"/light", l.lamp.Key()+"/gone")...)
+	after("an Aggregate deleted", func() error { return l.h.DeleteAggregate(groupID) }, without(group.Key())...)
+	// An own Section left without Tiles stays.
+	after("a Flag deleted", func() error { return l.h.DeleteFlag(l.flag.Flag()) }, without(l.flag.Key())...)
+	after("an Area deleted", func() error { return l.h.DeleteArea(home.AreaID(l.otherArea)) }, without("area:"+l.otherArea, officeLights)...)
+	after("an Automation deleted", func() error { l.h.SetAutomationStatus(nil); return nil }, without("night")...)
 }
 
 var (

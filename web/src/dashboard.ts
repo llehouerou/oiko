@@ -53,9 +53,10 @@ export interface TargetTile {
 }
 
 // A Tile of the dashboard: key is its Target, which an Area may hide, or its Automation's id. In
-// an Area, it has a place in its Layout.
+// an Area, it has a place in its Layout. In the editor, a placement showing nothing is a dormant
+// card, saying why (ADR 0045).
 export type DashboardTile = { key: string; label: string; place?: Place } & (
-  { kind: 'manual'; automation: AutomationStatus } | ({ kind: 'target' } & TargetTile)
+  { kind: 'manual'; automation: AutomationStatus } | ({ kind: 'target' } & TargetTile) | { kind: 'dormant'; why: string }
 )
 
 // A Section of a Dashboard: an Area's, one of a custom Dashboard's own, or Others (neither). Key
@@ -192,11 +193,31 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
     if (p?.kind === 'flag') return flags.filter((f) => f.id === p.id).flatMap((f) => tile(f.name, flagTile(f)))
     return []
   }
+  // What placement t, showing nothing, was, and why it is empty: a Function its Device has no more,
+  // a Device with no Function left that has a Tile, an Automation without a Manual trigger; or
+  // what the viewer no longer sees, Oiko dropping what is gone.
+  const dormant = (t: PlacedTile): DashboardTile => {
+    const card = (label: string, why: string): DashboardTile => ({ key: tileKey(t), label, kind: 'dormant', why })
+    const again = 'It shows again if one comes back.'
+    const unseen = card('Unavailable', 'What it showed is gone, or hidden from you.')
+    if (t.automation !== undefined) {
+      const a = automations.find((a) => a.id === t.automation)
+      return a ? card(a.name, `Its automation has no manual trigger now. ${again}`) : unseen
+    }
+    const p = parseTarget(t.target)
+    const d = p?.kind === 'device' ? devices.find((d) => d.id === p.id) : undefined
+    if (!d) return unseen
+    if (!p!.function) return card(d.name, `Its device has no function with a tile now. ${again}`)
+    return card(functionName(d, p!.function), `Its device has no function ${p!.function} with a tile now. It shows again if the function comes back.`)
+  }
   // A custom Dashboard's Section: an Area's as the built-in Dashboard shows it, or an own one, not
-  // shown while none of its Tiles shows anything, but while editing.
+  // shown while none of its Tiles shows anything, but while editing, which shows those as dormant.
   const customSection = (s: CustomSection, editing: boolean): DashboardSection[] => {
     if (s.area !== undefined) return sections.filter((a) => a.area!.id === s.area)
-    const own = (s.tiles ?? []).flatMap((t) => placed(t).map((d) => [d, t] as const))
+    const own = (s.tiles ?? []).flatMap((t) => {
+      const shown = placed(t)
+      return (editing && !shown.length ? [dormant(t)] : shown).map((d) => [d, t] as const)
+    })
     if (!own.length && !editing) return []
     const tiles = arrange(
       own.map(([d]) => d),
