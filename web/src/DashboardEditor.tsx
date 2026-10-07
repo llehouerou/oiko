@@ -5,7 +5,7 @@ import { edit, useKioskDashboards } from './store'
 import { api } from './access'
 import type { Kiosk } from './Kiosks'
 import type { Area, CustomDashboard } from './types'
-import { deleting, sectionKey, tileKey, type DashboardSection, type TileChoice } from './dashboard'
+import { deleting, sectionKey, tileKey, unseenSection, type DashboardSection, type TileChoice } from './dashboard'
 import {
   addSection,
   addTile,
@@ -256,7 +256,7 @@ function EditedSection({
         </>
       ) : (
         <>
-          {s.tiles.every((t) => t.kind === 'dormant') && <p className="px-1 text-xs text-neutral-500">Nobody sees this section until it has tiles.</p>}
+          {unseenSection(s) && <p className="px-1 text-xs text-neutral-500">Nobody sees this section until it has tiles.</p>}
           {children}
         </>
       )}

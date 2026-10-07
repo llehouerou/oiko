@@ -23,6 +23,9 @@ import type {
 // The key that names a Section on its Dashboard's Layout: an Area's by its Area, an own one by its id.
 export const sectionKey = (s: AreaSection | OwnSection) => (s.area !== undefined ? `area:${s.area}` : `own:${s.id}`)
 
+// Whether nobody sees own Section s, drawn while editing: none of its Tiles shows anything.
+export const unseenSection = (s: DashboardSection) => s.tiles.every((t) => t.kind === 'dormant')
+
 // The key that names a Tile on its own Section's Layout: its Target, or its Automation's id.
 export const tileKey = (t: TileRef) => t.target ?? `automation:${t.automation}`
 
@@ -194,8 +197,9 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
     return []
   }
   // What placement t, showing nothing, was, and why it is empty: a Function its Device has no more,
-  // a Device with no Function left that has a Tile, an Automation without a Manual trigger; or
-  // what the viewer no longer sees, Oiko dropping what is gone.
+  // a Device with no Function left that has a Tile, an Area Aggregate whose Area holds nothing of
+  // its kind, an Automation without a Manual trigger; or what the viewer no longer sees, Oiko
+  // dropping what is gone.
   const dormant = (t: PlacedTile): DashboardTile => {
     const card = (label: string, why: string): DashboardTile => ({ key: tileKey(t), label, kind: 'dormant', why })
     const again = 'It shows again if one comes back.'
@@ -205,6 +209,12 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
       return a ? card(a.name, `Its automation has no manual trigger now. ${again}`) : unseen
     }
     const p = parseTarget(t.target)
+    if (p?.kind === 'aggregate') {
+      // An Area Aggregate's id is its Area's, then its kind.
+      const [id, kind] = p.id.split('.')
+      const area = kind && areas.find((a) => a.id === id)
+      return area ? card(`${area.name} ${kind}`, `Its area holds no ${kind} now. ${again}`) : unseen
+    }
     const d = p?.kind === 'device' ? devices.find((d) => d.id === p.id) : undefined
     if (!d) return unseen
     if (!p!.function) return card(d.name, `Its device has no function with a tile now. ${again}`)

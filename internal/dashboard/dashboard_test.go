@@ -465,7 +465,7 @@ func TestARemovedPersonTakesTheirDashboardsAndListWithThem(t *testing.T) {
 	// names are the Names of the Dashboards p sees.
 	names := func(s *Store, p access.Identity) []string {
 		var ns []string
-		for _, d := range must(s.Dashboards(p)) {
+		for _, d := range dashboardsOf(s.Dashboards(p)) {
 			ns = append(ns, d.Name)
 		}
 		return ns
@@ -497,8 +497,8 @@ func TestARemovedPersonTakesTheirDashboardsAndListWithThem(t *testing.T) {
 	}
 }
 
-// must is ds, without the channel Dashboards answers with them.
-func must(ds []Dashboard, _ <-chan struct{}) []Dashboard { return ds }
+// dashboardsOf is ds, without the channel Dashboards answers with them.
+func dashboardsOf(ds []Dashboard, _ <-chan struct{}) []Dashboard { return ds }
 
 // held is what Dashboard d holds: each Area's Section as "area:<id>", and
 // each own Section as "<id>:" then its Tiles' keys.
@@ -563,21 +563,17 @@ func TestWhatIsDeletedLeavesEveryDashboard(t *testing.T) {
 		t.Fatal(err)
 	}
 	mine := func(s *Store, id string) Dashboard {
-		for _, d := range must(s.Dashboards(bob)) {
-			if d.ID == id {
-				return d
-			}
-		}
-		for _, d := range must(s.Dashboards(alice)) {
-			if d.ID == id {
-				return d
+		for _, by := range []access.Identity{alice, bob} {
+			if i := slices.IndexFunc(dashboardsOf(s.Dashboards(by)), func(d Dashboard) bool { return d.ID == id }); i >= 0 {
+				return dashboardsOf(s.Dashboards(by))[i]
 			}
 		}
 		t.Fatalf("no dashboard %s", id)
 		return Dashboard{}
 	}
-	// after checks that each deletion left both Dashboards holding want,
-	// across a restart too, and told their Persons and the Kiosk.
+	// after checks that each deletion leaves both Dashboards holding want,
+	// across a restart too, once their Persons and the Kiosk are told: they
+	// are cleaned in the background.
 	after := func(what string, del func() error, want ...string) {
 		t.Helper()
 		told := map[string]<-chan struct{}{}
@@ -587,6 +583,13 @@ func TestWhatIsDeletedLeavesEveryDashboard(t *testing.T) {
 		if err := del(); err != nil {
 			t.Fatalf("%s: %v", what, err)
 		}
+		for name, ch := range told {
+			select {
+			case <-ch:
+			case <-time.After(5 * time.Second):
+				t.Fatalf("%s: %s is not told", what, name)
+			}
+		}
 		for _, id := range []string{alices, shared} {
 			if got := held(mine(s, id)); !slices.Equal(got, want) {
 				t.Errorf("%s:\n got %v\nwant %v", what, got, want)
@@ -595,28 +598,26 @@ func TestWhatIsDeletedLeavesEveryDashboard(t *testing.T) {
 				t.Errorf("%s, after a restart: %v", what, got)
 			}
 		}
-		for name, ch := range told {
-			select {
-			case <-ch:
-			default:
-				t.Errorf("%s: %s is not told", what, name)
-			}
-		}
 	}
-	all := []string{"area:" + l.otherArea, "all:", l.lamp.Key(), l.lamp.Key() + "/light", l.lamp.Key() + "/gone", fresh.Key(), group.Key(), officeLights, "night", "flag:", l.flag.Key()}
-	if got := held(mine(s, alices)); !slices.Equal(got, all) {
-		t.Fatalf("before any deletion:\n got %v\nwant %v", got, all)
+	// left is what the Dashboards hold, each deletion taking more of it.
+	left := []string{"area:" + l.otherArea, "all:", l.lamp.Key(), l.lamp.Key() + "/light", l.lamp.Key() + "/gone", fresh.Key(), group.Key(), officeLights, "night", "flag:", l.flag.Key()}
+	if got := held(mine(s, alices)); !slices.Equal(got, left) {
+		t.Fatalf("before any deletion:\n got %v\nwant %v", got, left)
 	}
 	without := func(gone ...string) []string {
-		all = slices.DeleteFunc(all, func(h string) bool { return slices.Contains(gone, h) })
-		return all
+		left = slices.DeleteFunc(left, func(h string) bool { return slices.Contains(gone, h) })
+		return left
 	}
 
-	// A Replace drops the Device given up, and leaves the kept one alone,
-	// Detached, its Function's key gone included.
+	// A Replace drops the Device given up, and leaves the kept one alone, its
+	// Function whose key it lacks included.
 	l.port.SyncDevices([]bridge.Device{lampAt("0x2")})
 	after("a Replace", func() error { return l.h.Replace(l.lamp.Device(), fresh.Device()) }, without(fresh.Key())...)
+	// Detached, a Device stays.
 	l.port.SyncDevices(nil)
+	if got := held(mine(s, alices)); !slices.Equal(got, left) {
+		t.Errorf("a Device detached:\n got %v\nwant %v", got, left)
+	}
 	after("a Device deleted", func() error { return l.h.Delete(l.lamp.Device()) },
 		without(l.lamp.Key(), l.lamp.Key()+"/light", l.lamp.Key()+"/gone")...)
 	after("an Aggregate deleted", func() error { return l.h.DeleteAggregate(groupID) }, without(group.Key())...)

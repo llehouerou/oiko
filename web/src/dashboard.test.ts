@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { copied, dashboard, deleting, shown, type DashboardSection } from './dashboard'
+import { copied, dashboard, deleting, shown, unseenSection, type DashboardSection } from './dashboard'
 import type { Aggregate, Area, AutomationStatus, Capability, CustomDashboard, Device, Fn, Target } from './types'
 
 const on: Capability = { key: 'state', label: 'State', type: 'binary', access: { observable: true, settable: true, queryable: true }, category: 'primary' }
@@ -270,7 +270,7 @@ test('a placement showing nothing leaves its cells empty, but in the editor: a c
   const bare: Device = { ...device('bare', 'kitchen'), name: 'Bare' }
   const night: AutomationStatus = { id: 'night', name: 'Night', status: 'enabled' }
   const home = dashboard([plug, bare], [], [], [area('kitchen')], [night])
-  const placed = ['device:plug/switch/l2', 'device:bare', 'automation:night', 'device:gone']
+  const placed = ['device:plug/switch/l2', 'device:bare', 'automation:night', 'device:gone', 'aggregate:kitchen.light']
   const mine: CustomDashboard = {
     id: 'mine',
     owner: 'alice',
@@ -280,7 +280,7 @@ test('a placement showing nothing leaves its cells empty, but in the editor: a c
       { id: 'kept', columns: 1, col: 0, row: 0, width: 1, tiles: [{ target: 'device:plug/switch/l1', col: 0, row: 0, width: 1 }] },
       {
         id: 'dormant',
-        columns: 4,
+        columns: 5,
         col: 1,
         row: 0,
         width: 1,
@@ -299,7 +299,10 @@ test('a placement showing nothing leaves its cells empty, but in the editor: a c
     'device:bare 1 Bare: Its device has no function with a tile now. It shows again if one comes back.',
     'automation:night 2 Night: Its automation has no manual trigger now. It shows again if one comes back.',
     'device:gone 3 Unavailable: What it showed is gone, or hidden from you.',
+    'aggregate:kitchen.light 4 kitchen light: Its area holds no light now. It shows again if one comes back.',
   ])
+  // and notes that nobody sees a Section showing nothing
+  expect(home.custom(mine, true).map(unseenSection)).toEqual([false, true])
 })
 
 test("the Tiles to pick for an own Section: the home's, grouped by Area, searched by name, those it holds greyed out", () => {

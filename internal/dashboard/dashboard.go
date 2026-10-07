@@ -100,10 +100,12 @@ type document struct {
 // may refer to.
 type Store struct {
 	file    string
-	mu      sync.Mutex // under Home's lock: never held while calling Home
+	mu      sync.Mutex
 	doc     document
 	changed map[who]chan struct{} // closed when what an identity is given changes
-	known   known
+
+	kmu   sync.Mutex // under Home's lock: never held while calling Home, nor taken before mu
+	known known
 }
 
 // who is an identity told of changes: a Person, an Admin apart, or a Kiosk.
@@ -154,25 +156,20 @@ func Open(dir string, h *home.Home, persons, kiosks []string) (*Store, error) {
 	maps.DeleteFunc(s.doc.Kiosks, func(k, _ string) bool { return !slices.Contains(kiosks, k) })
 	// Held across Follow: an Update announced as it returns waits for the
 	// snapshot to be kept first, rather than be overwritten by it.
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.kmu.Lock()
+	defer s.kmu.Unlock()
 	snap, _ := h.Follow(s.deliver)
 	s.known = known{snap.Devices, snap.Aggregates, snap.Flags, snap.Areas, snap.Automations}
 	return s, nil
 }
 
-// deliver keeps what exists, and drops from every Dashboard what no longer
-// does (ADR 0045): a Device deleted or given up in a Replace, an Aggregate,
-// a Flag, an Area or an Automation. Each Update that deletes one is followed
-// by the list it is gone from. It runs under Home's lock.
+// deliver keeps what exists. Every deletion, a Device's given up in a
+// Replace included, is followed by the list it is gone from, which prunes
+// the Dashboards in the background: it runs under Home's lock, which never
+// waits for a write.
 func (s *Store) deliver(u home.Update) {
-	switch u.Kind {
-	case home.DevicesChanged, home.AggregatesChanged, home.FlagsChanged, home.AreasChanged, home.AutomationsChanged:
-	default:
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.kmu.Lock()
+	defer s.kmu.Unlock()
 	switch u.Kind {
 	case home.DevicesChanged:
 		s.known.devices = u.Devices
@@ -184,11 +181,23 @@ func (s *Store) deliver(u home.Update) {
 		s.known.areas = u.Areas
 	case home.AutomationsChanged:
 		s.known.automations = u.Automations
+	default:
+		return
 	}
+	go s.prune()
+}
+
+// prune drops from every Dashboard what no longer exists (ADR 0045), and
+// tells whoever sees one it changed. Nothing is recorded; a failed write is
+// logged, and tried again on the next change of what exists.
+func (s *Store) prune() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := s.knownNow()
 	ds := slices.Clone(s.doc.Dashboards)
 	var changed []Dashboard
 	for i, d := range ds {
-		if kept, ok := s.known.pruned(d); ok {
+		if kept, ok := k.pruned(d); ok {
 			ds[i] = kept
 			changed = append(changed, kept)
 		}
@@ -196,11 +205,16 @@ func (s *Store) deliver(u home.Update) {
 	if changed == nil {
 		return
 	}
-	// Nothing is recorded (ADR 0045); a failed write is retried by the next
-	// one, which drops what is gone again.
 	if err := s.write(ds, s.doc.Lists, changed...); err != nil {
 		log.Printf("dashboards: %v", err)
 	}
+}
+
+// knownNow is what exists, as last announced.
+func (s *Store) knownNow() known {
+	s.kmu.Lock()
+	defer s.kmu.Unlock()
+	return s.known
 }
 
 // Dashboards are those by sees, and a channel closed once they, by's list, or
@@ -512,7 +526,8 @@ func (s *Store) valid(d Dashboard) (Dashboard, error) {
 			return d, err
 		}
 	}
-	d, _ = s.known.pruned(d)
+	// Under mu: what is deleted from now on prunes it once it is written.
+	d, _ = s.knownNow().pruned(d)
 	for _, sec := range d.Sections {
 		if sec.Area != "" {
 			continue
