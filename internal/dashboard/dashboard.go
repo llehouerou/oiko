@@ -71,10 +71,11 @@ type Section struct {
 
 // Tile is a Tile placed in an own Section: a Target's (a Device, one of its
 // Functions, an Aggregate or a Flag) or an Automation's, at its place on the
-// Section's Layout.
+// Section's Layout, its name hidden if HideName.
 type Tile struct {
 	Target     home.Target `json:"target,omitzero"`
 	Automation string      `json:"automation,omitempty"`
+	HideName   bool        `json:"hideName,omitempty"`
 	home.Place
 }
 

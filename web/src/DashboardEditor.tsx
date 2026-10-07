@@ -16,6 +16,7 @@ import {
   removeTile,
   resizeSection,
   setDashboardColumns,
+  toggleTileName,
   type SectionContent,
 } from './editDashboard'
 import { defaultColumns, maxColumns, move, placements, reflow, type Arranged } from './layout'
@@ -29,7 +30,8 @@ import { Section, tileNodes } from './Section'
 // top holds its Name, its columns, Duplicate, Delete and Done; every free cell of its grid has a +
 // adding a Section there; each Section has a bar that drags it to another cell, steps its size and
 // removes it, and on an own Section edits its Name, Icon and columns. An own Section's Tiles are
-// arranged as an Area's are on Home, a + in each free cell picking one to add. An Area's Section
+// arranged as an Area's are on Home, a + in each free cell picking one to add, and each may hide its
+// name. An Area's Section
 // shows the Area dimmed: it follows the Area, arranged on Home. Each change saves the whole
 // Dashboard at once.
 export function DashboardEditor({
@@ -150,6 +152,7 @@ export function DashboardEditor({
                     onLayout={(n, layout) => lay(s, n, layout)}
                     onAdd={(col, row) => setAddingTile({ section: s.key, col, row })}
                     onRemove={(tile) => save(removeTile(d, s.key, tile))}
+                    onToggleName={(tile) => save(toggleTileName(d, s.key, tile))}
                   />
                 </div>
               ) : (

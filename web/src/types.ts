@@ -290,8 +290,8 @@ export interface OwnSection {
   tiles?: PlacedTile[]
 }
 
-// A Tile placed in an own Section: a Target's or an Automation's.
-export type PlacedTile = Place & TileRef
+// A Tile placed in an own Section: a Target's or an Automation's, its name hidden if hideName.
+export type PlacedTile = Place & TileRef & { hideName?: true }
 export type TileRef = { target: Target; automation?: undefined } | { target?: undefined; automation: string }
 
 export interface Update {

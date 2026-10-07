@@ -35,8 +35,8 @@ export interface Arranging {
 // Icon if it has one, then its name large, its status (climate, presence, doors) on a line under
 // it, its light bar on the right, which a folded section keeps. The bar has no chart: its ⋯ sheet
 // has its History. An own Section's header has its Icon and Name, and nothing without a Name. A
-// Section's tiles sit where its Layout places them, gaps included, while its columns fit;
-// narrower, they come one after another, as Others' do. The tiles an Area hides wait behind a
+// Section's tiles sit where its Layout places them, gaps included, while its columns fit or
+// keepLayout says so; narrower, they come one after another, as Others' do. The tiles an Area hides wait behind a
 // link; a tap on a name folds it all away. While arranging, an Area's section is open, its header
 // drags it among the others, and its grid shows every cell, hidden tiles dimmed in theirs.
 export function Section({
@@ -47,6 +47,7 @@ export function Section({
   onOpen,
   onResult,
   arranging,
+  keepLayout = false,
 }: {
   section: DashboardSection
   title?: string
@@ -55,6 +56,7 @@ export function Section({
   onOpen?: (id: string, back?: () => void) => void // an Admin's: an Area's, a Device's, an Aggregate's or a Flag's panel
   onResult: (r: { text: string; error?: boolean }) => void // a Manual trigger's
   arranging?: Arranging
+  keepLayout?: boolean
 }) {
   const { columns } = section
   const hidden = section.area?.hidden ?? []
@@ -77,7 +79,7 @@ export function Section({
   const folded = tiles.length - shown.length
   const visible = showHidden ? tiles : shown
   const open = !collapsed || !title || !!arranging
-  const grid = columns !== undefined && width >= columns * minColumn + (columns - 1) * columnGap
+  const grid = columns !== undefined && (keepLayout || width >= columns * minColumn + (columns - 1) * columnGap)
   const layout = placements(tiles)
   return (
     <section
@@ -192,14 +194,14 @@ export const tileNodes = (
     ...t,
     node:
       t.kind === 'manual' ? (
-        <ManualTile key={t.key} automation={t.automation} onResult={onResult} />
+        <ManualTile key={t.key} automation={t.automation} hideName={t.hideName} onResult={onResult} />
       ) : t.kind === 'dormant' ? (
         <div key={t.key} className="space-y-1 rounded-xl border border-dashed border-neutral-600 p-4 pr-10 text-neutral-400">
           <p className="truncate font-medium">{t.label}</p>
           <p className="text-xs text-neutral-500">{t.why}</p>
         </div>
       ) : (
-        <Tile key={t.key} tile={t} onOpen={opener(t, onOpen)} />
+        <Tile key={t.key} tile={t} hideName={t.hideName} onOpen={opener(t, onOpen)} />
       ),
   }))
 

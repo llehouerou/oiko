@@ -1,7 +1,7 @@
 // The Tiles of a Dashboard, drawn as dashboard.ts resolves them, and the controls and readings
 // they and the panels show of a Capability.
 
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import {
   mdiAlarmLight,
@@ -9,6 +9,7 @@ import {
   mdiBrightness5,
   mdiCctv,
   mdiCogOutline,
+  mdiDotsHorizontal,
   mdiDoorClosed,
   mdiDoorOpen,
   mdiFlag,
@@ -69,6 +70,7 @@ function BarTile({
   fn,
   dimmed,
   compact = false,
+  hideName = false,
   onSettings,
 }: {
   name: string
@@ -81,6 +83,7 @@ function BarTile({
   fn: Fn
   dimmed: boolean
   compact?: boolean // in an Area's header: the bar alone, its name only on its sheet; a square on a phone
+  hideName?: boolean
   onSettings?: (back: () => void) => void // an Admin's: its Device's or Aggregate's panel
 }) {
   const cap = fn.capabilities.find((c) => c.key === 'brightness' && c.access.settable && c.min != null && c.max != null)
@@ -175,13 +178,13 @@ function BarTile({
             else return
             e.preventDefault()
           }}
-          className={`relative ${compact ? 'min-h-12 flex-1' : 'h-14'} cursor-pointer touch-pan-y overflow-hidden rounded-lg bg-neutral-800 select-none`}
+          className={`group/card relative ${compact ? 'min-h-12 flex-1' : 'h-14'} cursor-pointer touch-pan-y overflow-hidden rounded-lg bg-neutral-800 select-none`}
         >
           <div
             className={`absolute bg-amber-400/25 ${compact ? 'inset-x-0 bottom-0 h-(--level) sm:inset-x-auto sm:inset-y-0 sm:left-0 sm:h-auto sm:w-(--level)' : 'inset-y-0 left-0 w-(--level)'}`}
             style={{ '--level': `${lit ? Math.max(level, 0.04) * 100 : 0}%` } as CSSProperties}
           />
-          <div className={`relative flex h-full items-center ${compact ? 'justify-center gap-2.5 sm:justify-start sm:pl-3' : 'gap-3 pl-3'}`}>
+          <div className={`relative flex h-full items-center ${compact ? 'justify-center gap-2.5 sm:justify-start sm:px-3' : 'gap-3 px-3'}`}>
             {fn.kind === 'light' ? (
               <LightIcon icon={icon} group={group} lit={lit} className={`size-6 shrink-0 ${lit ? 'text-amber-300' : 'text-neutral-500'}`} />
             ) : (
@@ -191,24 +194,11 @@ function BarTile({
               <p className="hidden min-w-0 flex-1 truncate text-sm text-neutral-300 sm:block">{status}</p>
             ) : (
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 text-xs">
-                  <p className="truncate text-base font-medium" onMouseEnter={titleIfTruncated}>
-                    {name}
-                  </p>
-                  {badges}
-                </div>
-                <p className="truncate text-xs text-neutral-400">{status}</p>
+                <NameLine name={name} hidden={hideName} badges={badges} />
+                <p className={`truncate ${statusSize(hideName)}`}>{status}</p>
               </div>
             )}
-            <button
-              onPointerDown={(e) => e.stopPropagation()}
-              onKeyDown={(e) => e.stopPropagation()}
-              onClick={() => setSheet(true)}
-              aria-label="More"
-              className={`self-stretch ${compact ? 'hidden px-3 sm:block' : 'px-4'} text-lg text-neutral-500 hover:text-white`}
-            >
-              ⋯
-            </button>
+            <More onOpen={() => setSheet(true)} />
           </div>
         </div>
         {!compact && (
@@ -274,17 +264,29 @@ export function FlagPill({ flag, onOpen }: { flag: Flag; onOpen?: () => void }) 
 }
 
 // An Automation's Tile with Manual triggers: a button for each, named after it.
-// Only an enabled Automation runs; otherwise the tile is dimmed and says why.
-export function ManualTile({ automation, onResult }: { automation: AutomationStatus; onResult: (r: { text: string; error?: boolean }) => void }) {
+// Only an enabled Automation runs; otherwise the tile is dimmed and says why. Its name may be hidden.
+export function ManualTile({
+  automation,
+  hideName = false,
+  onResult,
+}: {
+  automation: AutomationStatus
+  hideName?: boolean
+  onResult: (r: { text: string; error?: boolean }) => void
+}) {
   const off = automation.status !== 'enabled' ? automation.status : null
   return (
     <section className={`space-y-3 rounded-xl bg-neutral-900 p-4 ${off ? 'opacity-50' : ''}`}>
-      <div className="min-w-0">
-        <p className="truncate font-medium" onMouseEnter={titleIfTruncated}>
-          {automation.name}
-        </p>
-        <p className="text-xs text-neutral-500">{['automation', off].filter(Boolean).join(' · ')}</p>
-      </div>
+      {!hideName ? (
+        <div className="min-w-0">
+          <p className="truncate font-medium" onMouseEnter={titleIfTruncated}>
+            {automation.name}
+          </p>
+          <p className="text-xs text-neutral-500">{['automation', off].filter(Boolean).join(' · ')}</p>
+        </div>
+      ) : (
+        off && <p className="text-xs text-neutral-500">{off}</p>
+      )}
       <div className="flex flex-wrap gap-2">
         {automation.manualTriggers?.map((s) => (
           <button
@@ -314,8 +316,20 @@ interface CapProps {
 // A Target's Tile, as dashboard.ts resolves it, drawn as its shape says: a bar, a sensor's, or its
 // Functions' controls. A lone Function shares the Tile's header; a Function's kind or key shows as
 // a heading only where it adds something. Dimmed while its Device is detached or it is offline.
-export function Tile({ tile, compact, onOpen }: { tile: TargetTile; compact?: boolean; onOpen?: (back?: () => void) => void }) {
+// Its name may be hidden: an Admin's ⋯, or a long press on its header, then opens its panel.
+export function Tile({
+  tile,
+  compact,
+  hideName = false,
+  onOpen,
+}: {
+  tile: TargetTile
+  compact?: boolean
+  hideName?: boolean
+  onOpen?: (back?: () => void) => void
+}) {
   const offline = useAvailability(tile.subject) === 'offline'
+  const longPress = useLongPress(hideName && onOpen ? () => onOpen() : undefined) // a Tile of controls' header, its name hidden
   const { shape, name, fns } = tile
   const dimmed = tile.detached || offline
   const note = [tile.detached && 'detached', offline && 'offline'].filter(Boolean).join(' · ')
@@ -333,15 +347,16 @@ export function Tile({ tile, compact, onOpen }: { tile: TargetTile; compact?: bo
         toggle={shape.toggle}
         dimmed={dimmed}
         compact={compact}
+        hideName={hideName}
         onSettings={onOpen}
       />
     )
-  if (shape.kind === 'camera')
-    return <CameraTile target={shape.target} state={shape.state} name={name} note={note} badges={badges} dimmed={dimmed} onOpen={onOpen && (() => onOpen())} />
-  if (shape.kind !== 'controls') return <SensorTile shape={shape} name={name} note={note} badges={badges} dimmed={dimmed} onOpen={onOpen && (() => onOpen())} />
+  const props = { name, note, badges, dimmed, hideName, onOpen: onOpen && (() => onOpen()) }
+  if (shape.kind === 'camera') return <CameraTile {...props} target={shape.target} state={shape.state} />
+  if (shape.kind !== 'controls') return <SensorTile {...props} shape={shape} />
   const header = (command?: ReactNode) => (
-    <div className="min-w-0">
-      {onOpen ? (
+    <div className="min-w-0 select-none" {...longPress}>
+      {hideName ? null : onOpen ? (
         <button onClick={() => onOpen()} onMouseEnter={titleIfTruncated} className="block max-w-full truncate text-left font-medium hover:underline">
           {name}
         </button>
@@ -370,7 +385,8 @@ export function Tile({ tile, compact, onOpen }: { tile: TargetTile; compact?: bo
       : undefined
   const [only] = fns
   return (
-    <section className={`space-y-3 rounded-xl bg-neutral-900 p-4 ${dimmed ? 'opacity-50' : ''}`}>
+    <section className={`group/card relative space-y-3 rounded-xl bg-neutral-900 p-4 ${dimmed ? 'opacity-50' : ''}`}>
+      {hideName && <More onOpen={onOpen && (() => onOpen())} />}
       {fns.length === 1 && only ? (
         <FunctionControls {...only} heading={header} />
       ) : (
@@ -385,12 +401,13 @@ export function Tile({ tile, compact, onOpen }: { tile: TargetTile; compact?: bo
   )
 }
 
-// A button's Tile, a bar with no chart: its last Event and how long ago. A tap opens its History, ⋯ its
-// Device's panel.
-function EventTile({ name, note, badges, item, dimmed, onOpen }: SensorProps & { item: Part }) {
+// A button's Tile, a bar with no chart: its last Event and how long ago. A tap opens its History, ⋯ or
+// a long press its Device's panel.
+function EventTile({ name, note, badges, item, dimmed, hideName, onOpen }: SensorProps & { item: Part }) {
   const event = useLastEvent(ref(item))
   const now = useNow()
   const [history, setHistory] = useState(false)
+  const longPress = useLongPress(onOpen)
   return (
     <section className={`rounded-xl bg-neutral-900 p-1.5 ${dimmed ? 'opacity-50' : ''}`}>
       <div
@@ -400,17 +417,13 @@ function EventTile({ name, note, badges, item, dimmed, onOpen }: SensorProps & {
         // its History sheet is portaled out of the bar, but React still bubbles its events here
         onClick={(e) => e.currentTarget.contains(e.target as Node) && setHistory(true)}
         onKeyDown={(e) => e.currentTarget.contains(e.target as Node) && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setHistory(true))}
-        className="flex h-14 cursor-pointer items-center gap-3 rounded-lg bg-neutral-800 pl-3 select-none hover:bg-neutral-700/60"
+        {...longPress}
+        className="group/card relative flex h-14 cursor-pointer items-center gap-3 rounded-lg bg-neutral-800 px-3 select-none hover:bg-neutral-700/60"
       >
         <Svg path={mdiGestureTapButton} className="size-6 shrink-0 text-neutral-500" />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-xs">
-            <p className="truncate text-base font-medium" onMouseEnter={titleIfTruncated}>
-              {name}
-            </p>
-            {badges}
-          </div>
-          <p className="truncate text-xs text-neutral-400" onMouseEnter={titleIfTruncated}>
+          <NameLine name={name} hidden={hideName} badges={badges} />
+          <p className={`truncate ${statusSize(hideName)}`} onMouseEnter={titleIfTruncated}>
             {[event ? `${String(event.data)} · ${age(event.at, now)}` : 'none yet', note].filter(Boolean).join(' · ')}
           </p>
         </div>
@@ -452,16 +465,17 @@ function usePicture(target: Target) {
 
 // A camera's Tile: its Picture and how old it is, its Device's state beside its name; a camera
 // drawn instead until it has a Picture, or once it cannot load it. A tap on it opens its Live view,
-// never by itself: watching may wake a camera on battery (ADR 0036).
-function CameraTile({ target, state, name, note, badges, dimmed, onOpen }: SensorProps & { target: Target; state?: Part }) {
+// never by itself: watching may wake a camera on battery (ADR 0036). ⋯ or a long press opens its panel.
+function CameraTile({ target, state, name, note, badges, dimmed, hideName, onOpen }: SensorProps & { target: Target; state?: Part }) {
   const picture = usePicture(target)
   const [broken, setBroken] = useState<string>() // the src that failed to load
   const [live, setLive] = useState(false)
   const now = useNow()
+  const longPress = useLongPress(onOpen)
   const shown = picture && picture.src !== broken ? picture : undefined
   const status = [shown ? shown.taken && age(shown.taken, now) : picture === undefined ? 'loading' : 'no picture', note].filter(Boolean).join(' · ')
   return (
-    <section className={`space-y-1.5 rounded-xl bg-neutral-900 p-1.5 ${dimmed ? 'opacity-50' : ''}`}>
+    <section {...longPress} className={`group/card space-y-1.5 rounded-xl bg-neutral-900 p-1.5 select-none ${dimmed ? 'opacity-50' : ''}`}>
       <button
         onClick={() => setLive(true)}
         aria-label={`Watch ${name} live`}
@@ -477,15 +491,10 @@ function CameraTile({ target, state, name, note, badges, dimmed, onOpen }: Senso
         </span>
       </button>
       {live && createPortal(<LiveViewer target={target} name={name} onClose={() => setLive(false)} />, document.body)}
-      <div className="flex items-center gap-3 pl-3">
+      <div className="relative flex items-center gap-3 px-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-xs">
-            <p className="truncate text-base font-medium" onMouseEnter={titleIfTruncated}>
-              {name}
-            </p>
-            {badges}
-          </div>
-          <div className="flex items-center gap-3 text-xs text-neutral-400">
+          <NameLine name={name} hidden={hideName} badges={badges} />
+          <div className={`flex items-center gap-3 ${statusSize(hideName)}`}>
             <span className="truncate">{status}</span>
             {state && <StateText {...state} />}
           </div>
@@ -501,22 +510,73 @@ interface SensorProps {
   note: string // detached, offline…
   badges?: ReactNode // its health, when wrong
   dimmed: boolean
+  hideName: boolean
   onOpen?: () => void // an Admin's: its Device's or Aggregate's panel
 }
 
-// A sensor bar's ⋯, opening its panel, if anything does.
+// A bar Tile's name, unless hidden, with its health beside it.
+function NameLine({ name, hidden, badges, className = 'truncate text-base' }: { name: string; hidden: boolean; badges?: ReactNode; className?: string }) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      {!hidden && (
+        <p className={`${className} font-medium`} onMouseEnter={titleIfTruncated}>
+          {name}
+        </p>
+      )}
+      {badges}
+    </div>
+  )
+}
+
+// A bar Tile's status line: in its name's place and as large once the name is hidden.
+const statusSize = (hideName: boolean) => (hideName ? 'text-base text-neutral-200' : 'text-xs text-neutral-400')
+
+// A Tile's ⋯, opening its sheet or panel, if anything does: small, in the corner of the nearest
+// group/card, over what is there, shown while the pointer hovers it. A touch screen has none: a
+// long press opens the same (useLongPress).
 function More({ onOpen }: { onOpen?: () => void }) {
   if (!onOpen) return null
   return (
     <button
+      onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => (e.stopPropagation(), onOpen())}
       onKeyDown={(e) => e.stopPropagation()}
       aria-label="More"
-      className="self-stretch px-4 text-lg text-neutral-500 hover:text-white"
+      className="absolute top-1 right-1 hidden size-6 place-items-center rounded-full text-neutral-400 opacity-0 transition group-hover/card:opacity-100 hover:bg-white/10 hover:text-neutral-100 focus-visible:opacity-100 pointer-fine:grid"
     >
-      ⋯
+      <Svg path={mdiDotsHorizontal} className="size-4" />
     </button>
   )
+}
+
+// The handlers of an element a long press opens with: onLong once held still for half a second;
+// the click that ends it then goes nowhere. Only presses on the element itself count, not those
+// React bubbles from a sheet portaled out of it.
+function useLongPress(onLong?: () => void) {
+  const press = useRef<{ x: number; y: number; timer: number } | null>(null)
+  const fired = useRef(false)
+  if (!onLong) return {}
+  const stop = () => {
+    if (press.current) clearTimeout(press.current.timer)
+    press.current = null
+  }
+  return {
+    onPointerDown: (e: PointerEvent<HTMLElement>) => {
+      if (!e.currentTarget.contains(e.target as Node)) return
+      fired.current = false
+      press.current = { x: e.clientX, y: e.clientY, timer: window.setTimeout(() => ((fired.current = true), stop(), onLong()), 500) }
+    },
+    onPointerMove: (e: PointerEvent<HTMLElement>) => {
+      const p = press.current
+      if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) stop()
+    },
+    onPointerUp: stop,
+    onPointerCancel: stop,
+    onContextMenu: (e: MouseEvent<HTMLElement>) => e.preventDefault(),
+    onClickCapture: (e: MouseEvent<HTMLElement>) => {
+      if (fired.current) (e.stopPropagation(), (fired.current = false))
+    },
+  }
 }
 
 // A Tile with nothing to command, drawn as its shape says: its last Event, a bar for its state or
@@ -529,26 +589,29 @@ function SensorTile({ shape, ...props }: SensorProps & { shape: Extract<Shape, {
   return <SensorBar {...props} icon={icon} readings={shape.readings} />
 }
 
-// A cell per reading: its value large, its label and its 24 h, each opening its History. With three
-// or more, the Tile takes two columns of an automatic grid; in a Layout, its place's.
-function ReadingsTile({ name, note, badges, icon, readings, dimmed, onOpen }: SensorProps & { icon: string; readings: Part[] }) {
+// A cell per reading: its value large, its label and its 24 h, each opening its History; ⋯ or a long
+// press opens its panel. With three or more, the Tile takes two columns of an automatic grid; in a
+// Layout, its place's.
+function ReadingsTile({ name, note, badges, icon, readings, dimmed, hideName, onOpen }: SensorProps & { icon: string; readings: Part[] }) {
   const wide = readings.length >= 3
+  const longPress = useLongPress(onOpen)
   return (
-    <section className={`@container space-y-3 rounded-xl bg-neutral-900 p-3 ${wide ? 'sm:col-span-2' : ''} ${dimmed ? 'opacity-50' : ''}`}>
+    <section
+      {...longPress}
+      className={`@container group/card relative space-y-3 rounded-xl bg-neutral-900 p-3 select-none ${wide ? 'sm:col-span-2' : ''} ${dimmed ? 'opacity-50' : ''}`}
+    >
+      <More onOpen={onOpen} />
       <div className="flex items-center gap-3 px-1.5">
         <Svg path={icon} className="size-6 shrink-0 text-neutral-500" />
         <div className="flex min-w-0 flex-1 items-center gap-2 text-xs">
-          <p className="truncate text-base font-medium" onMouseEnter={titleIfTruncated}>
-            {name}
-          </p>
+          {!hideName && (
+            <p className="truncate text-base font-medium" onMouseEnter={titleIfTruncated}>
+              {name}
+            </p>
+          )}
           {badges}
           {note && <span className="text-neutral-500">{note}</span>}
         </div>
-        {onOpen && (
-          <button onClick={onOpen} aria-label="More" className="px-2 text-lg text-neutral-500 hover:text-white">
-            ⋯
-          </button>
-        )}
       </div>
       {/* three readings side by side only where its place is wide enough for them */}
       <div className={`grid grid-cols-2 gap-2 ${wide ? '@lg:grid-cols-3' : ''}`}>
@@ -585,14 +648,17 @@ export const readingIcons: Record<string, string> = {
 }
 
 // Shaped as a light's Tile: a bar with a big icon, the name and a status line, its chart below. With
-// a state, the bar takes its colour while active and the status leads with how long it has held. A
-// tap on the bar opens the History of what the chart shows: the state's, or the first reading's.
+// a state, the bar takes its colour while active and the status leads with how long it has held; a
+// lone reading instead stands large at the bar's end, or in the name's place, larger, once it is
+// hidden. A tap on the bar opens the History of what the chart shows: the state's, or the first
+// reading's; ⋯ or a long press, its panel.
 function SensorBar({
   name,
   note,
   badges,
   readings,
   dimmed,
+  hideName,
   onOpen,
   state,
   active = false,
@@ -600,14 +666,16 @@ function SensorBar({
   lead,
 }: SensorProps & { readings: Part[]; state?: Part; active?: boolean; icon: string; lead?: string }) {
   const [history, setHistory] = useState(false)
+  const longPress = useLongPress(onOpen)
   const charted = state ?? readings[0]
+  const lone = !state && readings.length === 1 ? readings[0] : undefined
   const status = [
     lead && (
       <span key="lead" className={active ? 'text-emerald-300' : ''}>
         {lead}
       </span>
     ),
-    ...readings.map((p) => <ReadingText key={`${p.target}|${p.cap.key}`} {...p} />),
+    ...(lone ? [] : readings).map((p) => <ReadingText key={`${p.target}|${p.cap.key}`} {...p} />),
     note && <span key="note">{note}</span>,
   ].filter(Boolean)
   return (
@@ -619,18 +687,21 @@ function SensorBar({
         // A reading's History sheet is portaled out of the bar, but React still bubbles its events here.
         onClick={(e) => e.currentTarget.contains(e.target as Node) && setHistory(true)}
         onKeyDown={(e) => e.currentTarget.contains(e.target as Node) && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setHistory(true))}
-        className={`flex h-14 cursor-pointer items-center gap-3 rounded-lg pl-3 select-none ${active ? 'bg-emerald-500/20' : 'bg-neutral-800 hover:bg-neutral-700/60'}`}
+        {...longPress}
+        className={`group/card relative flex h-14 cursor-pointer items-center gap-3 rounded-lg px-3 select-none ${active ? 'bg-emerald-500/20' : 'bg-neutral-800 hover:bg-neutral-700/60'}`}
       >
         <Svg path={icon} className={`size-6 shrink-0 ${active ? 'text-emerald-300' : 'text-neutral-500'}`} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-xs">
-            <p className="truncate text-base font-medium" onMouseEnter={titleIfTruncated}>
-              {name}
-            </p>
-            {badges}
-          </div>
-          <p className="truncate text-xs text-neutral-400">{status.flatMap((s, i) => (i ? [' · ', s] : [s]))}</p>
+          <NameLine
+            name={name}
+            hidden={hideName}
+            badges={badges}
+            className={lone ? 'line-clamp-2 text-sm leading-tight wrap-break-word hyphens-auto' : undefined}
+          />
+          {lone && hideName && <ReadingText {...lone} unitClassName="ml-1 text-base" className="block text-3xl font-light tabular-nums" />}
+          {status.length > 0 && <p className={`truncate ${statusSize(hideName && !lone)}`}>{status.flatMap((s, i) => (i ? [' · ', s] : [s]))}</p>}
         </div>
+        {lone && !hideName && <ReadingText {...lone} unitClassName="ml-0.5 text-sm" className="shrink-0 text-2xl font-light tabular-nums" />}
         <More onOpen={onOpen} />
       </div>
       {charted && (
@@ -645,9 +716,9 @@ function SensorBar({
 }
 
 // A reading in a status line: its unit says what it is, or else its label does. CO₂ that calls for
-// airing takes a colour. A tap opens its own History, not the bar's.
-export function ReadingText(props: CapProps & { className?: string }) {
-  const { target, cap, className = '' } = props
+// airing takes a colour. A tap opens its own History, not the bar's. unitClassName sets its unit apart.
+export function ReadingText(props: CapProps & { className?: string; unitClassName?: string }) {
+  const { target, cap, className = '', unitClassName } = props
   const value = useValue(ref(props))
   const [open, setOpen] = useState(false)
   const level = co2Level(cap.key, value?.data)
@@ -660,9 +731,19 @@ export function ReadingText(props: CapProps & { className?: string }) {
         className={`-my-1 py-1 text-left underline-offset-2 hover:text-white hover:underline ${level === 'high' ? 'text-red-400' : level === 'raised' ? 'text-amber-300' : ''} ${className}`}
       >
         {!cap.unit && `${cap.label} `}
-        {value ? display(value.data, cap) : '—'}
+        {value ? <Shown text={display(value.data, cap)} unit={cap.unit} unitClassName={unitClassName} /> : '—'}
       </button>
       {open && createPortal(<HistorySheet target={target} onClose={() => setOpen(false)} />, document.body)}
+    </>
+  )
+}
+
+function Shown({ text, unit, unitClassName }: { text: string; unit?: string; unitClassName?: string }) {
+  if (!unitClassName || !unit || !text.endsWith(` ${unit}`)) return text
+  return (
+    <>
+      {text.slice(0, -unit.length - 1)}
+      <span className={unitClassName}>{unit}</span>
     </>
   )
 }

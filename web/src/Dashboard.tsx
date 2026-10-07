@@ -88,7 +88,8 @@ const sectionGap = 24
 
 // A custom Dashboard, drawn from its Sections: each in its place on its Layout of columns while
 // they fit; narrower, a phone among others, they come one under another in reading order, gaps
-// dropped. This browser keeps which Sections it folds on this Dashboard alone.
+// dropped. While it keeps its Layout, so do its own Sections, however narrow: both were arranged
+// together. This browser keeps which Sections it folds on this Dashboard alone.
 export function CustomDashboardView({ id, columns, sections, onOpen, onResult }: { id: string; columns: number; sections: DashboardSection[] } & Handlers) {
   const [collapsed, collapse] = useFolds(`oiko.collapsed.${id}`)
   const [width, measure] = useWidth()
@@ -110,6 +111,7 @@ export function CustomDashboardView({ id, columns, sections, onOpen, onResult }:
               onCollapse={() => collapse(s.key)}
               onOpen={onOpen}
               onResult={onResult}
+              keepLayout={grid && !!s.own}
             />
           </div>
         ))}

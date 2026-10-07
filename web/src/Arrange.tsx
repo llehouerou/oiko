@@ -4,7 +4,7 @@
 
 import type { CSSProperties, ReactNode } from 'react'
 import { pointerWithin, useDraggable, useDroppable, type CollisionDetection } from '@dnd-kit/core'
-import { mdiArrowExpandHorizontal, mdiArrowExpandVertical, mdiClose, mdiPlus } from '@mdi/js'
+import { mdiArrowExpandHorizontal, mdiArrowExpandVertical, mdiClose, mdiLabelOffOutline, mdiLabelOutline, mdiPlus } from '@mdi/js'
 import { Svg } from './icons'
 import { cellsOf, maxRows, placements, resize, rows, type Arranged, type Place } from './layout'
 
@@ -14,6 +14,7 @@ export interface TileNode {
   key: string
   label: string
   place?: Place // in its Layout
+  hideName?: true
   node: ReactNode
 }
 
@@ -28,7 +29,7 @@ export const landing: CollisionDetection = (args) => {
 // The tiles of grid while arranging, in a grid of columns: every cell, for a tile to land in, and
 // each tile under its veil, those hidden dimmed. Each change hands the whole Layout to onLayout; a
 // drop is the page's. In an own Section, a free cell has a + adding a tile there (onAdd), and a
-// tile a button removing it (onRemove).
+// tile a button removing it (onRemove) and one showing or hiding its name (onToggleName).
 export function ArrangedGrid({
   grid,
   columns,
@@ -37,6 +38,7 @@ export function ArrangedGrid({
   onLayout,
   onAdd,
   onRemove,
+  onToggleName,
 }: {
   grid: string
   columns: number
@@ -45,6 +47,7 @@ export function ArrangedGrid({
   onLayout: (columns: number, layout: Arranged[]) => void
   onAdd?: (col: number, row: number) => void
   onRemove?: (key: string) => void
+  onToggleName?: (key: string) => void
 }) {
   const layout = placements(tiles)
   return (
@@ -59,6 +62,7 @@ export function ArrangedGrid({
           columns={columns}
           onSize={(size) => onLayout(columns, resize(layout, t.key, size, columns))}
           onRemove={onRemove && (() => onRemove(t.key))}
+          onToggleName={onToggleName && (() => onToggleName(t.key))}
         />
       ))}
     </div>
@@ -124,9 +128,13 @@ function Cell({ grid, type, col, row, children }: { grid: string; type: string; 
   )
 }
 
+// A tile's editing controls, with a mouse: shown only while it is hovered or focused.
+const reveal = 'transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover/tile:opacity-100 pointer-fine:group-focus-within/tile:opacity-100'
+
 // A tile while arranging: a veil over it keeps its controls from a tap and drags it to another
 // cell of its grid; its width steps from one column to them all, its height from one row to
-// maxRows; with onRemove, a button in its corner removes it.
+// maxRows; with onRemove, a button in its corner removes it, and with onToggleName, one beside it
+// shows or hides its name.
 function ArrangedTile({
   grid,
   tile,
@@ -134,6 +142,7 @@ function ArrangedTile({
   columns,
   onSize,
   onRemove,
+  onToggleName,
 }: {
   grid: string
   tile: TileNode
@@ -141,6 +150,7 @@ function ArrangedTile({
   columns: number
   onSize: (size: { width?: number; height?: number }) => void
   onRemove?: () => void
+  onToggleName?: () => void
 }) {
   const { setNodeRef, listeners, attributes, transform, isDragging } = useDraggable({
     id: `tile:${grid}:${tile.key}`,
@@ -151,7 +161,7 @@ function ArrangedTile({
     <div
       ref={setNodeRef}
       style={{ ...cells(place), transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined }}
-      className={`relative ${isDragging ? 'z-20 shadow-2xl' : ''}`}
+      className={`group/tile relative ${isDragging ? 'z-20 shadow-2xl' : ''}`}
     >
       <div className={`grid grid-cols-[minmax(0,1fr)] ${hidden ? 'opacity-30' : ''}`}>{tile.node}</div>
       <div
@@ -160,16 +170,28 @@ function ArrangedTile({
         aria-label={`Move ${tile.label}`}
         className="absolute inset-0 flex cursor-grab touch-none items-end justify-end gap-1 rounded-xl p-1.5 ring-1 ring-amber-400/50 hover:bg-amber-400/5"
       >
-        <SizeSteppers place={place} columns={columns} onSize={onSize} className="bg-neutral-950/90 text-xs" />
+        <span className={`flex gap-1 ${reveal}`}>
+          <SizeSteppers place={place} columns={columns} onSize={onSize} className="bg-neutral-950/90 text-xs" />
+        </span>
       </div>
       {onRemove && (
         <button
           onClick={onRemove}
           aria-label={`Remove ${tile.label}`}
           title="Remove"
-          className="absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-full bg-neutral-950/90 text-neutral-300 hover:bg-red-950 hover:text-red-300"
+          className={`absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-full bg-neutral-950/90 text-neutral-300 hover:bg-red-950 hover:text-red-300 ${reveal}`}
         >
           <Svg path={mdiClose} className="size-4" />
+        </button>
+      )}
+      {onToggleName && (
+        <button
+          onClick={onToggleName}
+          aria-label={`${tile.hideName ? 'Show' : 'Hide'} the name of ${tile.label}`}
+          title={tile.hideName ? 'Show name' : 'Hide name'}
+          className={`absolute top-1.5 right-10 grid size-7 place-items-center rounded-full bg-neutral-950/90 text-neutral-300 hover:bg-neutral-800 hover:text-white ${reveal}`}
+        >
+          <Svg path={tile.hideName ? mdiLabelOffOutline : mdiLabelOutline} className="size-4" />
         </button>
       )}
     </div>

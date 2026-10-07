@@ -109,7 +109,7 @@ func TestAPersonCreatesSavesAndDeletesTheirOwn(t *testing.T) {
 	id, err := s.Create(alice, parse(t, `{"name": " Evening ", "sections": [
 		{"area": "`+string(l.area)+`", "col": 0, "row": 0, "width": 1},
 		{"name": "Favourites", "icon": "sofa", "columns": 2, "col": 1, "row": 0, "width": 1, "height": 2, "tiles": [
-			{"target": "`+l.lamp.Key()+`", "col": 0, "row": 0, "width": 2},
+			{"target": "`+l.lamp.Key()+`", "hideName": true, "col": 0, "row": 0, "width": 2},
 			{"automation": "night", "col": 0, "row": 1, "width": 1}
 		]}
 	]}`))
@@ -126,7 +126,7 @@ func TestAPersonCreatesSavesAndDeletesTheirOwn(t *testing.T) {
 		t.Fatalf("created: %+v", mine)
 	}
 	own := mine[0].Sections[1]
-	if own.ID == "" || own.Name != "Favourites" || len(own.Tiles) != 2 || own.Tiles[0].Target != l.lamp {
+	if own.ID == "" || own.Name != "Favourites" || len(own.Tiles) != 2 || own.Tiles[0].Target != l.lamp || !own.Tiles[0].HideName || own.Tiles[1].HideName {
 		t.Errorf("its own Section: %+v", own)
 	}
 	if theirs, _ := s.Dashboards(bob); len(theirs) != 0 {
