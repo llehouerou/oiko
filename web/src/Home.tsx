@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
-import { mdiCheck } from '@mdi/js'
+import { mdiCheck, mdiContentCopy, mdiViewDashboardEditOutline } from '@mdi/js'
 import { useAggregates, useAreas, useAutomationStatuses, useDashboardList, useDashboards, useDevices, useFlags } from './store'
 import { useAllows, useMe } from './access'
-import { dashboard, shown } from './dashboard'
-import { AppBar, ChartsSetting, CreateButton, EditSetting } from './AppBar'
+import { copied, dashboard, shown } from './dashboard'
+import { ActionSetting, AppBar, ChartsSetting, CreateButton } from './AppBar'
 import { ReleaseBanner } from './About'
 import { ChartsShown } from './MiniChart'
 import { Svg } from './icons'
 import { CustomDashboardView, Dashboard } from './Dashboard'
-import { DashboardMenu } from './DashboardMenu'
+import { CreateDashboard, DashboardMenu } from './DashboardMenu'
 import { DashboardEditor } from './DashboardEditor'
 import { FlagPill } from './Tiles'
 import { AggregatePanel, AreaPanel, DevicePanel, FlagPanel } from './HomePanels'
@@ -63,16 +63,25 @@ export function Home({ hash }: { hash: string }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const editing = editable && editingId === (current?.id ?? 'builtin')
   const arrange = editing && !current
+  // Whether the Person is duplicating the current Dashboard into a new one of theirs.
+  const [duplicating, setDuplicating] = useState(false)
   return (
     <>
       <AppBar
         page="#"
-        home={person && <DashboardMenu current={current} dashboards={dashboards} list={list} />}
+        home={person && <DashboardMenu current={current} dashboards={dashboards} list={list} onCreated={setEditingId} />}
         settings={
-          (member || editable) && (
+          (member || person) && (
             <>
               {member && <ChartsSetting charts={charts} onCharts={toggleCharts} />}
-              {editable && <EditSetting label={current ? 'Edit dashboard' : 'Arrange dashboard'} onEdit={() => setEditingId(current?.id ?? 'builtin')} />}
+              {editable && (
+                <ActionSetting
+                  icon={mdiViewDashboardEditOutline}
+                  label={current ? 'Edit dashboard' : 'Arrange dashboard'}
+                  onClick={() => setEditingId(current?.id ?? 'builtin')}
+                />
+              )}
+              {person && <ActionSetting icon={mdiContentCopy} label="Duplicate…" onClick={() => setDuplicating(true)} />}
             </>
           )
         }
@@ -93,6 +102,7 @@ export function Home({ hash }: { hash: string }) {
               sections={home.custom(current, true)}
               areas={areas}
               choices={home.choices}
+              onDuplicate={() => setDuplicating(true)}
               onDone={() => setEditingId(null)}
               onResult={setToast}
             />
@@ -129,6 +139,14 @@ export function Home({ hash }: { hash: string }) {
         <AreaPanel key={openArea.id} area={openArea} areas={areas} devices={devices} tiles={sections.find((s) => s.area === openArea)?.tiles} onClose={close} />
       )}
       {openId === 'new-area' && <AreaPanel areas={areas} devices={devices} onClose={close} />}
+      {duplicating && (
+        <CreateDashboard
+          title={`Duplicate ${current?.name ?? 'Home'}`}
+          copy={copied(current, areas)}
+          onCreated={setEditingId}
+          onClose={() => setDuplicating(false)}
+        />
+      )}
       {toast && (
         <button
           onClick={() => setToast(null)}

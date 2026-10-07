@@ -11,7 +11,17 @@ import { Switch } from './controls'
 import { Svg } from './icons'
 import { Panel } from './Panel'
 
-export function DashboardMenu({ current, dashboards, list }: { current?: CustomDashboard; dashboards: CustomDashboard[]; list: ListEntry[] }) {
+export function DashboardMenu({
+  current,
+  dashboards,
+  list,
+  onCreated,
+}: {
+  current?: CustomDashboard
+  dashboards: CustomDashboard[]
+  list: ListEntry[]
+  onCreated: (id: string) => void // a Dashboard created from the menu, to open in its editor
+}) {
   const button = useRef<HTMLButtonElement>(null)
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -73,7 +83,7 @@ export function DashboardMenu({ current, dashboards, list }: { current?: CustomD
           Edit list
         </button>
       </div>
-      {creating && <NewDashboard onClose={() => setCreating(false)} />}
+      {creating && <CreateDashboard title="New dashboard" onCreated={onCreated} onClose={() => setCreating(false)} />}
       {editing && <EditList list={list} name={name} onClose={() => setEditing(false)} />}
     </>
   )
@@ -141,9 +151,19 @@ function ListRow({ entry, name, last, onShow }: { entry: ListEntry; name: string
     </li>
   )
 }
-// Asks for a Name, and an Admin whether it is shared or their own, creates an empty Dashboard of
-// it, and opens it.
-function NewDashboard({ onClose }: { onClose: () => void }) {
+// Asks for a Name, and an Admin whether it is shared or their own, creates a Dashboard of it, empty
+// or holding copy, opens it at its address and tells onCreated its id.
+export function CreateDashboard({
+  title,
+  copy,
+  onCreated,
+  onClose,
+}: {
+  title: string
+  copy?: Pick<CustomDashboard, 'columns' | 'sections'>
+  onCreated: (id: string) => void
+  onClose: () => void
+}) {
   const admin = useAllows('admin')
   const [error, setError] = useState<string | null>(null)
   const submit = async (e: FormEvent<HTMLFormElement>) => {
@@ -152,15 +172,16 @@ function NewDashboard({ onClose }: { onClose: () => void }) {
     const res = await api('/api/dashboards', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shared: form.get('shared') === 'shared', name: form.get('name'), sections: [] }),
+      body: JSON.stringify({ shared: form.get('shared') === 'shared', name: form.get('name'), sections: [], ...copy }),
     })
     if (!res.ok) return setError((await res.text()).trim())
     const { id }: { id: string } = await res.json()
     location.hash = `#dashboard/${id}`
+    onCreated(id)
     onClose()
   }
   return (
-    <Panel title={<h2 className="text-lg font-medium">New dashboard</h2>} onClose={onClose}>
+    <Panel title={<h2 className="text-lg font-medium">{title}</h2>} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4 text-sm">
         <input name="name" placeholder="Name" aria-label="Name" autoFocus className="w-full rounded bg-neutral-800 px-2 py-1" />
         {admin && (
@@ -171,7 +192,7 @@ function NewDashboard({ onClose }: { onClose: () => void }) {
         )}
         {error && <p className="text-red-400">{error}</p>}
         <button type="submit" className="rounded bg-amber-400 px-3 py-1 font-medium text-neutral-900 hover:bg-amber-300">
-          Create
+          {copy ? 'Duplicate' : 'Create'}
         </button>
       </form>
     </Panel>

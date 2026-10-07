@@ -20,7 +20,6 @@ import {
   mdiRobotOutline,
   mdiTabletDashboard,
   mdiTimelineClockOutline,
-  mdiViewDashboardEditOutline,
   mdiViewDashboardOutline,
 } from '@mdi/js'
 import { Switch } from './controls'
@@ -235,17 +234,17 @@ export function ChartsSetting({ charts, onCharts }: { charts: boolean; onCharts:
   )
 }
 
-// The Dashboard's entry into changing it: arranging the built-in one's Areas and their tiles, or
-// editing a custom one; it closes the menu.
-export function EditSetting({ label, onEdit }: { label: string; onEdit: () => void }) {
+// An entry of the page's settings that does something, e.g. changing the Dashboard or duplicating
+// it; it closes the menu.
+export function ActionSetting({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
   return (
     <button
       popoverTarget="settings"
       popoverTargetAction="hide"
-      onClick={onEdit}
+      onClick={onClick}
       className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-neutral-800"
     >
-      <Svg path={mdiViewDashboardEditOutline} className="size-5 text-neutral-400" />
+      <Svg path={icon} className="size-5 text-neutral-400" />
       {label}
     </button>
   )

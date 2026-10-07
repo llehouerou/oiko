@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { dashboard, shown, type DashboardSection } from './dashboard'
+import { copied, dashboard, shown, type DashboardSection } from './dashboard'
 import type { Aggregate, Area, AutomationStatus, Capability, CustomDashboard, Device, Fn, Target } from './types'
 
 const on: Capability = { key: 'state', label: 'State', type: 'binary', access: { observable: true, settable: true, queryable: true }, category: 'primary' }
@@ -321,4 +321,35 @@ test('#dashboard/<id> opens a Dashboard the Person sees, hidden or not; any othe
   // the built-in Dashboard first, or no list at all (a Kiosk's), opens it
   expect(shown('#', mine, [{ id: 'builtin' }, { id: 'night' }])).toBeUndefined()
   expect(shown('#', mine, [])).toBeUndefined()
+})
+
+test('a copy of the built-in Dashboard holds its Areas two per row, in order, without Others; of a custom one, what its viewer sees', () => {
+  expect(copied(undefined, [area('living'), area('kitchen'), area('office')])).toEqual({
+    columns: 2,
+    sections: [
+      { area: 'living', col: 0, row: 0, width: 1 },
+      { area: 'kitchen', col: 1, row: 0, width: 1 },
+      { area: 'office', col: 0, row: 1, width: 1 },
+    ],
+  })
+  const evening: CustomDashboard = {
+    id: 'evening',
+    shared: true,
+    name: 'Evening',
+    columns: 3,
+    sections: [
+      { area: 'kitchen', col: 2, row: 0, width: 1, height: 2 },
+      {
+        id: 'own',
+        name: 'Lights',
+        icon: 'sofa',
+        columns: 2,
+        col: 0,
+        row: 0,
+        width: 2,
+        tiles: [{ target: 'device:lamp', col: 1, row: 0, width: 1, height: 2 }],
+      },
+    ],
+  }
+  expect(copied(evening, [])).toEqual({ columns: 3, sections: evening.sections })
 })

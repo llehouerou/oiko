@@ -280,3 +280,11 @@ export function shown(hash: string, dashboards: CustomDashboard[], list: ListEnt
   const first = list.find((e) => !e.hidden)?.id
   return dashboards.find((d) => d.id === id) ?? dashboards.find((d) => d.id === first)
 }
+
+// What a duplicate of Dashboard d, undefined for the built-in one, holds, built from what its viewer
+// sees (ADR 0041): a custom one's Sections and Tiles as they reach the viewer, the built-in one's
+// Areas' Sections two per row, in their order, without Others. It never follows d.
+export function copied(d: CustomDashboard | undefined, areas: Area[]): Pick<CustomDashboard, 'columns' | 'sections'> {
+  if (d) return { columns: d.columns, sections: d.sections }
+  return { columns: 2, sections: areas.map((a, i) => ({ area: a.id, col: i % 2, row: Math.floor(i / 2), width: 1 })) }
+}

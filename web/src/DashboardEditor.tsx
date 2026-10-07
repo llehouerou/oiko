@@ -1,6 +1,6 @@
 import { Fragment, useState, type ReactNode } from 'react'
 import { DndContext, PointerSensor, useDraggable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
-import { mdiCheck, mdiDeleteOutline, mdiDrag, mdiMagnify, mdiShapeOutline, mdiViewColumnOutline, mdiViewGridOutline } from '@mdi/js'
+import { mdiCheck, mdiContentCopy, mdiDeleteOutline, mdiDrag, mdiMagnify, mdiShapeOutline, mdiViewColumnOutline, mdiViewGridOutline } from '@mdi/js'
 import { edit } from './store'
 import type { Area, CustomDashboard } from './types'
 import { sectionKey, tileKey, type DashboardSection, type TileChoice } from './dashboard'
@@ -24,16 +24,18 @@ import { ArrangedGrid, Cells, cells, landing, SizeSteppers, Stepper } from './Ar
 import { Section, tileNodes } from './Section'
 
 // A custom Dashboard turned into its editor, in place: everything live and at full size. A bar on
-// top holds its Name, its columns, Delete and Done; every free cell of its grid has a + adding a
-// Section there; each Section has a bar that drags it to another cell, steps its size and removes
-// it, and on an own Section edits its Name, Icon and columns. An own Section's Tiles are arranged
-// as an Area's are on Home, a + in each free cell picking one to add. An Area's Section shows the
-// Area dimmed: it follows the Area, arranged on Home. Each change saves the whole Dashboard at once.
+// top holds its Name, its columns, Duplicate, Delete and Done; every free cell of its grid has a +
+// adding a Section there; each Section has a bar that drags it to another cell, steps its size and
+// removes it, and on an own Section edits its Name, Icon and columns. An own Section's Tiles are
+// arranged as an Area's are on Home, a + in each free cell picking one to add. An Area's Section
+// shows the Area dimmed: it follows the Area, arranged on Home. Each change saves the whole
+// Dashboard at once.
 export function DashboardEditor({
   dashboard: d,
   sections,
   areas,
   choices,
+  onDuplicate,
   onDone,
   onResult,
 }: {
@@ -41,6 +43,7 @@ export function DashboardEditor({
   sections: DashboardSection[] // d's, as custom draws them while editing
   areas: Area[]
   choices: (query: string, taken: string[]) => { area?: Area; tiles: TileChoice[] }[] // the home's Tiles
+  onDuplicate: () => void
   onDone: () => void
   onResult: (r: { text: string; error?: boolean }) => void
 }) {
@@ -92,6 +95,10 @@ export function DashboardEditor({
           onChange={(n) => save(setDashboardColumns(d, n))}
           className="text-sm"
         />
+        <button onClick={onDuplicate} className="flex items-center gap-1 rounded-full px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800">
+          <Svg path={mdiContentCopy} className="size-5" />
+          Duplicate
+        </button>
         <button onClick={remove} className="flex items-center gap-1 rounded-full px-3 py-1.5 text-sm text-red-300 hover:bg-red-950">
           <Svg path={mdiDeleteOutline} className="size-5" />
           Delete
