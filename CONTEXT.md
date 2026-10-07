@@ -149,15 +149,19 @@ _Avoid_: alert, message, push
 ### Home
 
 **Area**:
-Room or zone of the home, created and named by an Admin, in an order of their choosing. Areas are flat: none contains another. A Device has an Area or none; each of its Functions inherits it unless assigned another one. A Flag or an Aggregate may be assigned one too. Deleting an Area leaves what it held without one. The built-in Dashboard shows one section per Area, in their order, and everything without one last.
+Room or zone of the home, created and named by an Admin, in an order of their choosing, with an Icon if they pick one. Areas are flat: none contains another. A Device has an Area or none; each of its Functions inherits it unless assigned another one. A Flag or an Aggregate may be assigned one too. Deleting an Area leaves what it held without one. The built-in Dashboard shows one Section per Area, in their order, and everything without one last.
 
 **Area Aggregate**:
 Aggregate Oiko derives for an Area and an aggregated kind (lights, occupancy, doors, temperature, humidity, CO2) from the Functions of that kind in the Area, under a rule fixed per kind: a room's temperature and humidity are its mean, its CO2 its highest. Its members are never stored, its Name is derived, and it exists while it has at least one member, coming back under the same identity when it has one again.
 _Avoid_: Room, Zone
 
 **Dashboard**:
-A view of the home in the web client, made of Tiles. The built-in one, derived from the Areas, is always complete; the others are custom, shared or personal to one Person (a Guest's included), and an Admin may assign one to a Kiosk, which never edits it. A Dashboard only arranges what its viewer may see: it grants nothing.
+A view of the home in the web client: an ordered list of Sections. The built-in one, derived from the Areas, is always complete; the others are custom, shared or personal to one Person (a Guest's included), and an Admin may assign one to a Kiosk, which never edits it. A Dashboard only arranges what its viewer may see: it grants nothing.
 _Avoid_: view, page, board, panel; the dashboard (for the web client as a whole)
+
+**Section**:
+One part of a Dashboard, never containing another: an Area's, which follows the Area as it is now and shows exactly what the built-in Dashboard shows of it, or one of the Dashboard's own, holding the Tiles placed in it, under its Name and Icon when it has a Name. A Tile appears at most once in a Section, but may appear in several of one Dashboard.
+_Avoid_: group (reserved for the Bridge's), card, panel, block, view
 
 **Web client**:
 Oiko's own app in a browser, where a Person or a Kiosk signs in and sees its Dashboards.
@@ -171,11 +175,11 @@ Where an Area's Tiles sit on the built-in Dashboard: a grid of a few columns, an
 _Avoid_: arrangement, position, grid (as the term)
 
 **Name**:
-Display label of a Device, an Aggregate, a Flag, an Area, a Person, a Kiosk or a Program. A new Device takes its Bridge's label; afterwards it is freely editable in Oiko, never used as a reference, and never written back to the Bridge. A Function has no Name of its own: it shows its Device's, followed by its key when the Device has several (e.g. `Kitchen plug · switch/l2`).
+Display label of a Device, an Aggregate, a Flag, an Area, a Section, a Person, a Kiosk or a Program. A new Device takes its Bridge's label; afterwards it is freely editable in Oiko, never used as a reference, and never written back to the Bridge. A Function has no Name of its own: it shows its Device's, followed by its key when the Device has several (e.g. `Kitchen plug · switch/l2`).
 _Avoid_: entity_id, slug as identifier
 
 **Icon**:
-Picture the web client shows for a Device or an Aggregate, picked by an Admin among the web client's own, known to Oiko by its name only. Without one, a light shows a bulb and an Aggregate of lights several. Like a Name, a label: never a reference, never written back to the Bridge.
+Picture the web client shows for a Device, an Aggregate, an Area or a Section, picked by an Admin (a Section's by whoever edits its Dashboard) among the web client's own, known to Oiko by its name only. Without one, a light shows a bulb and an Aggregate of lights several; an Area or a Section shows none. Like a Name, a label: never a reference, never written back to the Bridge.
 _Avoid_: symbol, image
 
 ### Access
