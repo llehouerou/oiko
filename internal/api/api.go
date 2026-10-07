@@ -22,6 +22,7 @@ import (
 	"github.com/llehouerou/oiko/internal/automation"
 	"github.com/llehouerou/oiko/internal/build"
 	"github.com/llehouerou/oiko/internal/camera"
+	"github.com/llehouerou/oiko/internal/dashboard"
 	"github.com/llehouerou/oiko/internal/history"
 	"github.com/llehouerou/oiko/internal/home"
 	"github.com/llehouerou/oiko/internal/release"
@@ -29,12 +30,12 @@ import (
 
 // Handler serves the API to a Session or a Token, each endpoint to the
 // Access levels it declares, and the web client to anyone (ADR 0023, 0027,
-// 0034). cams are the home's cameras, acc keeps who signs in, b is what Oiko
-// is built from, install its Install (see CONTEXT.md), releases what is
-// newer, bridges the type of each Bridge of the configuration, by name,
-// public the Public URL, nil when the configuration has none: the origin
-// sign-in checks.
-func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, cams *camera.Cameras, acc *access.Store, b build.Build, install string, releases *release.Checker, bridges map[string]string, public *url.URL, static fs.FS) http.Handler {
+// 0034). cams are the home's cameras, acc keeps who signs in, dash the custom
+// Dashboards, b is what Oiko is built from, install its Install (see
+// CONTEXT.md), releases what is newer, bridges the type of each Bridge of the
+// configuration, by name, public the Public URL, nil when the configuration
+// has none: the origin sign-in checks.
+func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, cams *camera.Cameras, acc *access.Store, dash *dashboard.Store, b build.Build, install string, releases *release.Checker, bridges map[string]string, public *url.URL, static fs.FS) http.Handler {
 	mux := http.NewServeMux()
 	handle := func(level access.Level, pattern string, serve http.HandlerFunc) {
 		mux.HandleFunc(pattern, needs(level, serve))
@@ -43,8 +44,34 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 
 	// A Guest observes the home as it is now, commands it and starts Manual
 	// triggers, which the event stream carries as Automation statuses.
-	handle(guest, "GET /api/updates", updates(h, acc, releases))
+	handle(guest, "GET /api/updates", updates(h, acc, dash, releases))
 	handle(guest, "POST /api/commands", command(h))
+	// A Person's own Dashboards, a Guest's too; the dashboards module refuses
+	// a Kiosk and a Program, and whoever is not their owner (ADR 0041, 0046).
+	handle(guest, "POST /api/dashboards", func(w http.ResponseWriter, r *http.Request) {
+		var d dashboard.Dashboard
+		if !decode(w, r, &d) {
+			return
+		}
+		by, _ := identity(r)
+		id, err := dash.Create(by, d)
+		if err != nil {
+			reply(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]string{"id": id})
+	})
+	handle(guest, "PUT /api/dashboards/{id}", func(w http.ResponseWriter, r *http.Request) {
+		var d dashboard.Dashboard
+		if decode(w, r, &d) {
+			by, _ := identity(r)
+			reply(w, dash.Save(by, r.PathValue("id"), d))
+		}
+	})
+	handle(guest, "DELETE /api/dashboards/{id}", func(w http.ResponseWriter, r *http.Request) {
+		by, _ := identity(r)
+		reply(w, dash.Delete(by, r.PathValue("id")))
+	})
 	// A camera's Picture shows the home as it is now (ADR 0036).
 	handle(guest, "GET /api/picture", picture(cams))
 	handle(guest, "POST /api/live-view", liveView(cams))
@@ -294,13 +321,15 @@ func respond(w http.ResponseWriter, v any, err error) {
 // the identity's Access level lets it see them: a Guest sees only what it can
 // press, never who did what (ADR 0031). The Status of each module's Releases
 // comes to an Admin with the snapshot, and again, as a "releases" message,
-// each time it changes (ADR 0023). Updates available at once are written
-// together and flushed once. A client that stops reading ends the stream, at
-// the first write that does not go through within streamWriteLimit. It counts
-// as a use of its Session or Token at each keepalive, and ends at once when
-// either ends, or the identity's access changes: the client reconnects and
-// gets what its level sees now.
-func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.HandlerFunc {
+// each time it changes (ADR 0023). A Person's own Dashboards come with the
+// snapshot too, and again, whole, as a "dashboards" message, each time they
+// change (ADR 0046). Updates available at once are written together and
+// flushed once. A client that stops reading ends the stream, at the first
+// write that does not go through within streamWriteLimit. It counts as a use
+// of its Session or Token at each keepalive, and ends at once when either
+// ends, or the identity's access changes: the client reconnects and gets what
+// its level sees now.
+func updates(h *home.Home, acc *access.Store, dash *dashboard.Store, releases *release.Checker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, _ := identity(r)
 		snap, ch, cancel := h.Subscribe()
@@ -310,6 +339,7 @@ func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.Ha
 		if id.Level.Allows(access.Admin) {
 			statuses, changed = releases.Statuses()
 		}
+		dashboards, rearranged := dash.Dashboards(id)
 		w.Header().Set("Content-Type", "text/event-stream")
 		rc := http.NewResponseController(w)
 		defer rc.SetWriteDeadline(time.Time{}) // the connection may serve other requests
@@ -323,8 +353,9 @@ func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.Ha
 		if !send(event(struct {
 			Kind string `json:"kind"`
 			home.Snapshot
-			Releases []release.Status `json:"releases"`
-		}{"snapshot", snap, statuses})) {
+			Releases   []release.Status      `json:"releases"`
+			Dashboards []dashboard.Dashboard `json:"dashboards,omitempty"`
+		}{"snapshot", snap, statuses, dashboards})) {
 			return
 		}
 		keepalive := time.NewTicker(keepaliveEvery)
@@ -343,6 +374,14 @@ func updates(h *home.Home, acc *access.Store, releases *release.Checker) http.Ha
 					Kind     string           `json:"kind"`
 					Releases []release.Status `json:"releases"`
 				}{"releases", statuses})) {
+					return
+				}
+			case <-rearranged:
+				dashboards, rearranged = dash.Dashboards(id)
+				if !send(event(struct {
+					Kind       string                `json:"kind"`
+					Dashboards []dashboard.Dashboard `json:"dashboards"`
+				}{"dashboards", dashboards})) {
 					return
 				}
 			case <-keepalive.C:

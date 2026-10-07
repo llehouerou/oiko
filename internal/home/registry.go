@@ -28,7 +28,7 @@ func (h *Home) Rename(id DeviceID, name string) error {
 // SetIcon sets the Icon of Device or Aggregate t; "" goes back to the
 // default.
 func (h *Home) SetIcon(t Target, icon string) error {
-	if err := validIcon(icon); err != nil {
+	if err := ValidIcon(icon); err != nil {
 		return err
 	}
 	h.mu.Lock()
@@ -55,10 +55,10 @@ func (h *Home) SetIcon(t Target, icon string) error {
 	return fmt.Errorf("%w: a device's or an aggregate's icon is set here, an area's with its name", ErrInvalid)
 }
 
-// validIcon refuses what cannot name an Icon. Like a Name it is a label only,
+// ValidIcon refuses what cannot name an Icon. Like a Name it is a label only,
 // and Oiko does not draw it: it is the name of a picture the web client has;
 // "" is none.
-func validIcon(icon string) error {
+func ValidIcon(icon string) error {
 	if len(icon) > 50 || strings.Trim(icon, "abcdefghijklmnopqrstuvwxyz0123456789-") != "" {
 		return fmt.Errorf("%w: an icon is named with lowercase letters, digits and dashes", ErrInvalid)
 	}

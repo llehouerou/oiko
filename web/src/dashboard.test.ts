@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { dashboard, type DashboardSection } from './dashboard'
+import { dashboard, shown, type DashboardSection } from './dashboard'
 import type { Aggregate, Area, AutomationStatus, Capability, Device, Fn, Target } from './types'
 
 const on: Capability = { key: 'state', label: 'State', type: 'binary', access: { observable: true, settable: true, queryable: true }, category: 'primary' }
@@ -164,4 +164,62 @@ test('a tile of readings takes a row per line of its cells, unless its height is
   // two columns wide, three to a line: two rows
   expect(places([{ tile: 'device:indoor', col: 0, row: 0, width: 2 }])[0]).toBe('device:indoor 00 2')
   expect(places([{ tile: 'device:indoor', col: 0, row: 0, width: 1, height: 1 }])[0]).toBe('device:indoor 00 1')
+})
+
+test("a custom Dashboard's Area Sections are the built-in Dashboard's, its own Sections hold what is placed in them", () => {
+  const devices = [device('relay', 'living', fn('l1'), fn('l2', 'kitchen')), device('lamp', 'kitchen', fn('light'))]
+  const aggregates = [derived('kitchen', 'light', 'device:lamp/light')]
+  const flags = [{ id: 'away', name: 'Away', kind: 'flag', capabilities: [{ ...on, key: 'on' }] }]
+  const bedtime: AutomationStatus = { id: 'bedtime', name: 'Bedtime', status: 'enabled', manualTriggers: [{ step: 'go', name: 'Go' }] }
+  const night: AutomationStatus = { id: 'night', name: 'Night', status: 'enabled' } // no Manual trigger: no Tile
+  const home = dashboard(devices, aggregates, flags, [area('living'), area('kitchen')], [bedtime, night])
+  const sections = home.custom({
+    id: 'evening',
+    owner: 'alice',
+    name: 'Evening',
+    columns: 2,
+    sections: [
+      { area: 'kitchen', col: 1, row: 0, width: 1 },
+      { area: 'gone', col: 0, row: 1, width: 1 },
+      { id: 'empty', columns: 1, col: 1, row: 1, width: 1, tiles: [{ automation: 'night', col: 0, row: 0, width: 1 }] },
+      {
+        id: 'favourites',
+        name: 'Favourites',
+        icon: 'sofa',
+        columns: 2,
+        col: 0,
+        row: 0,
+        width: 1,
+        tiles: [
+          { target: 'device:relay', col: 0, row: 0, width: 1 },
+          { target: 'aggregate:kitchen-light', col: 1, row: 0, width: 1 },
+          { target: 'flag:away', col: 0, row: 1, width: 1 },
+          { automation: 'bedtime', col: 1, row: 1, width: 1, height: 2 },
+          { automation: 'night', col: 0, row: 2, width: 1 },
+          { target: 'device:gone', col: 0, row: 3, width: 1 },
+        ],
+      },
+    ],
+  })
+  // in reading order, each in its place; an Area that is gone, or an own Section with nothing to
+  // show, shows nothing
+  expect(sections.map((s) => `${s.key} ${s.place?.col}${s.place?.row}`)).toEqual(['own:favourites 00', 'area:kitchen 10'])
+  const [own, kitchen] = sections
+  expect(kitchen).toMatchObject(home.sections[1]!)
+  expect(own).toMatchObject({ own: { name: 'Favourites', icon: 'sofa' }, columns: 2, climate: [] })
+  expect(own!.tiles.map((t) => `${t.key} ${t.place?.col}${t.place?.row}${t.place?.height}`)).toEqual([
+    'device:relay 001',
+    'aggregate:kitchen-light 101',
+    'flag:away 011',
+    'bedtime 112',
+  ])
+  // a Device's Tile shows each of its Functions that has one, whatever their Areas
+  const relay = own!.tiles[0]!
+  expect(relay.kind === 'target' && relay.fns.map((f) => f.target)).toEqual(['device:relay/l1', 'device:relay/l2'])
+})
+
+test("#dashboard/<id> opens one of the Person's own Dashboards; any other address the built-in one", () => {
+  const mine = [{ id: 'evening', owner: 'alice', name: 'Evening', columns: 2, sections: [] }]
+  expect(shown('#dashboard/evening', mine)?.name).toBe('Evening')
+  for (const hash of ['', '#', '#dashboard/builtin', '#dashboard/someone-elses', '#dashboard/']) expect(shown(hash, mine), hash).toBeUndefined()
 })

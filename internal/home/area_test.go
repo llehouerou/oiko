@@ -65,7 +65,7 @@ func TestAnAreasFileWrittenBeforeIconsLoadsUnchanged(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "areas.json"), []byte(before), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	want := []Area{{ID: "a1", Name: "Office", HiddenAggregates: []string{"co2"}, Columns: 2, Layout: []Placement{{Tile: TargetFlag("f1"), Col: 1, Width: 1}}}}
+	want := []Area{{ID: "a1", Name: "Office", HiddenAggregates: []string{"co2"}, Columns: 2, Layout: []Placement{{TargetFlag("f1"), Place{Col: 1, Width: 1}}}}}
 	if got := snapshot(opened(t, dir)).Areas; !reflect.DeepEqual(got, want) {
 		t.Errorf("loaded %+v, want %+v", got, want)
 	}
@@ -204,7 +204,7 @@ func TestAreaLayoutSurvivesARestart(t *testing.T) {
 	h := opened(t, dir)
 	living, _ := h.CreateArea("Living room", "")
 	lamp, flag := TargetDevice("d1", ""), TargetFlag("f1")
-	layout := []Placement{{Tile: lamp, Col: 1, Row: 0, Width: 2, Height: 3}, {Tile: flag, Col: 0, Row: 2, Width: 1}}
+	layout := []Placement{{lamp, Place{Col: 1, Row: 0, Width: 2, Height: 3}}, {flag, Place{Col: 0, Row: 2, Width: 1}}}
 	if err := h.SetAreaLayout(living, 3, layout); err != nil {
 		t.Fatal(err)
 	}
@@ -219,13 +219,13 @@ func TestAreaLayoutSurvivesARestart(t *testing.T) {
 	}{
 		"no column":         {0, nil},
 		"too many":          {maxColumns + 1, nil},
-		"past the edge":     {3, []Placement{{Tile: lamp, Col: 2, Width: 2}}},
+		"past the edge":     {3, []Placement{{lamp, Place{Col: 2, Width: 2}}}},
 		"no width":          {3, []Placement{{Tile: lamp}}},
-		"negative row":      {3, []Placement{{Tile: lamp, Row: -1, Width: 1}}},
-		"placed twice":      {3, []Placement{{Tile: lamp, Width: 1}, {Tile: lamp, Row: 1, Width: 1}}},
-		"overlapping":       {3, []Placement{{Tile: lamp, Width: 2}, {Tile: flag, Col: 1, Width: 1}}},
-		"overlapping below": {3, []Placement{{Tile: lamp, Width: 1, Height: 2}, {Tile: flag, Row: 1, Width: 1}}},
-		"negative height":   {3, []Placement{{Tile: lamp, Width: 1, Height: -1}}},
+		"negative row":      {3, []Placement{{lamp, Place{Row: -1, Width: 1}}}},
+		"placed twice":      {3, []Placement{{lamp, Place{Width: 1}}, {lamp, Place{Row: 1, Width: 1}}}},
+		"overlapping":       {3, []Placement{{lamp, Place{Width: 2}}, {flag, Place{Col: 1, Width: 1}}}},
+		"overlapping below": {3, []Placement{{lamp, Place{Width: 1, Height: 2}}, {flag, Place{Row: 1, Width: 1}}}},
+		"negative height":   {3, []Placement{{lamp, Place{Width: 1, Height: -1}}}},
 	} {
 		if err := h.SetAreaLayout(living, c.columns, c.layout); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: %v, want ErrInvalid", name, err)

@@ -39,9 +39,10 @@ const pages = [
 export type Page = (typeof pages)[number]['href']
 
 // The pages its Access level shows as tabs in the middle, the current one lit, if it is one; a narrow
-// screen keeps their icons only. onLeave may hold the page, e.g. on unsaved changes; settings are the
-// page's, under ⚙. Only an Admin opens what Oiko is built from.
-export function AppBar({ page, onLeave, settings }: { page?: Page; onLeave?: () => Promise<boolean>; settings?: ReactNode }) {
+// screen keeps their icons only. home takes the Home tab's place: the Dashboard menu. onLeave may
+// hold the page, e.g. on unsaved changes; settings are the page's, under ⚙. Only an Admin opens
+// what Oiko is built from.
+export function AppBar({ page, home, onLeave, settings }: { page?: Page; home?: ReactNode; onLeave?: () => Promise<boolean>; settings?: ReactNode }) {
   const [about, setAbout] = useState(false) // what Oiko is built from, opened from its logo
   const me = useMe()
   const admin = allows(me, 'admin')
@@ -57,23 +58,27 @@ export function AppBar({ page, onLeave, settings }: { page?: Page; onLeave?: () 
         <nav className="flex rounded-full bg-neutral-900 p-1">
           {pages
             .filter((p) => allows(me, p.level))
-            .map((p) => (
-              <a
-                key={p.href}
-                href={p.href}
-                title={p.label}
-                aria-current={p.href === page ? 'page' : undefined}
-                onClick={async (e) => {
-                  if (!onLeave || p.href === page) return
-                  e.preventDefault()
-                  if (await onLeave()) location.hash = p.href
-                }}
-                className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm sm:px-4 ${p.href === page ? 'bg-neutral-700 text-white shadow' : 'text-neutral-400 hover:text-white'}`}
-              >
-                <Svg path={p.icon} className="size-5" />
-                <span className="hidden md:inline">{p.label}</span>
-              </a>
-            ))}
+            .map((p) =>
+              p.href === '#' && home ? (
+                <div key={p.href}>{home}</div>
+              ) : (
+                <a
+                  key={p.href}
+                  href={p.href}
+                  title={p.label}
+                  aria-current={p.href === page ? 'page' : undefined}
+                  onClick={async (e) => {
+                    if (!onLeave || p.href === page) return
+                    e.preventDefault()
+                    if (await onLeave()) location.hash = p.href
+                  }}
+                  className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm sm:px-4 ${p.href === page ? 'bg-neutral-700 text-white shadow' : 'text-neutral-400 hover:text-white'}`}
+                >
+                  <Svg path={p.icon} className="size-5" />
+                  <span className="hidden md:inline">{p.label}</span>
+                </a>
+              ),
+            )}
         </nav>
         <div className="flex flex-1 items-center justify-end gap-2">
           <ConnectionBadge />

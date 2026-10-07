@@ -1,8 +1,8 @@
 import { roles } from './roles'
-import { aggregateTarget, catalogue, deviceTarget, flagTarget, fnOf } from './targets'
+import { aggregateTarget, catalogue, deviceTarget, flagTarget, fnOf, parseTarget } from './targets'
 import { aggregateSummary, memberLeaves, tileCaps, tileShape, titled, type Shape } from './tiles'
 import { arrange, defaultColumns, type Place } from './layout'
-import type { Aggregate, Area, AutomationStatus, Capability, Device, Flag, Fn, Target } from './types'
+import type { Aggregate, Area, AutomationStatus, Capability, CustomDashboard, CustomSection, Device, Flag, Fn, PlacedTile, Spot, Target } from './types'
 
 // A Target's Tile, resolved once: everything about it that does not change while it is shown.
 // Its Availability, Values and Commands are read live.
@@ -24,17 +24,22 @@ export type DashboardTile = { key: string; label: string; place?: Place } & (
   { kind: 'manual'; automation: AutomationStatus } | ({ kind: 'target' } & TargetTile)
 )
 
-// An Area's part of the dashboard, or Others (no area). Its header shows its status, from its
-// Area Aggregates (climate, doors, presence), and its light bar: its lone light's Tile, or its
-// Aggregate of lights'. An Area's tiles come in its Layout's reading order.
+// A Section of a Dashboard: an Area's, one of a custom Dashboard's own, or Others (neither). Key
+// names it on its Dashboard. An Area's header shows its status, from its Area Aggregates (climate,
+// doors, presence), and its light bar: its lone light's Tile, or its Aggregate of lights'. An
+// Area's tiles come in its Layout's reading order, an own Section's in its own. On a custom
+// Dashboard, a Section has its place on the Dashboard's Layout.
 export interface DashboardSection {
+  key: string
   area?: Area
-  columns?: number // of an Area's Layout
+  own?: { name?: string; icon?: string }
+  columns?: number // of an Area's Layout, or an own Section's
   climate: Aggregate[]
   doors?: Aggregate
   presence?: Aggregate
   bar?: TargetTile
   tiles: DashboardTile[]
+  place?: Place
 }
 
 export const climateKinds = ['temperature', 'humidity', 'co2']
@@ -47,9 +52,9 @@ function naturalRows(t: DashboardTile, width: number) {
   return Math.ceil(t.shape.readings.length / perLine)
 }
 
-// The dashboard: Flags without an Area as pills under its header, then a Section per Area in
-// their order, then Others, if it holds anything. The Automations with a Manual trigger open
-// Others.
+// The built-in Dashboard: Flags without an Area as pills under its header, then a Section per
+// Area in their order, then Others, if it holds anything. The Automations with a Manual trigger
+// open Others. custom draws a custom Dashboard from the same home.
 export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Flag[], areas: Area[], automations: AutomationStatus[]) {
   const manual = automations.filter((a) => a.manualTriggers?.length)
   const targets = catalogue(devices, aggregates, flags)
@@ -116,6 +121,7 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
       : undefined
     const columns = area.columns ?? defaultColumns
     return {
+      key: `area:${area.id}`,
       area,
       columns,
       climate: climateKinds.flatMap((k) => areaAggregate(area, k) ?? []),
@@ -130,9 +136,62 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
       ),
     }
   }
-  const others: DashboardSection = { climate: [], tiles: tiles('') }
+  const others: DashboardSection = { key: 'others', climate: [], tiles: tiles('') }
+  const sections = areas.map(section)
+  // The Tile of t placed in an own Section, if it shows anything: a Device's shows every one of
+  // its Functions that has a Tile, whatever their Areas.
+  const placed = (t: PlacedTile): DashboardTile[] => {
+    if (t.automation !== undefined) return manual.filter((a) => a.id === t.automation).map((a) => ({ key: a.id, label: a.name, kind: 'manual', automation: a }))
+    const p = parseTarget(t.target)
+    const tile = (label: string, tt: TargetTile): DashboardTile[] => [{ key: t.target, label, kind: 'target', ...tt }]
+    if (p?.kind === 'device' && !p.function) {
+      return devices
+        .filter((d) => d.id === p.id)
+        .flatMap((d) => {
+          const fns = (d.functions ?? []).filter((fn) => tileCaps(fn).length > 0 || fn.kind === 'camera')
+          return fns.length ? tile(d.name, deviceTile(d, fns)) : []
+        })
+    }
+    if (p?.kind === 'aggregate') return aggregates.filter((a) => a.id === p.id).flatMap((a) => tile(a.name, aggregateTile(a)))
+    if (p?.kind === 'flag') return flags.filter((f) => f.id === p.id).flatMap((f) => tile(f.name, flagTile(f)))
+    return []
+  }
+  // A custom Dashboard's Section: an Area's as the built-in Dashboard shows it, or an own one, not
+  // shown while none of its Tiles shows anything.
+  const customSection = (s: CustomSection): DashboardSection[] => {
+    if (s.area !== undefined) return sections.filter((a) => a.area!.id === s.area)
+    const own = (s.tiles ?? []).flatMap((t) => placed(t).map((d) => [d, t] as const))
+    if (!own.length) return []
+    const tiles = arrange(
+      own.map(([d]) => d),
+      s.columns,
+      own.map(([d, t]) => at(d.key, t)),
+      naturalRows,
+    )
+    return [{ key: `own:${s.id}`, own: { name: s.name, icon: s.icon }, columns: s.columns, climate: [], tiles }]
+  }
   return {
     pills: flags.filter((f) => !f.area),
-    sections: [...areas.map(section), ...(others.tiles.length ? [others] : [])],
+    sections: [...sections, ...(others.tiles.length ? [others] : [])],
+    // The Sections of custom Dashboard d, each in its place on its Layout, in reading order. What
+    // no longer exists shows nothing, its cells left empty.
+    custom: (d: CustomDashboard) => {
+      const shown = d.sections.flatMap((s) => customSection(s).map((c) => [c, s] as const))
+      return arrange(
+        shown.map(([c]) => c),
+        d.columns,
+        shown.map(([c, s]) => at(c.key, s)),
+      )
+    },
   }
+}
+
+// The place of occupant key at spot, on a Layout.
+const at = (key: string, { col, row, width, height }: Spot) => ({ key, col, row, width, height })
+
+// The custom Dashboard hash opens, #dashboard/<id>, if it is one of dashboards; undefined for the
+// built-in one, which any other address opens.
+export function shown(hash: string, dashboards: CustomDashboard[]) {
+  const id = hash.match(/^#dashboard\/(.+)$/)?.[1]
+  return dashboards.find((d) => d.id === id)
 }

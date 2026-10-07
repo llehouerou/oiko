@@ -37,6 +37,7 @@ import (
 	"github.com/llehouerou/oiko/internal/automation"
 	"github.com/llehouerou/oiko/internal/build"
 	"github.com/llehouerou/oiko/internal/camera"
+	"github.com/llehouerou/oiko/internal/dashboard"
 	"github.com/llehouerou/oiko/internal/history"
 	"github.com/llehouerou/oiko/internal/home"
 	"github.com/llehouerou/oiko/internal/release"
@@ -353,6 +354,10 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 	if secret, ok := acc.Setup(); ok {
 		log.Printf("oiko: no Admin yet: open %s/setup#%s to claim this Oiko", setupOrigin(listen, public), secret)
 	}
+	dash, err := dashboard.Open(dataDir, h)
+	if err != nil {
+		log.Fatalf("dashboards: %v", err)
+	}
 	hostLinks, err := listenHost(dataDir)
 	if err != nil {
 		log.Fatalf("oiko sign-in-link: %v", err)
@@ -361,7 +366,7 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 	built := build.Current()
 	releases := release.New(built)
 	go releases.Run(ctx)
-	srv := api.Server(listen, api.Handler(h, engine, hist, cams, acc, built, install, releases, types, public, web.Dist()))
+	srv := api.Server(listen, api.Handler(h, engine, hist, cams, acc, dash, built, install, releases, types, public, web.Dist()))
 	srv.BaseContext = func(net.Listener) context.Context { return ctx } // ends SSE streams on shutdown
 	served := make(chan struct{})
 	go func() {

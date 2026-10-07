@@ -8,6 +8,8 @@ import type {
   AutomationStatus,
   Availability,
   CommandState,
+  CustomDashboard,
+  Dashboards,
   Device,
   Flag,
   Ref,
@@ -31,6 +33,7 @@ let areas: Area[] = []
 let automations: AutomationStatus[] = []
 let bridges: Record<string, boolean> = {}
 let releases: ReleaseStatus[] = []
+let dashboards: CustomDashboard[] = [] // this Person's own
 let connected = false
 let now = Date.now()
 const values = new Map<string, Value>()
@@ -76,6 +79,7 @@ function apply(msg: Snapshot | Update) {
       automations = msg.automations
       bridges = msg.bridges
       releases = msg.releases
+      dashboards = msg.dashboards ?? []
       values.clear()
       for (const { ref, value } of msg.values) values.set(refKey(ref), value)
       events.clear()
@@ -178,10 +182,14 @@ export function connect() {
       if (source.readyState === EventSource.CLOSED) retry = setTimeout(open, 3000)
     }
     source.onmessage = (e) => {
-      const msg: Snapshot | Update | Releases = JSON.parse(e.data)
+      const msg: Snapshot | Update | Releases | Dashboards = JSON.parse(e.data)
       if (msg.kind === 'releases') {
         releases = msg.releases
         return notify('releases')
+      }
+      if (msg.kind === 'dashboards') {
+        dashboards = msg.dashboards
+        return notify('dashboards')
       }
       apply(msg)
       followers.forEach((f) => f(msg))
@@ -341,6 +349,9 @@ export const useBridges = () => useSyncExternalStore(subscribeTo('connection'), 
 
 // What the module proxy lists of each module built into Oiko, Oiko's first.
 export const useReleases = () => useSyncExternalStore(subscribeTo('releases'), () => releases)
+
+// This Person's own custom Dashboards.
+export const useDashboards = () => useSyncExternalStore(subscribeTo('dashboards'), () => dashboards)
 
 // 'disconnected', 'online', or the names of the Bridges offline.
 export const useConnection = () =>

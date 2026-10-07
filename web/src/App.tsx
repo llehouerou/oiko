@@ -50,6 +50,6 @@ export function App() {
     case 'history':
       return <Timeline />
     case 'home':
-      return <Home />
+      return <Home hash={page} />
   }
 }

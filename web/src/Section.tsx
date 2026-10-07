@@ -13,19 +13,32 @@ import { ManualTile, ReadingText, readingIcons, StateText, Tile } from './Tiles'
 const minColumn = 224
 const columnGap = 12
 
+// The width of the element given the ref it answers, followed as it changes.
+export function useWidth() {
+  const [width, setWidth] = useState(0)
+  const measure = (el: HTMLElement | null) => {
+    if (!el) return
+    const o = new ResizeObserver(([e]) => setWidth(e!.contentRect.width))
+    o.observe(el)
+    return () => o.disconnect()
+  }
+  return [width, measure] as const
+}
+
 // What arranging the dashboard hands an Area's section: how to save its Layout.
 export interface Arranging {
   onLayout: (columns: number, layout: Arranged[]) => void
 }
 
-// A Section of a Dashboard, drawn from what dashboard.ts derived of it: an Area's, or Others, that
-// of the tiles without one. An Area's header is a banner: its Icon if it has one, then its name
-// large, its status (climate, presence, doors) on a line under it, its light bar on the right,
-// which a folded section keeps. The bar has no chart: its ⋯ sheet has its History. An Area's tiles
-// sit where its Layout places them, gaps included, while its columns fit; narrower, they come one
-// after another, as Others' do. The tiles it hides wait behind a link; a tap on its name folds it
-// all away. While arranging, an Area's section is open, its header drags it among the others, and
-// its grid shows every cell, hidden tiles dimmed in theirs.
+// A Section of a Dashboard, drawn from what dashboard.ts derived of it: an Area's, one of a custom
+// Dashboard's own, or Others, that of the tiles without an Area. An Area's header is a banner: its
+// Icon if it has one, then its name large, its status (climate, presence, doors) on a line under
+// it, its light bar on the right, which a folded section keeps. The bar has no chart: its ⋯ sheet
+// has its History. An own Section's header has its Icon and Name, and nothing without a Name. A
+// Section's tiles sit where its Layout places them, gaps included, while its columns fit;
+// narrower, they come one after another, as Others' do. The tiles an Area hides wait behind a
+// link; a tap on a name folds it all away. While arranging, an Area's section is open, its header
+// drags it among the others, and its grid shows every cell, hidden tiles dimmed in theirs.
 export function Section({
   section,
   title,
@@ -61,16 +74,10 @@ export function Section({
   )
   const bar = section.bar && <Tile tile={section.bar} compact onOpen={opener(section.bar)} />
   const [showHidden, setShowHidden] = useState(false)
-  const [width, setWidth] = useState(0)
-  const measure = (el: HTMLDivElement | null) => {
-    if (!el) return
-    const o = new ResizeObserver(([e]) => setWidth(e!.contentRect.width))
-    o.observe(el)
-    return () => o.disconnect()
-  }
+  const [width, measure] = useWidth()
   const area = section.area?.id ?? ''
-  const drag = useDraggable({ id: `area:${area}`, data: { type: 'area', area }, disabled: !arranging })
-  const drop = useDroppable({ id: `area:${area}`, data: { type: 'area', area }, disabled: !arranging })
+  const drag = useDraggable({ id: section.key, data: { type: 'area', area }, disabled: !arranging })
+  const drop = useDroppable({ id: section.key, data: { type: 'area', area }, disabled: !arranging })
   const shown = tiles.filter((t) => !hidden.includes(t.key))
   const folded = tiles.length - shown.length
   const visible = showHidden ? tiles : shown
@@ -119,7 +126,7 @@ export function Section({
                   aria-expanded={open}
                   className="flex min-w-0 items-center gap-2 enabled:hover:text-amber-200"
                 >
-                  <AreaIcon icon={section.area?.icon} className="size-6 shrink-0" />
+                  <AreaIcon icon={section.area?.icon ?? section.own?.icon} className="size-6 shrink-0" />
                   <h2 className="truncate text-xl font-semibold tracking-tight">{title}</h2>
                 </button>
                 {onSettings && !arranging && (
@@ -178,7 +185,7 @@ export function Section({
           ) : visible.length > 0 ? (
             <div className="grid grid-flow-dense grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] items-start gap-3">{visible.map((t) => t.node)}</div>
           ) : (
-            !bar && !folded && <p className="text-sm text-neutral-600">Nothing here yet: add devices from its settings.</p>
+            section.area && !bar && !folded && <p className="text-sm text-neutral-600">Nothing here yet: add devices from its settings.</p>
           )}
           {folded > 0 && !arranging && (
             <button onClick={() => setShowHidden(!showHidden)} className="text-xs text-neutral-500 hover:text-white">

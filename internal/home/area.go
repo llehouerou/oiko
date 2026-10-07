@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"uuid"
 )
@@ -87,19 +88,61 @@ type Area struct {
 	Layout           []Placement `json:"layout,omitempty"`
 }
 
-// Placement is where a tile sits in its Area's grid: its first cell, from 0,
-// and how many columns and rows it spans (0 rows is one). A row is as tall
-// as its tallest tile.
-type Placement struct {
-	Tile   Target `json:"tile"`
-	Col    int    `json:"col"`
-	Row    int    `json:"row"`
-	Width  int    `json:"width"`
-	Height int    `json:"height,omitempty"`
+// Place is where an occupant sits on a Layout (ADR 0015, 0043): its first
+// cell, from 0, and how many columns and rows it spans (0 rows is one). A row
+// is as tall as its tallest occupant.
+type Place struct {
+	Col    int `json:"col"`
+	Row    int `json:"row"`
+	Width  int `json:"width"`
+	Height int `json:"height,omitempty"`
 }
 
-// maxColumns bounds an Area's grid: wider would not fit a screen.
+// Placement is where a tile sits in its Area's grid.
+type Placement struct {
+	Tile Target `json:"tile"`
+	Place
+}
+
+// maxColumns bounds a Layout: wider would not fit a screen.
 const maxColumns = 6
+
+// CheckLayout is the one check of a Layout (ADR 0015, 0043): 1 to 6 columns,
+// and each occupant, named by its key, inside them, apart from the others and
+// placed once. at is an occupant's key and place.
+func CheckLayout[T any](columns int, layout []T, at func(T) (string, Place)) error {
+	if columns < 1 || columns > maxColumns {
+		return fmt.Errorf("%w: a layout has 1 to %d columns", ErrInvalid, maxColumns)
+	}
+	taken := map[[2]int]bool{}
+	keys := map[string]bool{}
+	for _, o := range layout {
+		key, p := at(o)
+		if p.Col < 0 || p.Row < 0 || p.Width < 1 || p.Height < 0 || p.Col+p.Width > columns {
+			return fmt.Errorf("%w: %s lies outside the grid", ErrInvalid, key)
+		}
+		if keys[key] {
+			return fmt.Errorf("%w: %s is placed twice", ErrInvalid, key)
+		}
+		keys[key] = true
+		for r := p.Row; r < p.Row+max(p.Height, 1); r++ {
+			for c := p.Col; c < p.Col+p.Width; c++ {
+				if taken[[2]int{c, r}] {
+					return fmt.Errorf("%w: %s overlaps another", ErrInvalid, key)
+				}
+				taken[[2]int{c, r}] = true
+			}
+		}
+	}
+	return nil
+}
+
+// AreaAggregate is the Area whose Area Aggregate id is, whether it exists now
+// or not; false if it is no Area Aggregate's.
+func AreaAggregate(id AggregateID) (AreaID, bool) {
+	area, kind, _ := strings.Cut(string(id), ".")
+	return AreaID(area), area != "" && slices.ContainsFunc(areaKinds, func(k areaKind) bool { return k.kind == kind })
+}
 
 // CreateArea defines a new Area, last in the order, and returns its ID.
 func (h *Home) CreateArea(name, icon string) (AreaID, error) {
@@ -120,7 +163,7 @@ func validArea(name, icon string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return name, validIcon(icon)
+	return name, ValidIcon(icon)
 }
 
 // EditArea sets an Area's Name and Icon, "" for none.
@@ -161,25 +204,8 @@ func (h *Home) SetAreaDisplay(id AreaID, hidden []Target, hiddenAggregates []str
 // sit, each within the grid, apart from the others. A tile it does not place
 // is the dashboard's to place.
 func (h *Home) SetAreaLayout(id AreaID, columns int, layout []Placement) error {
-	if columns < 1 || columns > maxColumns {
-		return fmt.Errorf("%w: an area has 1 to %d columns", ErrInvalid, maxColumns)
-	}
-	taken := map[[2]int]bool{}
-	for i, p := range layout {
-		if p.Col < 0 || p.Row < 0 || p.Width < 1 || p.Height < 0 || p.Col+p.Width > columns {
-			return fmt.Errorf("%w: %s lies outside the grid", ErrInvalid, p.Tile)
-		}
-		if slices.ContainsFunc(layout[:i], func(q Placement) bool { return q.Tile == p.Tile }) {
-			return fmt.Errorf("%w: %s is placed twice", ErrInvalid, p.Tile)
-		}
-		for r := p.Row; r < p.Row+max(p.Height, 1); r++ {
-			for c := p.Col; c < p.Col+p.Width; c++ {
-				if taken[[2]int{c, r}] {
-					return fmt.Errorf("%w: %s overlaps another tile", ErrInvalid, p.Tile)
-				}
-				taken[[2]int{c, r}] = true
-			}
-		}
+	if err := CheckLayout(columns, layout, func(p Placement) (string, Place) { return p.Tile.Key(), p.Place }); err != nil {
+		return err
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()

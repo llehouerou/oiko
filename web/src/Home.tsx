@@ -1,24 +1,30 @@
 import { useEffect, useState } from 'react'
 import { mdiCheck } from '@mdi/js'
-import { useAggregates, useAreas, useAutomationStatuses, useDevices, useFlags } from './store'
-import { useAllows } from './access'
-import { dashboard } from './dashboard'
+import { useAggregates, useAreas, useAutomationStatuses, useDashboards, useDevices, useFlags } from './store'
+import { useAllows, useMe } from './access'
+import { dashboard, shown } from './dashboard'
 import { AppBar, ArrangeSetting, ChartsSetting, CreateButton } from './AppBar'
 import { ReleaseBanner } from './About'
 import { ChartsShown } from './MiniChart'
 import { Svg } from './icons'
-import { Dashboard } from './Dashboard'
+import { CustomDashboard, Dashboard } from './Dashboard'
+import { DashboardMenu } from './DashboardMenu'
 import { FlagPill } from './Tiles'
 import { AggregatePanel, AreaPanel, DevicePanel, FlagPanel } from './HomePanels'
 
-// The Home page: the built-in Dashboard, drawn from the Sections derived from the Areas, under the
-// Flags without an Area as pills, and the panels an Admin opens from it.
-export function Home() {
+// The Home page: the Dashboard hash opens, a Person's own at #dashboard/<id>, the built-in one
+// otherwise, and the panels an Admin opens from it. The built-in Dashboard is drawn from the
+// Sections derived from the Areas, under the Flags without an Area as pills. A Person switches
+// Dashboards from the menu that takes the Home tab's place.
+export function Home({ hash }: { hash: string }) {
   const devices = useDevices()
   const aggregates = useAggregates()
   const flags = useFlags()
   const areas = useAreas()
   const automations = useAutomationStatuses() // their Tiles: those with a Manual trigger show
+  const dashboards = useDashboards()
+  const identity = useMe()?.identity
+  const person = !!identity && 'person' in identity
   const member = useAllows('member') // reads the home's past: its tiles' charts
   const admin = useAllows('admin') // edits the home: its panels, arranging it, creating in it
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null)
@@ -45,25 +51,29 @@ export function Home() {
   const openAggregate = aggregates.find((a) => a.id === openId)
   const openFlag = flags.find((f) => f.id === openId)
   const openArea = areas.find((a) => a.id === openId)
-  const { pills, sections } = dashboard(devices, aggregates, flags, areas, automations)
-  // Whether an Admin is arranging the dashboard: the Areas' order and their Layouts.
+  const home = dashboard(devices, aggregates, flags, areas, automations)
+  const { pills, sections } = home
+  const current = shown(hash, dashboards) // undefined: the built-in Dashboard
+  // Whether an Admin is arranging the built-in Dashboard: the Areas' order and their Layouts.
   const [arranging, setArranging] = useState(false)
+  const arrange = arranging && !current
   return (
     <>
       <AppBar
         page="#"
+        home={person && <DashboardMenu current={current} dashboards={dashboards} />}
         settings={
           member && (
             <>
               <ChartsSetting charts={charts} onCharts={toggleCharts} />
-              {admin && <ArrangeSetting onArrange={() => setArranging(true)} />}
+              {admin && !current && <ArrangeSetting onArrange={() => setArranging(true)} />}
             </>
           )
         }
       />
       <main className="mx-auto max-w-[120rem] space-y-6 p-4 pb-24 lg:px-8">
         {admin && <ReleaseBanner />}
-        {pills.length > 0 && (
+        {!current && pills.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {pills.map((f) => (
               <FlagPill key={f.id} flag={f} onOpen={admin ? () => setOpenId(f.id) : undefined} />
@@ -71,10 +81,20 @@ export function Home() {
           </div>
         )}
         <ChartsShown value={charts}>
-          <Dashboard sections={sections} arranging={arranging} onOpen={admin ? setOpenId : undefined} onResult={setToast} />
+          {current ? (
+            <CustomDashboard
+              id={current.id}
+              columns={current.columns}
+              sections={home.custom(current)}
+              onOpen={admin ? setOpenId : undefined}
+              onResult={setToast}
+            />
+          ) : (
+            <Dashboard sections={sections} arranging={arrange} onOpen={admin ? setOpenId : undefined} onResult={setToast} />
+          )}
         </ChartsShown>
       </main>
-      {arranging ? (
+      {arrange ? (
         <button
           onClick={() => setArranging(false)}
           className="fixed right-6 bottom-6 z-10 flex h-14 items-center gap-2 rounded-2xl bg-amber-400 px-5 font-medium text-neutral-950 shadow-xl shadow-amber-500/20 hover:bg-amber-300"
