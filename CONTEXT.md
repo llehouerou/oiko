@@ -156,7 +156,7 @@ Aggregate Oiko derives for an Area and an aggregated kind (lights, occupancy, do
 _Avoid_: Room, Zone
 
 **Dashboard**:
-A view of the home in the web client: Sections, in an order. The built-in one, derived from the Areas, is always complete and edited by nobody, and sets its Sections in two columns, alternately; the others are custom, with a Name, and place their Sections on a Layout of their own: shared, which an Admin edits and every Person sees, or personal to one Person (a Guest's included), who alone sees and edits it. An Admin may assign the built-in one or a shared one to a Kiosk, which never edits it. A Dashboard only arranges what its viewer may see: it grants nothing, and what its viewer may not see is left out, its place left empty.
+A view of the home in the web client: Sections, in an order. The built-in one, derived from the Areas, is always complete and edited by nobody, and sets its Sections in two columns, alternately; the others are custom, with a Name, and place their Sections on a Layout of their own: shared, which an Admin edits and every Person sees, or personal to one Person (a Guest's included), who alone sees and edits it. An Admin may assign the built-in one or a shared one to a Kiosk, which never edits it. A Dashboard only arranges what its viewer may see: it grants nothing, and what its viewer may not see is left out, its place left empty. Each Person orders the Dashboards they see and may hide any but one; the first one not hidden is the one that opens.
 _Avoid_: view, page, board, panel; the dashboard (for the web client as a whole)
 
 **Section**:
@@ -189,7 +189,7 @@ A human known to Oiko: a member of the household or a temporary guest, under an 
 _Avoid_: User, account, member (as the term), occupant, resident
 
 **Kiosk**:
-A shared screen, such as a wall tablet, signed in to the web client as itself rather than as a Person. What is done from it is the Kiosk's doing, and it is revoked on its own. Holds at most one Session, which ends only when an Admin signs it out or after 30 days without use; it shows no sign-out and manages nothing, not even its Name.
+A shared screen, such as a wall tablet, signed in to the web client as itself rather than as a Person. What is done from it is the Kiosk's doing, and it is revoked on its own. Holds at most one Session, which ends only when an Admin signs it out or after 30 days without use; it shows no sign-out and manages nothing, not even its Name, and shows only the Dashboard an Admin assigned it, the built-in one until then.
 _Avoid_: panel, display, shared device, household account
 
 **Kiosk pairing**:
