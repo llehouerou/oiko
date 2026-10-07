@@ -156,7 +156,7 @@ Aggregate Oiko derives for an Area and an aggregated kind (lights, occupancy, do
 _Avoid_: Room, Zone
 
 **Dashboard**:
-A view of the home in the web client: an ordered list of Sections. The built-in one, derived from the Areas, is always complete and edited by nobody; the others are custom, with a Name: shared, which an Admin edits and every Person sees, or personal to one Person (a Guest's included), who alone sees and edits it. An Admin may assign the built-in one or a shared one to a Kiosk, which never edits it. A Dashboard only arranges what its viewer may see: it grants nothing, and what its viewer may not see is left out.
+A view of the home in the web client: Sections, in an order. The built-in one, derived from the Areas, is always complete and edited by nobody, and sets its Sections in two columns, alternately; the others are custom, with a Name, and place their Sections on a Layout of their own: shared, which an Admin edits and every Person sees, or personal to one Person (a Guest's included), who alone sees and edits it. An Admin may assign the built-in one or a shared one to a Kiosk, which never edits it. A Dashboard only arranges what its viewer may see: it grants nothing, and what its viewer may not see is left out, its place left empty.
 _Avoid_: view, page, board, panel; the dashboard (for the web client as a whole)
 
 **Section**:
@@ -171,7 +171,7 @@ A Device's, Aggregate's, Flag's or Automation's box on a Dashboard; an Automatio
 _Avoid_: card, widget, entity row
 
 **Layout**:
-Where an Area's Tiles sit on the built-in Dashboard: a grid of a few columns, and for each Tile placed, its cell and how many columns and rows it spans, with empty cells wherever they are left. A row is as tall as its tallest Tile; a Tile several rows tall fills them, leaving the cells beside it to others. Until it is set, a Tile is one row tall, a Tile of readings one per line of its cells. A Tile not placed takes the first free cells after the placed ones. A screen too narrow for the columns shows the Tiles one under another in reading order, without the empty cells. Tiles without an Area have no Layout.
+Where the Tiles of an Area or of an own Section sit, or where a custom Dashboard's Sections sit: a grid of a few columns, and for each Tile or Section placed, its cell and how many columns and rows it spans, with empty cells wherever they are left. A row is as tall as its tallest occupant; one several rows tall fills them, leaving the cells beside it to others. Until it is set, a Tile is one row tall, a Tile of readings one per line of its cells, and a Section one column wide and one row tall. One not placed takes the first free cells after the placed ones. A screen too narrow for the columns shows them one under another in reading order, without the empty cells. An Area's Layout is arranged on the built-in Dashboard and used by the Area's Section on every Dashboard. Others has no Layout.
 _Avoid_: arrangement, position, grid (as the term)
 
 **Name**:
