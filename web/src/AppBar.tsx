@@ -235,17 +235,18 @@ export function ChartsSetting({ charts, onCharts }: { charts: boolean; onCharts:
   )
 }
 
-// The dashboard's entry into arranging its Areas and their tiles; it closes the menu.
-export function ArrangeSetting({ onArrange }: { onArrange: () => void }) {
+// The Dashboard's entry into changing it: arranging the built-in one's Areas and their tiles, or
+// editing a custom one; it closes the menu.
+export function EditSetting({ label, onEdit }: { label: string; onEdit: () => void }) {
   return (
     <button
       popoverTarget="settings"
       popoverTargetAction="hide"
-      onClick={onArrange}
+      onClick={onEdit}
       className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-neutral-800"
     >
       <Svg path={mdiViewDashboardEditOutline} className="size-5 text-neutral-400" />
-      Arrange dashboard
+      {label}
     </button>
   )
 }

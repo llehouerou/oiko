@@ -262,7 +262,18 @@ export interface CustomDashboard {
 
 // An Area's Section, by its id, or one of the Dashboard's own: an optional Name and Icon, and
 // its Tiles on a Layout of its columns.
-export type CustomSection = Place & ({ area: string } | { area?: undefined; id: string; name?: string; icon?: string; columns: number; tiles?: PlacedTile[] })
+export type CustomSection = Place & (AreaSection | OwnSection)
+export interface AreaSection {
+  area: string
+}
+export interface OwnSection {
+  area?: undefined
+  id: string
+  name?: string
+  icon?: string
+  columns: number
+  tiles?: PlacedTile[]
+}
 
 // A Tile placed in an own Section: a Target's or an Automation's.
 export type PlacedTile = Place & ({ target: Target; automation?: undefined } | { target?: undefined; automation: string })

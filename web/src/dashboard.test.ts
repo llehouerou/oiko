@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import { dashboard, shown, type DashboardSection } from './dashboard'
-import type { Aggregate, Area, AutomationStatus, Capability, Device, Fn, Target } from './types'
+import type { Aggregate, Area, AutomationStatus, Capability, CustomDashboard, Device, Fn, Target } from './types'
 
 const on: Capability = { key: 'state', label: 'State', type: 'binary', access: { observable: true, settable: true, queryable: true }, category: 'primary' }
 const fn = (key: string, area?: string): Fn => ({ key, kind: key, area, capabilities: [on] })
@@ -173,7 +173,7 @@ test("a custom Dashboard's Area Sections are the built-in Dashboard's, its own S
   const bedtime: AutomationStatus = { id: 'bedtime', name: 'Bedtime', status: 'enabled', manualTriggers: [{ step: 'go', name: 'Go' }] }
   const night: AutomationStatus = { id: 'night', name: 'Night', status: 'enabled' } // no Manual trigger: no Tile
   const home = dashboard(devices, aggregates, flags, [area('living'), area('kitchen')], [bedtime, night])
-  const sections = home.custom({
+  const evening: CustomDashboard = {
     id: 'evening',
     owner: 'alice',
     name: 'Evening',
@@ -200,7 +200,8 @@ test("a custom Dashboard's Area Sections are the built-in Dashboard's, its own S
         ],
       },
     ],
-  })
+  }
+  const sections = home.custom(evening)
   // in reading order, each in its place; an Area that is gone, or an own Section with nothing to
   // show, shows nothing
   expect(sections.map((s) => `${s.key} ${s.place?.col}${s.place?.row}`)).toEqual(['own:favourites 00', 'area:kitchen 10'])
@@ -216,6 +217,8 @@ test("a custom Dashboard's Area Sections are the built-in Dashboard's, its own S
   // a Device's Tile shows each of its Functions that has one, whatever their Areas
   const relay = own!.tiles[0]!
   expect(relay.kind === 'target' && relay.fns.map((f) => f.target)).toEqual(['device:relay/l1', 'device:relay/l2'])
+  // while editing, an own Section with nothing to show is there to edit
+  expect(home.custom(evening, true).map((s) => `${s.key} ${s.tiles.length}`)).toEqual(['own:favourites 4', 'area:kitchen 1', 'own:empty 0'])
 })
 
 test("#dashboard/<id> opens one of the Person's own Dashboards; any other address the built-in one", () => {

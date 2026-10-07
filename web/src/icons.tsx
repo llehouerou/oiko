@@ -198,7 +198,7 @@ export function IconPicker({ target, icon, group, onError }: { target: Target; i
   )
 }
 
-// Picks an Area's Icon; the first choice, '', is none.
+// Picks an Area's Icon, or an own Section's; the first choice, '', is none.
 export function AreaIconPicker({ icon, onPick }: { icon: string; onPick: (icon: string) => void }) {
   return <IconGrid icons={[{ name: '', label: 'No icon', path: mdiCancel }, ...areaIcons]} current={icon} onPick={onPick} />
 }

@@ -155,11 +155,11 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
     return []
   }
   // A custom Dashboard's Section: an Area's as the built-in Dashboard shows it, or an own one, not
-  // shown while none of its Tiles shows anything.
-  const customSection = (s: CustomSection): DashboardSection[] => {
+  // shown while none of its Tiles shows anything, but while editing.
+  const customSection = (s: CustomSection, editing: boolean): DashboardSection[] => {
     if (s.area !== undefined) return sections.filter((a) => a.area!.id === s.area)
     const own = (s.tiles ?? []).flatMap((t) => placed(t).map((d) => [d, t] as const))
-    if (!own.length) return []
+    if (!own.length && !editing) return []
     const tiles = arrange(
       own.map(([d]) => d),
       s.columns,
@@ -173,8 +173,8 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
     sections: [...sections, ...(others.tiles.length ? [others] : [])],
     // The Sections of custom Dashboard d, each in its place on its Layout, in reading order. What
     // no longer exists shows nothing, its cells left empty.
-    custom: (d: CustomDashboard) => {
-      const shown = d.sections.flatMap((s) => customSection(s).map((c) => [c, s] as const))
+    custom: (d: CustomDashboard, editing = false) => {
+      const shown = d.sections.flatMap((s) => customSection(s, editing).map((c) => [c, s] as const))
       return arrange(
         shown.map(([c]) => c),
         d.columns,
