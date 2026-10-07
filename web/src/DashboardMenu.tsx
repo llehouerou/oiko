@@ -90,7 +90,7 @@ function NewDashboard({ onClose }: { onClose: () => void }) {
         {admin && (
           <select name="shared" aria-label="Who sees it" defaultValue="personal" className="w-full rounded bg-neutral-800 px-2 py-1">
             <option value="personal">Personal: you alone see it</option>
-            <option value="shared">Shared: everyone sees it, Admins edit it</option>
+            <option value="shared">Shared: every Person sees it, Admins edit it</option>
           </select>
         )}
         {error && <p className="text-red-400">{error}</p>}

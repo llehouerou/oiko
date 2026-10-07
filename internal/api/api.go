@@ -386,7 +386,8 @@ func updates(h *home.Home, acc *access.Store, dash *dashboard.Store, releases *r
 				if !ok || !send(func() bool {
 					refilter := false
 					return writeBatch(w, u, ch, id.Level, func(u home.Update) {
-						if u.Kind == home.AutomationsChanged {
+						// What a Guest sees of a Dashboard follows the Automations it may press.
+						if u.Kind == home.AutomationsChanged && !id.Level.Allows(access.Member) {
 							automations, refilter = u.Automations, true
 						}
 					}) && (!refilter || writeDashboards())
@@ -422,12 +423,12 @@ func updates(h *home.Home, acc *access.Store, dash *dashboard.Store, releases *r
 	}
 }
 
-// writeBatch writes u and every Update already queued behind it, each as
-// level l sees it, if it does, once seen with it; it reports false if the
-// stream must end.
-func writeBatch(w http.ResponseWriter, u home.Update, ch <-chan home.Update, l access.Level, seen func(home.Update)) bool {
+// writeBatch writes u and every Update already queued behind it, each handed
+// to observe first, then as level l sees it, if it does; it reports false if
+// the stream must end.
+func writeBatch(w http.ResponseWriter, u home.Update, ch <-chan home.Update, l access.Level, observe func(home.Update)) bool {
 	for {
-		seen(u)
+		observe(u)
 		if v, ok := updateFor(l, u); ok && writeEvent(w, v) != nil {
 			return false
 		}

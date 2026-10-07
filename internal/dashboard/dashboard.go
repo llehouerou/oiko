@@ -46,6 +46,12 @@ func (d Dashboard) EditableBy(by access.Identity) bool {
 	return d.Owner == by.ID
 }
 
+// seenBy reports whether Person p sees d: every Person a shared one, its
+// owner alone a personal one.
+func (d Dashboard) seenBy(p string) bool {
+	return d.Shared || d.Owner == p
+}
+
 // Section is an Area's, by its id, which shows what the built-in Dashboard
 // shows of it, or one of the Dashboard's own: an optional Name and Icon, and
 // its Tiles on a Layout of its columns. Its id names an own Section among the
@@ -139,7 +145,7 @@ func (s *Store) Dashboards(by access.Identity) ([]Dashboard, <-chan struct{}) {
 	defer s.mu.Unlock()
 	seen := []Dashboard{}
 	for _, d := range s.doc.Dashboards {
-		if d.Shared || d.Owner == by.ID {
+		if d.seenBy(by.ID) {
 			seen = append(seen, d)
 		}
 	}
@@ -243,7 +249,7 @@ func (s *Store) write(ds []Dashboard, changed Dashboard) error {
 	}
 	s.doc.Dashboards = ds
 	for p, ch := range s.changed {
-		if changed.Shared || p == changed.Owner {
+		if changed.seenBy(p) {
 			close(ch)
 			delete(s.changed, p)
 		}
