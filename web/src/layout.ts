@@ -1,16 +1,11 @@
 // A Layout: where its occupants sit in a grid of a few columns, gaps included (ADR 0015). An
 // occupant is anything with a key: a Tile in an Area's Layout, a Section in a Dashboard's (ADR 0043).
 
-// Where an occupant sits: its first cell, from 0, and how many columns and rows it spans. Its
-// height is always known once arranged, and auto while nobody has set it, so that it stays the
-// occupant's own and is never stored.
-export interface Place {
-  col: number
-  row: number
-  width: number
-  height?: number
-  auto?: boolean
-}
+import type { Placement } from './types'
+
+// Where an occupant sits, as a Placement says. Its height is always known once arranged, and auto
+// while nobody has set it, so that it stays the occupant's own and is never stored.
+export type Place = Omit<Placement, 'tile'> & { auto?: boolean }
 // An occupant in its place.
 export type Arranged = Place & { key: string }
 

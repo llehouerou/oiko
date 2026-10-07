@@ -13,14 +13,13 @@ import { ManualTile, ReadingText, readingIcons, StateText, Tile } from './Tiles'
 const minColumn = 224
 const columnGap = 12
 
-// What arranging the dashboard hands an Area's section: its id, and how to save its Layout.
+// What arranging the dashboard hands an Area's section: how to save its Layout.
 export interface Arranging {
-  area: string
   onLayout: (columns: number, layout: Arranged[]) => void
 }
 
-// A Section of a Dashboard, drawn from what dashboard.ts derived of it: an Area's, a card of its
-// own, or that of the tiles without one. An Area's header is a banner: its name large, its status
+// A Section of a Dashboard, drawn from what dashboard.ts derived of it: an Area's, or Others, that
+// of the tiles without one. An Area's header is a banner: its name large, its status
 // (climate, presence, doors) on a line under it, its light bar on the right, which a folded section
 // keeps. The bar has no chart: its ⋯ sheet has its History. An Area's tiles sit where its Layout
 // places them, gaps included, while its columns fit; narrower, they come one after another, as
@@ -69,7 +68,7 @@ export function Section({
     o.observe(el)
     return () => o.disconnect()
   }
-  const area = arranging?.area ?? ''
+  const area = section.area?.id ?? ''
   const drag = useDraggable({ id: `area:${area}`, data: { type: 'area', area }, disabled: !arranging })
   const drop = useDroppable({ id: `area:${area}`, data: { type: 'area', area }, disabled: !arranging })
   const shown = tiles.filter((t) => !hidden.includes(t.key))

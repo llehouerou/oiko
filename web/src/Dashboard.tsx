@@ -21,7 +21,7 @@ export function Dashboard({
   onOpen?: (id: string, back?: () => void) => void // an Admin's: an Area's, a Device's, an Aggregate's or a Flag's panel
   onResult: (r: { text: string; error?: boolean }) => void
 }) {
-  const areas = sections.flatMap((s) => (s.area ? [s.area.id] : []))
+  const areaIds = sections.flatMap((s) => (s.area ? [s.area.id] : []))
   // The sections this browser folds, by Area id ('' for Others).
   const [collapsed, setCollapsed] = useState<string[]>(() => JSON.parse(localStorage.getItem('oiko.collapsed') ?? '[]'))
   const collapse = (id: string) => {
@@ -40,8 +40,8 @@ export function Dashboard({
     if (!from || !to) return
     if (from.type === 'area') {
       if (to.area === from.area) return
-      const at = areas.indexOf(to.area)
-      const ids = areas.filter((id) => id !== from.area)
+      const at = areaIds.indexOf(to.area)
+      const ids = areaIds.filter((id) => id !== from.area)
       ids.splice(at, 0, from.area)
       return report(await edit('PUT', 'areas', { order: ids }))
     }
@@ -60,12 +60,12 @@ export function Dashboard({
                   <div key={id} style={{ order: i }}>
                     <Section
                       section={s}
-                      title={s.area?.name ?? (areas.length ? 'Others' : undefined)}
+                      title={s.area?.name ?? (areaIds.length ? 'Others' : undefined)}
                       collapsed={collapsed.includes(id)}
                       onCollapse={() => collapse(id)}
                       onOpen={onOpen}
                       onResult={onResult}
-                      arranging={arranging && s.area ? { area: id, onLayout: (columns, layout) => saveLayout(id, columns, layout) } : undefined}
+                      arranging={arranging && s.area ? { onLayout: (columns, layout) => saveLayout(id, columns, layout) } : undefined}
                     />
                   </div>
                 )
