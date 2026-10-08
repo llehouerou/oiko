@@ -1,3 +1,5 @@
 # Made-up matches scripts/check-public lets pass, one per line.
 # A LAN address the access tests reach Oiko on.
 192.168.1.2
+# The project mailbox for conduct reports (CODE_OF_CONDUCT.md); it names no person.
+conduct@oikohome.org
