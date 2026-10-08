@@ -102,23 +102,26 @@ func TestHeapPerLoadedAutomation(t *testing.T) {
 }
 
 func TestReportCostDoesNotDependOnLoadedAutomations(t *testing.T) {
-	cost := func(n int) (allocs float64, best time.Duration) {
-		e, q := loaded(t, n)
-		allocs = testing.AllocsPerRun(100, func() { report(e, q) })
-		best = time.Hour
-		for range 5 {
-			start := time.Now()
-			for range 2000 {
-				report(e, q)
-			}
-			best = min(best, time.Since(start))
-		}
-		return allocs, best
-	}
-	allocs0, time0 := cost(0)
-	allocs500, time500 := cost(500)
+	e0, q0 := loaded(t, 0)
+	e500, q500 := loaded(t, 500)
+	allocs0 := testing.AllocsPerRun(100, func() { report(e0, q0) })
+	allocs500 := testing.AllocsPerRun(100, func() { report(e500, q500) })
 	if allocs0 != allocs500 {
 		t.Errorf("allocations per report: %v with 0 Automations, %v with 500", allocs0, allocs500)
+	}
+	// Rounds alternate between the two engines, so a busy machine (other test
+	// packages run alongside) slows both alike, and each keeps its best round.
+	time0, time500 := time.Hour, time.Hour
+	round := func(e *Engine, q *quietHome) time.Duration {
+		start := time.Now()
+		for range 2000 {
+			report(e, q)
+		}
+		return time.Since(start)
+	}
+	for range 10 {
+		time0 = min(time0, round(e0, q0))
+		time500 = min(time500, round(e500, q500))
 	}
 	// Generous: the point is the absence of a per-Automation factor.
 	if time500 > 2*time0 {
