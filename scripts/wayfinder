@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# The wayfinding operations of docs/agents/issue-tracker.md that take more than
+# one gh call.
+#
+#   scripts/wayfinder publish-research <findings.md> <branch>
+#       Commits the findings to docs/research/ on a new branch from origin/main,
+#       pushes it (never merged, no pull request) and prints the file's URL.
+#   scripts/wayfinder resolve <ticket> <comment.md> <gist>
+#       Posts the resolution comment, closes the ticket and appends
+#       "- [<title>](<url>): <gist>" to its map's Decisions so far.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
+
+publish_research() {
+	local file=$1 branch=$2 name title wt
+	name=$(basename "$file")
+	title=$(sed -n '1s/^# //p' "$file")
+	wt=$(mktemp -d)
+	git fetch -q origin main
+	git worktree add -q -b "$branch" "$wt" origin/main
+	install -m 644 "$file" "$wt/docs/research/$name"
+	git -C "$wt" add "docs/research/$name"
+	# The hooks run here too: scripts/check-public sees the findings.
+	git -C "$wt" commit -qm "Research: ${title:-$name}"
+	git -C "$wt" push -q -u origin "$branch"
+	git worktree remove "$wt"
+	echo "https://github.com/$repo/blob/$branch/docs/research/$name"
+}
+
+resolve() {
+	local ticket=$1 comment=$2 gist=$3 map title url body
+	map=$(gh api "repos/$repo/issues/$ticket/parent" --jq .number)
+	title=$(gh issue view "$ticket" --json title --jq .title)
+	url=$(gh issue view "$ticket" --json url --jq .url)
+	gh issue comment "$ticket" --body-file "$comment" >/dev/null
+	gh issue close "$ticket" >/dev/null
+	# ponytail: GitHub has no compare-and-swap on a body; reading it just before
+	# writing keeps the window with a concurrent session to a second.
+	body=$(gh issue view "$map" --json body --jq .body)
+	body=$(LINE="- [$title]($url): $gist" awk '
+		/^$/ { blanks++; next }
+		/^## Not yet specified/ && !done { print ENVIRON["LINE"]; done = 1 }
+		{ for (; blanks > 0; blanks--) print ""; print }
+		END { if (!done) exit 1 }
+	' <<<"$body") || { echo "wayfinder: no \"## Not yet specified\" heading in #$map" >&2; exit 1; }
+	gh issue edit "$map" --body "$body" >/dev/null
+	echo "resolved #$ticket into #$map"
+}
+
+usage() {
+	sed -n '5,10s/^# //p' "$0" >&2
+	exit 2
+}
+
+# Called on their own, not in a && list, so that set -e holds inside them.
+case ${1:-} in
+publish-research)
+	(($# == 3)) || usage
+	publish_research "$2" "$3"
+	;;
+resolve)
+	(($# == 4)) || usage
+	resolve "$2" "$3" "$4"
+	;;
+*) usage ;;
+esac

@@ -59,6 +59,10 @@
           ];
           # The browser test drives it (web/e2e).
           CHROMIUM = pkgs.lib.getExe pkgs.chromium;
+          # Versioned hooks: scripts/check-public before each commit.
+          shellHook = ''
+            git config core.hooksPath .githooks
+          '';
         };
       });
     };

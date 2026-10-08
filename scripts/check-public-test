@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# scripts/check-public flags each line of bad and none of good.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+d=$(mktemp -d)
+trap 'rm -r "$d"' EXIT
+
+cat >"$d/bad" <<'EOF'
+/home/bob/oiko
+/Users/bob/oiko
+10.1.2.3
+172.20.0.5
+192.168.4.20
+aa:bb:cc:dd:ee:ff
+0x00158d00a1b2c3d4
+bob@gmail.com
+EOF
+cat >"$d/good" <<'EOF'
+0x00158d0000000004 0x0017880100000001
+alice@example.org bob@oiko.test
+192.168.1.2 8.8.8.8 /var/lib/oiko
+github.com/llehouerou/oiko/cmd/oiko-build@v0.3.0
+EOF
+
+if out=$(scripts/check-public "$d/good"); then :; else
+	echo "check-public-test: flagged good data:"
+	echo "$out"
+	exit 1
+fi
+out=$(scripts/check-public "$d/bad" || true)
+want=$(wc -l <"$d/bad")
+got=$(grep -c "^$d/bad:" <<<"$out" || true)
+if ((got != want)); then
+	echo "check-public-test: flagged $got of $want bad lines:"
+	echo "$out"
+	exit 1
+fi

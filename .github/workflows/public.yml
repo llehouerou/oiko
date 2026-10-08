@@ -1,0 +1,15 @@
+name: Public
+
+# Every branch, those never opened as a pull request included (research/*):
+# pushing one publishes it.
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: scripts/check-public-test
+      - run: scripts/check-public
