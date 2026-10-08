@@ -5,7 +5,8 @@ import type { Aggregate } from './types'
 import { aggregateTarget, parseTarget } from './targets'
 import { AreaIcon, Svg } from './icons'
 import type { DashboardSection, DashboardTile, TargetTile } from './dashboard'
-import { maxColumns, placements, reflow, type Arranged } from './layout'
+import { maxColumns } from './layout'
+import { tileLayout, type SavedLayout } from './tileLayout'
 import { ArrangedGrid, cells, Stepper, type TileNode } from './Arrange'
 import { ManualTile, ReadingText, readingIcons, StateText, Tile } from './Tiles'
 
@@ -27,7 +28,7 @@ export function useWidth() {
 
 // What arranging the dashboard hands an Area's section: how to save its Layout.
 export interface Arranging {
-  onLayout: (columns: number, layout: Arranged[]) => void
+  onLayout: (saved: SavedLayout) => void
 }
 
 // A Section of a Dashboard, drawn from what dashboard.ts derived of it: an Area's, one of a custom
@@ -80,7 +81,6 @@ export function Section({
   const visible = showHidden ? tiles : shown
   const open = !collapsed || !title || !!arranging
   const grid = columns !== undefined && (keepLayout || width >= columns * minColumn + (columns - 1) * columnGap)
-  const layout = placements(tiles)
   return (
     <section
       ref={(el) => (drag.setNodeRef(el), drop.setNodeRef(el))}
@@ -141,7 +141,7 @@ export function Section({
                     value={columns}
                     max={maxColumns}
                     label="columns"
-                    onChange={(n) => arranging.onLayout(n, reflow(layout, n))}
+                    onChange={(n) => arranging.onLayout(tileLayout(section).columns(n))}
                     className="ml-auto text-sm"
                   />
                 )}
@@ -155,7 +155,7 @@ export function Section({
       {open && (
         <div ref={measure} className="space-y-3 p-3 empty:hidden">
           {arranging && columns ? (
-            <ArrangedGrid grid={section.key} columns={columns} tiles={tiles} hidden={hidden} onLayout={arranging.onLayout} />
+            <ArrangedGrid section={section} tiles={tiles} hidden={hidden} onLayout={arranging.onLayout} />
           ) : visible.length > 0 && grid ? (
             <div className="grid auto-rows-[minmax(3.5rem,auto)] items-start gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
               {visible.map((t) => (

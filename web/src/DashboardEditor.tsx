@@ -9,7 +9,6 @@ import { deleting, sectionKey, tileKey, unseenSection, type DashboardSection, ty
 import { Switch } from './controls'
 import {
   addSection,
-  addTile,
   layTiles,
   moveSection,
   nameSection,
@@ -20,7 +19,8 @@ import {
   nameTile,
   type SectionContent,
 } from './editDashboard'
-import { defaultColumns, maxColumns, move, placements, reflow, type Arranged } from './layout'
+import { defaultColumns, maxColumns } from './layout'
+import { tileLayout } from './tileLayout'
 import { confirm } from './confirm'
 import { AreaIcon, AreaIconPicker, Svg } from './icons'
 import { Panel } from './Panel'
@@ -81,16 +81,11 @@ export function DashboardEditor({
     onDone()
     location.hash = '#'
   }
-  // own Section s's Tiles in columns, those it draws where layout places them.
-  const lay = (s: DashboardSection, columns: number, layout: Arranged[]) => save(layTiles(d, s.key, columns, layout))
-  // A dragged Section takes the cell it lands on; a dragged Tile, the cell of its Section it lands on.
+  // A dragged Section takes the cell it lands on; a dragged Tile is its Section's grid's.
   const dropped = ({ active, over }: DragEndEvent) => {
     const from = active.data.current
     const to = over?.data.current
-    if (!from || !to) return
-    if (from.type === 'section') return save(moveSection(d, from.key, to.col, to.row))
-    const s = sections.find((s) => s.key === from.grid)
-    if (s?.columns) lay(s, s.columns, move(placements(s.tiles), from.tile, to.col, to.row, s.columns))
+    if (from?.type === 'section' && to) save(moveSection(d, from.key, to.col, to.row))
   }
   // The keys of the Tiles own Section key holds, those showing nothing included.
   const held = (key: string) => d.sections.flatMap((s) => (s.area === undefined && sectionKey(s) === key ? (s.tiles ?? []).map(tileKey) : []))
@@ -145,15 +140,14 @@ export function DashboardEditor({
               onSize={(size) => save(resizeSection(d, s.key, size))}
               onRemove={() => save(removeSection(d, s.key))}
               onName={(change) => save(nameSection(d, s.key, change))}
-              onColumns={(n) => lay(s, n, reflow(placements(s.tiles), n))}
+              onColumns={(n) => save(layTiles(d, s.key, tileLayout(s).columns(n)))}
             >
               {s.own ? (
                 <div className="px-1">
                   <ArrangedGrid
-                    grid={s.key}
-                    columns={s.columns!}
+                    section={s}
                     tiles={tileNodes(s.tiles, onResult)}
-                    onLayout={(n, layout) => lay(s, n, layout)}
+                    onLayout={(saved) => save(layTiles(d, s.key, saved))}
                     onAdd={(col, row) => setAddingTile({ section: s.key, col, row })}
                     onRemove={(tile) => save(removeTile(d, s.key, tile))}
                     onName={(tile) => setNaming({ section: s.key, tile })}
@@ -179,7 +173,7 @@ export function DashboardEditor({
           choices={(query) => choices(query, held(tileSection.key))}
           onAdd={(c) => {
             setAddingTile(null)
-            save(addTile(d, tileSection.key, placements(tileSection.tiles), c.tile, addingTile.col, addingTile.row))
+            save(layTiles(d, tileSection.key, tileLayout(tileSection).added(tileKey(c.tile), addingTile.col, addingTile.row), c.tile))
           }}
           onClose={() => setAddingTile(null)}
         />

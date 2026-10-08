@@ -1,9 +1,10 @@
 // Edits to a custom Dashboard's document, each giving the whole Dashboard to save (ADR 0043): its
-// Sections, and an own Section's Tiles, moved, sized, added and removed on their Layouts with the
-// grid code of an Area's.
+// Sections moved, sized, added and removed on its Layout with the grid code of an Area's, and an
+// own Section's Tiles laid as tileLayout.ts arranges them, named and removed.
 
 import { sectionKey, tileKey } from './dashboard'
 import { move, resize, reflow, settle, stored, type Arranged, type Place } from './layout'
+import type { SavedLayout } from './tileLayout'
 import type { AreaSection, CustomDashboard, CustomSection, OwnSection, PlacedTile, TileRef } from './types'
 
 // What a Section is, apart from its place.
@@ -63,16 +64,10 @@ function laid(tiles: PlacedTile[], columns: number, layout: Arranged[]) {
   return placedAs(tiles, tileKey, settle([...layout, ...dormant], columns))
 }
 
-// d with own Section key's Tiles in columns, those it draws where layout places them.
-export const layTiles = (d: CustomDashboard, key: string, columns: number, layout: Arranged[]) =>
-  changeOwn(d, key, (s) => ({ ...s, columns, tiles: laid(s.tiles ?? [], columns, layout) }))
-
-// d with tile added to own Section key at col and row, beside those it draws where layout places them.
-export const addTile = (d: CustomDashboard, key: string, layout: Arranged[], tile: TileRef, col: number, row: number) =>
-  changeOwn(d, key, (s) => ({
-    ...s,
-    tiles: laid([...(s.tiles ?? []), { ...tile, col, row, width: 1 }], s.columns, [...layout, { key: tileKey(tile), col, row, width: 1 }]),
-  }))
+// d with own Section key's Tiles laid as saved says, those it draws where it places them; added, if
+// given, joins them at its place there.
+export const layTiles = (d: CustomDashboard, key: string, { columns, layout }: SavedLayout, added?: TileRef) =>
+  changeOwn(d, key, (s) => ({ ...s, columns, tiles: laid([...(s.tiles ?? []), ...(added ? [{ ...added, col: 0, row: 0, width: 1 }] : [])], columns, layout) }))
 
 // d without Tile tile in own Section key.
 export const removeTile = (d: CustomDashboard, key: string, tile: string) =>

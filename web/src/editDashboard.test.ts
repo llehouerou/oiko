@@ -1,16 +1,5 @@
 import { expect, test } from 'vitest'
-import {
-  addSection,
-  addTile,
-  layTiles,
-  moveSection,
-  nameSection,
-  removeSection,
-  removeTile,
-  resizeSection,
-  setDashboardColumns,
-  nameTile,
-} from './editDashboard'
+import { addSection, layTiles, moveSection, nameSection, removeSection, removeTile, resizeSection, setDashboardColumns, nameTile } from './editDashboard'
 import { sectionKey, tileKey } from './dashboard'
 import type { CustomDashboard, OwnSection, PlacedTile } from './types'
 import type { Arranged, Place } from './layout'
@@ -91,13 +80,15 @@ test("an own Section's Name and Icon change; an Area's Section has none", () => 
   expect(nameSection(d, 'area:living', { name: 'Lounge' }).sections[1]).toEqual({ area: 'living', col: 1, row: 0, width: 1 })
 })
 
-const at = (key: string, col: number, row: number, more: Partial<Arranged> = {}): Arranged => ({ key, col, row, width: 1, height: 1, auto: true, ...more })
+// A Tile's place in a Layout as saved: its height only where someone set it.
+const at = (key: string, col: number, row: number, more: Partial<Arranged> = {}): Arranged => ({ key, col, row, width: 1, ...more })
 
-test("an own Section's Tiles are added, moved, sized and removed on its Layout as drawn", () => {
+test("an own Section's Tiles are laid as their saved Layout says, one added joining them, one removed leaving them", () => {
   let d = addSection(addSection(empty, own('fav', [{ target: 'flag:away', col: 0, row: 0, width: 1 }]), 0, 0), own('more'), 1, 0)
-  // a Device added beside the Flag, an Automation under it, a Tile's own height never stored
-  d = passes(addTile(d, 'own:fav', [at('flag:away', 0, 0)], { target: 'device:lamp' }, 1, 0))
-  d = passes(addTile(d, 'own:fav', [at('flag:away', 0, 0), at('device:lamp', 1, 0)], { automation: 'night' }, 0, 1))
+  d = passes(layTiles(d, 'own:fav', { columns: 2, layout: [at('flag:away', 0, 0), at('device:lamp', 1, 0)] }, { target: 'device:lamp' }))
+  d = passes(
+    layTiles(d, 'own:fav', { columns: 2, layout: [at('flag:away', 0, 0), at('device:lamp', 1, 0), at('automation:night', 0, 1)] }, { automation: 'night' }),
+  )
   expect(d.sections[0]).toEqual({
     ...own('fav'),
     ...{ col: 0, row: 0, width: 1 },
@@ -108,11 +99,11 @@ test("an own Section's Tiles are added, moved, sized and removed on its Layout a
     ],
   })
   // the same Tile in another Section of the Dashboard
-  d = passes(addTile(d, 'own:more', [], { target: 'device:lamp' }, 0, 0))
+  d = passes(layTiles(d, 'own:more', { columns: 2, layout: [at('device:lamp', 0, 0)] }, { target: 'device:lamp' }))
   expect(d.sections[1]).toMatchObject({ tiles: [{ target: 'device:lamp', col: 0, row: 0, width: 1 }] })
-  // the Flag removed, then moved, a height set, one column: the Layout says it all
+  // the Flag removed, then the others in one column, a height set
   d = passes(removeTile(d, 'own:fav', 'flag:away'))
-  d = passes(layTiles(d, 'own:fav', 1, [at('automation:night', 0, 0, { height: 2, auto: false }), at('device:lamp', 0, 2)]))
+  d = passes(layTiles(d, 'own:fav', { columns: 1, layout: [at('automation:night', 0, 0, { height: 2 }), at('device:lamp', 0, 2)] }))
   expect(d.sections[0]).toMatchObject({
     columns: 1,
     tiles: [
@@ -122,7 +113,7 @@ test("an own Section's Tiles are added, moved, sized and removed on its Layout a
   })
   // an Area's Section has no Tiles of its own
   const living = addSection(d, { area: 'living' }, 0, 1)
-  expect(addTile(living, 'area:living', [], { target: 'device:lamp' }, 0, 0)).toEqual(living)
+  expect(layTiles(living, 'area:living', { columns: 1, layout: [at('device:lamp', 0, 0)] }, { target: 'device:lamp' })).toEqual(living)
 })
 
 test("a Tile takes a name of its own and hides it, then its own name comes back, the other Tiles' as they were", () => {
@@ -147,14 +138,14 @@ test('a Tile placed that shows nothing stays placed, moving on when a Tile shown
     { target: 'device:lamp', col: 0, row: 0, width: 1 },
   ]
   let d = passes(addSection(empty, own('fav', tiles), 0, 0))
-  d = passes(layTiles(d, 'own:fav', 2, [at('device:lamp', 1, 0)]))
+  d = passes(layTiles(d, 'own:fav', { columns: 2, layout: [at('device:lamp', 1, 0)] }))
   expect(d.sections[0]).toMatchObject({
     tiles: [
       { target: 'device:lamp', col: 1, row: 0, width: 1 },
       { target: 'device:fan', col: 0, row: 1, width: 1 },
     ],
   })
-  d = passes(addTile(d, 'own:fav', [at('device:lamp', 1, 0)], { target: 'flag:away' }, 0, 1))
+  d = passes(layTiles(d, 'own:fav', { columns: 2, layout: [at('device:lamp', 1, 0), at('flag:away', 0, 1)] }, { target: 'flag:away' }))
   expect(d.sections[0]).toMatchObject({
     tiles: [
       { target: 'device:lamp', col: 1, row: 0, width: 1 },

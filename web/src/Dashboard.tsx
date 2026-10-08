@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { edit } from './store'
 import type { DashboardSection } from './dashboard'
-import { move, placements, stored, type Arranged } from './layout'
+import type { SavedLayout } from './tileLayout'
 import { cells, landing } from './Arrange'
 import { Section, useWidth } from './Section'
 
@@ -28,29 +28,24 @@ function useFolds(key: string) {
 // columns, alternately: the first on the left, the second on the right, and so on, whatever their
 // heights. Narrower, the columns melt away and the Sections come one under another, in their
 // order. While arranging, an Admin drags an Area's Section among the others, and a tile to a cell
-// of its Area.
+// of its Area, which its grid saves.
 export function Dashboard({ sections, arranging, onOpen, onResult }: { sections: DashboardSection[]; arranging: boolean } & Handlers) {
   const areaIds = sections.flatMap((s) => (s.area ? [s.area.id] : []))
   // The sections this browser folds, by Area id ('' for Others).
   const [collapsed, collapse] = useFolds('oiko.collapsed')
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
   const report = (err: string | null) => err && onResult({ text: err, error: true })
-  const saveLayout = async (area: string, columns: number, layout: Arranged[]) =>
-    report(await edit('PUT', `areas/${area}/layout`, { columns, layout: stored(layout).map(({ key, ...p }) => ({ tile: key, ...p })) }))
-  // A dragged Area takes the place of the one it lands on; a dragged tile, the cell it lands on.
+  const saveLayout = async (area: string, { columns, layout }: SavedLayout) =>
+    report(await edit('PUT', `areas/${area}/layout`, { columns, layout: layout.map(({ key, ...p }) => ({ tile: key, ...p })) }))
+  // A dragged Area takes the place of the one it lands on.
   const dropped = async ({ active, over }: DragEndEvent) => {
     const from = active.data.current
     const to = over?.data.current
-    if (!from || !to) return
-    if (from.type === 'area') {
-      if (to.area === from.area) return
-      const at = areaIds.indexOf(to.area)
-      const ids = areaIds.filter((id) => id !== from.area)
-      ids.splice(at, 0, from.area)
-      return report(await edit('PUT', 'areas', { order: ids }))
-    }
-    const s = sections.find((s) => s.key === from.grid)
-    if (s?.area && s.columns) saveLayout(s.area.id, s.columns, move(placements(s.tiles), from.tile, to.col, to.row, s.columns))
+    if (from?.type !== 'area' || !to || to.area === from.area) return
+    const at = areaIds.indexOf(to.area)
+    const ids = areaIds.filter((id) => id !== from.area)
+    ids.splice(at, 0, from.area)
+    report(await edit('PUT', 'areas', { order: ids }))
   }
   return (
     <DndContext sensors={sensors} collisionDetection={landing} onDragEnd={dropped}>
@@ -69,7 +64,7 @@ export function Dashboard({ sections, arranging, onOpen, onResult }: { sections:
                       onCollapse={() => collapse(id)}
                       onOpen={onOpen}
                       onResult={onResult}
-                      arranging={arranging && s.area ? { onLayout: (columns, layout) => saveLayout(id, columns, layout) } : undefined}
+                      arranging={arranging && s.area ? { onLayout: (saved) => saveLayout(id, saved) } : undefined}
                     />
                   </div>
                 )

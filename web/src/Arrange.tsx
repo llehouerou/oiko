@@ -3,10 +3,12 @@
 // steppers that count columns and rows.
 
 import type { CSSProperties, ReactNode } from 'react'
-import { pointerWithin, useDraggable, useDroppable, type CollisionDetection } from '@dnd-kit/core'
+import { pointerWithin, useDndMonitor, useDraggable, useDroppable, type CollisionDetection } from '@dnd-kit/core'
 import { mdiArrowExpandHorizontal, mdiArrowExpandVertical, mdiClose, mdiPencilOutline, mdiPlus } from '@mdi/js'
 import { Svg } from './icons'
-import { cellsOf, maxRows, placements, resize, rows, type Arranged, type Place } from './layout'
+import type { DashboardSection } from './dashboard'
+import { cellsOf, defaultColumns, maxRows, placements, rows, type Place } from './layout'
+import { tileLayout, type SavedLayout } from './tileLayout'
 
 // A tile of a Dashboard, drawn: key names it on its Layout: its Target, which an Area may hide, or
 // its Automation.
@@ -25,13 +27,12 @@ export const landing: CollisionDetection = (args) => {
   return pointerWithin({ ...args, droppableContainers: args.droppableContainers.filter((d) => fits(d.data.current)) })
 }
 
-// The tiles of grid while arranging, in a grid of columns: every cell, for a tile to land in, and
-// each tile under its veil, those hidden dimmed. Each change hands the whole Layout to onLayout; a
-// drop is the page's. In an own Section, a free cell has a + adding a tile there (onAdd), and a
-// tile a button removing it (onRemove) and one naming it (onName).
+// The tiles of section while arranging, drawn as tiles: every cell, for a tile to land in, and each
+// tile under its veil, those hidden dimmed. A tile dropped on a cell or sized hands the Layout to
+// save to onLayout. In an own Section, a free cell has a + adding a tile there (onAdd), and a tile a
+// button removing it (onRemove) and one naming it (onName).
 export function ArrangedGrid({
-  grid,
-  columns,
+  section,
   tiles,
   hidden = [],
   onLayout,
@@ -39,19 +40,27 @@ export function ArrangedGrid({
   onRemove,
   onName,
 }: {
-  grid: string
-  columns: number
+  section: DashboardSection
   tiles: TileNode[]
   hidden?: string[]
-  onLayout: (columns: number, layout: Arranged[]) => void
+  onLayout: (saved: SavedLayout) => void
   onAdd?: (col: number, row: number) => void
   onRemove?: (key: string) => void
   onName?: (key: string) => void
 }) {
-  const layout = placements(tiles)
+  const grid = section.key
+  const columns = section.columns ?? defaultColumns
+  const layout = tileLayout(section)
+  useDndMonitor({
+    onDragEnd: ({ active, over }) => {
+      const from = active.data.current
+      const to = over?.data.current
+      if (from?.type === 'tile' && from.grid === grid && to?.type === 'tile' && to.grid === grid) onLayout(layout.moved(from.tile, to.col, to.row))
+    },
+  })
   return (
     <div className="grid auto-rows-[minmax(3.5rem,auto)] items-start gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-      <Cells grid={grid} type="tile" columns={columns} layout={layout} what="a tile" onAdd={onAdd} />
+      <Cells grid={grid} type="tile" columns={columns} layout={placements(section.tiles)} what="a tile" onAdd={onAdd} />
       {tiles.map((t) => (
         <ArrangedTile
           key={t.key}
@@ -59,7 +68,7 @@ export function ArrangedGrid({
           tile={t}
           hidden={hidden.includes(t.key)}
           columns={columns}
-          onSize={(size) => onLayout(columns, resize(layout, t.key, size, columns))}
+          onSize={(size) => onLayout(layout.sized(t.key, size))}
           onRemove={onRemove && (() => onRemove(t.key))}
           onName={onName && (() => onName(t.key))}
         />
