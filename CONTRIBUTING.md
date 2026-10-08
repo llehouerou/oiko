@@ -58,11 +58,11 @@ make build                         # single ./oiko binary with the UI embedded
 go test -run=^$ -bench=. ./internal/zigbee2mqtt   # hot-path latency
 ```
 
-Without Nix, install Go 1.27, Node 24, Mosquitto, make and Chromium (its path in `CHROMIUM`), then
-run `git config core.hooksPath .githooks`. Nothing promises this path keeps working.
+Without Nix, install Go 1.27, Node 24, Mosquitto, make, Chromium (its path in `CHROMIUM`) and
+ImageMagick (for `make icons`), then run `git config core.hooksPath .githooks`. Nothing promises
+this path keeps working.
 
 CI runs an offline link check of every Markdown file (lychee), then `make test` in the dev shell.
-Whoever visibly changes the built-in Dashboard reruns `make screenshots` in the same pull request.
 
 After changing `web/package-lock.json` or `go.sum`, update `npmDepsHash` or `vendorHash` in
 `nix/package.nix` (`nix build` prints the new one).
