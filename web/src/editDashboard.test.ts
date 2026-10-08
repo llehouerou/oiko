@@ -91,7 +91,9 @@ test("an own Section's Tiles are laid as their saved Layout says, one added join
   )
   expect(d.sections[0]).toEqual({
     ...own('fav'),
-    ...{ col: 0, row: 0, width: 1 },
+    col: 0,
+    row: 0,
+    width: 1,
     tiles: [
       { target: 'flag:away', col: 0, row: 0, width: 1 },
       { target: 'device:lamp', col: 1, row: 0, width: 1 },

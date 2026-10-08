@@ -211,7 +211,8 @@ export function Timeline() {
           }}
           onMouseLeave={() => cursor.set(null)}
         >
-          <div className={`${row} sticky top-[65px] z-10 bg-neutral-950 py-1`}> {/* under the AppBar: h-16 + its 1px border */}
+          {/* under the AppBar: h-16 + its 1px border */}
+          <div className={`${row} sticky top-[65px] z-10 bg-neutral-950 py-1`}>
             <div className="hidden sm:block" />
             <div ref={axis}>
               <Ticks from={from} to={to} />

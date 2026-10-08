@@ -125,6 +125,7 @@ export function Sparkline({ data, from, to, stroke = color }: { data: uPlot.Alig
       resized.disconnect()
       u.destroy()
     }
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- made once: a Sparkline's stroke never changes while it shows
   }, [])
   useEffect(() => {
     range.current = [from, to]

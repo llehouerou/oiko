@@ -21,6 +21,7 @@ export function AuditLog({ party }: { party?: { kind: string; id: string } }) {
     setEntries((es) => (before ? [...(es ?? []), ...page] : page))
     setMore(page.length === 100)
   }
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- load reads nothing else that changes: a new query reloads
   useEffect(() => void load(), [query])
   if (error) return <p className="text-red-400">{error}</p>
   return (

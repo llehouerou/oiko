@@ -1,0 +1,14 @@
+{
+  // oxlint, not ESLint: typescript-eslint needs TypeScript's JS API, which TypeScript 7 has not.
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react"],
+  "categories": { "correctness": "error" },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "error",
+    // ponytail: the React Compiler's purity and setState-in-effect rules flag ten existing
+    // components (loading in an effect, Date during render); turn them on once those are reworked.
+    "react/purity": "off",
+    "react/set-state-in-effect": "off"
+  }
+}

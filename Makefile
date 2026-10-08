@@ -14,8 +14,10 @@ build: web/node_modules
 	go build -o oiko ./cmd/oiko
 
 test: web/node_modules
+	test -z "$$(gofmt -l .)" || { gofmt -l .; echo 'gofmt: the files above are not formatted'; exit 1; }
+	go vet ./...
 	go test -race ./...
-	cd web && npm test && npm run build && npm run test:browser
+	cd web && npm run lint && npm test && npm run build && npm run test:browser
 
 # The PNGs iOS and the web manifest want, from web/public/favicon.svg and web/icons/; they are
 # committed, made again after a change to one of those.

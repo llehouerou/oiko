@@ -7,7 +7,8 @@
     "build": "tsc --noEmit && vite build && touch dist/.gitkeep",
     "test": "LC_ALL=en_GB.UTF-8 vitest run",
     "test:browser": "node e2e/csp.js",
-    "format": "prettier --write src e2e"
+    "format": "prettier --write src e2e",
+    "lint": "prettier --check src e2e && oxlint --deny-warnings src e2e"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -27,6 +28,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "babel-plugin-react-compiler": "^1.0.0",
+    "oxlint": "1.87.0",
     "playwright-core": "^1.63.0",
     "prettier": "3.9.9",
     "tailwindcss": "^4.3.3",

@@ -628,7 +628,9 @@ function useLongPress(onLong?: () => void) {
     onPointerCancel: stop,
     onContextMenu: (e: MouseEvent<HTMLElement>) => e.preventDefault(),
     onClickCapture: (e: MouseEvent<HTMLElement>) => {
-      if (fired.current) (e.stopPropagation(), (fired.current = false))
+      if (!fired.current) return
+      e.stopPropagation()
+      fired.current = false
     },
   }
 }
