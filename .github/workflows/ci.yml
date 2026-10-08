@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Links between the repo's own Markdown files: offline, so the web never makes it fail.
+      - uses: lycheeverse/lychee-action@v2
+        with:
+          args: --offline --no-progress '**/*.md'
+      - uses: cachix/install-nix-action@v31
+      # The dev shell pins Go, Node and the Chromium the browser test drives.
+      - run: nix develop -c make test
