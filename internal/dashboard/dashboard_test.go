@@ -78,7 +78,8 @@ func opened(t *testing.T, dir string, h *home.Home) *Store {
 // list is what Person p's list holds, as "id" or "-id" when hidden.
 func list(s *Store, p access.Identity) []string {
 	var ids []string
-	for _, e := range s.List(p) {
+	g, _ := s.Given(p)
+	for _, e := range g.List {
 		if e.Hidden {
 			ids = append(ids, "-"+e.ID)
 		} else {
@@ -102,7 +103,7 @@ func TestAPersonCreatesSavesAndDeletesTheirOwn(t *testing.T) {
 	l := aHome(t)
 	dir := t.TempDir()
 	s := opened(t, dir, l.h)
-	mine, changed := s.Dashboards(alice)
+	mine, changed := dashboards(s, alice)
 	if len(mine) != 0 {
 		t.Fatalf("before any: %+v", mine)
 	}
@@ -121,7 +122,7 @@ func TestAPersonCreatesSavesAndDeletesTheirOwn(t *testing.T) {
 	default:
 		t.Error("creating one does not tell its owner")
 	}
-	mine, changed = s.Dashboards(alice)
+	mine, changed = dashboards(s, alice)
 	if len(mine) != 1 || mine[0].ID != id || mine[0].Owner != "alice" || mine[0].Name != "Evening" || mine[0].Columns != 2 {
 		t.Fatalf("created: %+v", mine)
 	}
@@ -129,7 +130,7 @@ func TestAPersonCreatesSavesAndDeletesTheirOwn(t *testing.T) {
 	if own.ID == "" || own.Name != "Favourites" || len(own.Tiles) != 2 || own.Tiles[0].Target != l.lamp || own.Tiles[0].Name != "Reading lamp" || !own.Tiles[0].HideName || own.Tiles[1].Name != "" || own.Tiles[1].HideName {
 		t.Errorf("its own Section: %+v", own)
 	}
-	if theirs, _ := s.Dashboards(bob); len(theirs) != 0 {
+	if theirs, _ := dashboards(s, bob); len(theirs) != 0 {
 		t.Errorf("Bob sees %+v", theirs)
 	}
 
@@ -144,7 +145,7 @@ func TestAPersonCreatesSavesAndDeletesTheirOwn(t *testing.T) {
 	default:
 		t.Error("saving one does not tell its owner")
 	}
-	if again, _ := opened(t, dir, l.h).Dashboards(alice); !reflect.DeepEqual(again, []Dashboard{saved}) {
+	if again, _ := dashboards(opened(t, dir, l.h), alice); !reflect.DeepEqual(again, []Dashboard{saved}) {
 		t.Errorf("after a restart:\n got %+v\nwant %+v", again, []Dashboard{saved})
 	}
 
@@ -161,7 +162,7 @@ func TestAPersonCreatesSavesAndDeletesTheirOwn(t *testing.T) {
 	if err := s.Delete(alice, id); err != nil {
 		t.Fatal(err)
 	}
-	if mine, _ := opened(t, dir, l.h).Dashboards(alice); len(mine) != 0 {
+	if mine, _ := dashboards(opened(t, dir, l.h), alice); len(mine) != 0 {
 		t.Errorf("after deleting it: %+v", mine)
 	}
 }
@@ -173,7 +174,7 @@ func TestAnAdminKeepsSharedDashboardsAndEveryPersonSeesThem(t *testing.T) {
 	told := map[string]<-chan struct{}{}
 	listen := func() {
 		for _, p := range []access.Identity{alice, bob, carol} {
-			_, told[p.Name] = s.Dashboards(p)
+			_, told[p.Name] = dashboards(s, p)
 		}
 	}
 	everyoneTold := func(what string) {
@@ -201,7 +202,7 @@ func TestAnAdminKeepsSharedDashboardsAndEveryPersonSeesThem(t *testing.T) {
 	}
 	everyoneTold("creating one")
 	for _, p := range []access.Identity{alice, bob, carol} {
-		if ds, _ := s.Dashboards(p); len(ds) != 1 || ds[0].ID != id || !ds[0].Shared || ds[0].Owner != "" {
+		if ds, _ := dashboards(s, p); len(ds) != 1 || ds[0].ID != id || !ds[0].Shared || ds[0].Owner != "" {
 			t.Errorf("%s sees %+v", p.Name, ds)
 		}
 	}
@@ -220,7 +221,7 @@ func TestAnAdminKeepsSharedDashboardsAndEveryPersonSeesThem(t *testing.T) {
 		t.Fatal(err)
 	}
 	everyoneTold("saving one")
-	if ds, _ := opened(t, dir, l.h).Dashboards(alice); len(ds) != 1 || !ds[0].Shared || ds[0].Owner != "" || ds[0].Name != "Night" {
+	if ds, _ := dashboards(opened(t, dir, l.h), alice); len(ds) != 1 || !ds[0].Shared || ds[0].Owner != "" || ds[0].Name != "Night" {
 		t.Errorf("after a restart: %+v", ds)
 	}
 
@@ -228,7 +229,7 @@ func TestAnAdminKeepsSharedDashboardsAndEveryPersonSeesThem(t *testing.T) {
 	if _, err := s.Create(alice, Dashboard{Name: "Alice's"}); err != nil {
 		t.Fatal(err)
 	}
-	if ds, _ := s.Dashboards(carol); len(ds) != 1 {
+	if ds, _ := dashboards(s, carol); len(ds) != 1 {
 		t.Errorf("Carol sees %+v", ds)
 	}
 	listen()
@@ -236,7 +237,7 @@ func TestAnAdminKeepsSharedDashboardsAndEveryPersonSeesThem(t *testing.T) {
 		t.Fatal(err)
 	}
 	everyoneTold("deleting one")
-	if ds, _ := s.Dashboards(bob); len(ds) != 0 {
+	if ds, _ := dashboards(s, bob); len(ds) != 0 {
 		t.Errorf("after deleting it: %+v", ds)
 	}
 }
@@ -316,7 +317,7 @@ func TestADeviceAndOneOfItsFunctionsAreTwoTiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mine, _ := opened(t, dir, l.h).Dashboards(alice) // kept across a restart
+	mine, _ := dashboards(opened(t, dir, l.h), alice) // kept across a restart
 	var kept []string
 	for _, tile := range mine[0].Sections[0].Tiles {
 		kept = append(kept, tile.Target.Key())
@@ -355,7 +356,7 @@ func TestWhatIsGoneIsDroppedOnASave(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mine, _ := s.Dashboards(alice)
+	mine, _ := dashboards(s, alice)
 	d := mine[0]
 	if d.ID != id || len(d.Sections) != 2 || d.Sections[0].Area != l.area {
 		t.Fatalf("its Sections: %+v", d.Sections)
@@ -399,8 +400,8 @@ func TestEachPersonOrdersTheDashboardsTheySee(t *testing.T) {
 
 	// A list saved is reconciled: what Alice does not see dropped, what she
 	// misses appended, shown; she alone is told.
-	_, aliceTold := s.Dashboards(alice)
-	_, carolTold := s.Dashboards(carol)
+	_, aliceTold := dashboards(s, alice)
+	_, carolTold := dashboards(s, carol)
 	if err := s.SaveList(alice, []Entry{{ID: shared}, {ID: carols}, {ID: "gone"}, {ID: Builtin, Hidden: true}, {ID: shared, Hidden: true}}); err != nil {
 		t.Fatal(err)
 	}
@@ -466,7 +467,7 @@ func TestARemovedPersonTakesTheirDashboardsAndListWithThem(t *testing.T) {
 	// names are the Names of the Dashboards p sees.
 	names := func(s *Store, p access.Identity) []string {
 		var ns []string
-		for _, d := range dashboardsOf(s.Dashboards(p)) {
+		for _, d := range dashboardsOf(dashboards(s, p)) {
 			ns = append(ns, d.Name)
 		}
 		return ns
@@ -498,8 +499,21 @@ func TestARemovedPersonTakesTheirDashboardsAndListWithThem(t *testing.T) {
 	}
 }
 
-// dashboardsOf is ds, without the channel Dashboards answers with them.
+// dashboardsOf is ds, without the channel dashboards answers with them.
 func dashboardsOf(ds []Dashboard, _ <-chan struct{}) []Dashboard { return ds }
+
+// dashboards are the Dashboards by is given, and the channel closed once what
+// it is given changes.
+func dashboards(s *Store, by access.Identity) ([]Dashboard, <-chan struct{}) {
+	g, changed := s.Given(by)
+	return g.Dashboards, changed
+}
+
+// assignments are the Kiosks' assignments by is given.
+func assignments(s *Store, by access.Identity) map[string]string {
+	g, _ := s.Given(by)
+	return g.Kiosks
+}
 
 // held is what Dashboard d holds: each Area's Section as "area:<id>", and
 // each own Section as "<id>:" then its Tiles' keys.
@@ -564,9 +578,9 @@ func TestWhatIsDeletedLeavesEveryDashboard(t *testing.T) {
 		t.Fatal(err)
 	}
 	mine := func(s *Store, id string) Dashboard {
-		for _, by := range []access.Identity{alice, bob} {
-			if i := slices.IndexFunc(dashboardsOf(s.Dashboards(by)), func(d Dashboard) bool { return d.ID == id }); i >= 0 {
-				return dashboardsOf(s.Dashboards(by))[i]
+		for _, by := range []access.Identity{bob, alice} { // an Admin: the shared one whole
+			if i := slices.IndexFunc(dashboardsOf(dashboards(s, by)), func(d Dashboard) bool { return d.ID == id }); i >= 0 {
+				return dashboardsOf(dashboards(s, by))[i]
 			}
 		}
 		t.Fatalf("no dashboard %s", id)
@@ -579,7 +593,7 @@ func TestWhatIsDeletedLeavesEveryDashboard(t *testing.T) {
 		t.Helper()
 		told := map[string]<-chan struct{}{}
 		for _, by := range []access.Identity{alice, bob, hall} {
-			_, told[by.Name] = s.Dashboards(by)
+			_, told[by.Name] = dashboards(s, by)
 		}
 		if err := del(); err != nil {
 			t.Fatalf("%s: %v", what, err)
@@ -633,9 +647,92 @@ var (
 	kitchen = access.Identity{Kind: access.KioskKind, ID: "kitchen", Name: "Kitchen tablet", Level: access.Member}
 )
 
+// Of a Dashboard it does not edit, a Guest is given the Tiles of the
+// Automations it presses only, without a trace (ADR 0041), an own Section left
+// empty kept; its own comes whole, so that saving it never erases what it no
+// longer sees. What it presses follows the Automations.
+func TestAGuestIsGivenWhatItPressesOfADashboardItDoesNotEdit(t *testing.T) {
+	l := aHome(t)
+	l.h.SetAutomationStatus([]home.AutomationStatus{
+		{ID: "leave", Name: "Leave", ManualTriggers: []home.ManualTrigger{{Step: "go", Name: "Go"}}},
+		{ID: "night", Name: "Night"},
+	})
+	s := opened(t, t.TempDir(), l.h)
+	doc := `{"name": "Evening", "sections": [
+		{"id": "mixed", "columns": 2, "col": 0, "row": 0, "width": 1, "tiles": [
+			{"target": "` + l.flag.Key() + `", "col": 0, "row": 0, "width": 1},
+			{"automation": "leave", "col": 1, "row": 0, "width": 1},
+			{"automation": "night", "col": 0, "row": 1, "width": 1}]},
+		{"id": "night only", "columns": 1, "col": 1, "row": 0, "width": 1, "tiles": [
+			{"automation": "night", "col": 0, "row": 0, "width": 1}]}]}`
+	shared, err := s.Create(bob, parse(t, strings.Replace(doc, `{"name"`, `{"shared": true, "name"`, 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	alices, err := s.Create(alice, parse(t, doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"hall", "kitchen"} {
+		if err := s.Assign(bob, k, shared); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// given is what by is given of Dashboard id.
+	given := func(by access.Identity, id string) []string {
+		t.Helper()
+		for _, d := range dashboardsOf(dashboards(s, by)) {
+			if d.ID == id {
+				return held(d)
+			}
+		}
+		t.Fatalf("%s is not given %s", by.Name, id)
+		return nil
+	}
+	whole := []string{"mixed:", l.flag.Key(), "leave", "night", "night only:", "night"}
+	pressed := []string{"mixed:", l.flag.Key(), "leave", "night only:"}
+	for _, c := range []struct {
+		by   access.Identity
+		want []string
+	}{{alice, pressed}, {hall, pressed}, {carol, whole}, {bob, whole}, {kitchen, whole}} {
+		if got := given(c.by, shared); !slices.Equal(got, c.want) {
+			t.Errorf("%s, the shared one: %v, want %v", c.by.Name, got, c.want)
+		}
+	}
+	if got := given(alice, alices); !slices.Equal(got, whole) {
+		t.Errorf("Alice's own: %v, want %v", got, whole)
+	}
+
+	// Night given a Manual trigger: every Guest is told, and given its Tiles.
+	_, aliceTold := dashboards(s, alice)
+	_, hallTold := dashboards(s, hall)
+	_, carolTold := dashboards(s, carol)
+	l.h.SetAutomationStatus([]home.AutomationStatus{
+		{ID: "leave", Name: "Leave", ManualTriggers: []home.ManualTrigger{{Step: "go", Name: "Go"}}},
+		{ID: "night", Name: "Night", ManualTriggers: []home.ManualTrigger{{Step: "go", Name: "Go"}}},
+	})
+	for name, ch := range map[string]<-chan struct{}{"Alice": aliceTold, "the hall": hallTold} {
+		select {
+		case <-ch:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s is not told", name)
+		}
+	}
+	select {
+	case <-carolTold:
+		t.Error("a Member is told")
+	default:
+	}
+	for _, by := range []access.Identity{alice, hall} {
+		if got := given(by, shared); !slices.Equal(got, whole) {
+			t.Errorf("%s, once Night has a Manual trigger: %v", by.Name, got)
+		}
+	}
+}
+
 // shows is the id of the Dashboard Kiosk k shows: its own, or the built-in one.
 func shows(s *Store, k access.Identity) string {
-	switch ds, _ := s.Dashboards(k); len(ds) {
+	switch ds, _ := dashboards(s, k); len(ds) {
 	case 0:
 		return Builtin
 	case 1:
@@ -658,7 +755,7 @@ func TestAnAdminAssignsAKioskItsDashboard(t *testing.T) {
 	}
 	want := func(s *Store, assigned map[string]string) {
 		t.Helper()
-		if got := s.Assignments(bob); !maps.Equal(got, assigned) {
+		if got := assignments(s, bob); !maps.Equal(got, assigned) {
 			t.Errorf("the assignments: %v, want %v", got, assigned)
 		}
 		for _, k := range []access.Identity{hall, kitchen} {
@@ -682,9 +779,9 @@ func TestAnAdminAssignsAKioskItsDashboard(t *testing.T) {
 	}
 
 	// Several Kiosks share one; the Kiosk and every Admin are told.
-	_, hallTold := s.Dashboards(hall)
-	_, bobTold := s.Dashboards(bob)
-	_, carolTold := s.Dashboards(carol)
+	_, hallTold := dashboards(s, hall)
+	_, bobTold := dashboards(s, bob)
+	_, carolTold := dashboards(s, carol)
 	for _, k := range kiosks {
 		if err := s.Assign(bob, k, evening); err != nil {
 			t.Fatal(err)
@@ -705,7 +802,7 @@ func TestAnAdminAssignsAKioskItsDashboard(t *testing.T) {
 	want(s, map[string]string{"hall": evening, "kitchen": evening})
 
 	// Its Dashboard edited reaches the Kiosk.
-	_, hallTold = s.Dashboards(hall)
+	_, hallTold = dashboards(s, hall)
 	if err := s.Save(bob, evening, Dashboard{Name: "Night"}); err != nil {
 		t.Fatal(err)
 	}
@@ -714,7 +811,7 @@ func TestAnAdminAssignsAKioskItsDashboard(t *testing.T) {
 	default:
 		t.Error("an edit does not tell the Kiosk")
 	}
-	if ds, _ := s.Dashboards(hall); ds[0].Name != "Night" {
+	if ds, _ := dashboards(s, hall); ds[0].Name != "Night" {
 		t.Errorf("the Hall tablet shows %+v", ds)
 	}
 
@@ -726,7 +823,7 @@ func TestAnAdminAssignsAKioskItsDashboard(t *testing.T) {
 	want(opened(t, dir, home.New(nil)), map[string]string{"kitchen": evening})
 
 	// Deleted, a shared Dashboard sends its Kiosks back to the built-in one.
-	_, kitchenTold := s.Dashboards(kitchen)
+	_, kitchenTold := dashboards(s, kitchen)
 	if err := s.Delete(bob, evening); err != nil {
 		t.Fatal(err)
 	}
@@ -740,7 +837,7 @@ func TestAnAdminAssignsAKioskItsDashboard(t *testing.T) {
 
 	// Only an Admin learns the assignments.
 	for _, by := range []access.Identity{alice, carol, hall} {
-		if got := s.Assignments(by); got != nil {
+		if got := assignments(s, by); got != nil {
 			t.Errorf("a %s %s gets %v", by.Level, by.Kind, got)
 		}
 	}
@@ -758,7 +855,7 @@ func TestARemovedKioskTakesItsAssignmentWithIt(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	_, bobTold := s.Dashboards(bob)
+	_, bobTold := dashboards(s, bob)
 	if err := s.RemoveKiosk("hall"); err != nil {
 		t.Fatal(err)
 	}
@@ -767,7 +864,7 @@ func TestARemovedKioskTakesItsAssignmentWithIt(t *testing.T) {
 	default:
 		t.Error("removing a Kiosk does not tell an Admin")
 	}
-	if got := opened(t, dir, home.New(nil)).Assignments(bob); !maps.Equal(got, map[string]string{"kitchen": evening}) {
+	if got := assignments(opened(t, dir, home.New(nil)), bob); !maps.Equal(got, map[string]string{"kitchen": evening}) {
 		t.Errorf("once the Hall tablet is removed: %v", got)
 	}
 
@@ -776,7 +873,7 @@ func TestARemovedKioskTakesItsAssignmentWithIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := again.Assignments(bob); len(got) != 0 {
+	if got := assignments(again, bob); len(got) != 0 {
 		t.Errorf("an assignment of a Kiosk no longer known: %v", got)
 	}
 }

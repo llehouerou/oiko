@@ -2,7 +2,8 @@
 // to 0046): shared ones, an Admin's to edit and every Person's to see, and
 // personal ones, their owner's alone; each Person's list of those they see;
 // and each Kiosk's assigned Dashboard. It alone checks what a Dashboard may
-// hold and who may save it; the HTTP layer only names who asks.
+// hold and who may save it, and decides what each identity is given of them
+// at its Access level; the HTTP layer only names who asks.
 package dashboard
 
 import (
@@ -102,27 +103,29 @@ type document struct {
 // Store holds the custom Dashboards, and follows the home to know what they
 // may refer to.
 type Store struct {
-	file    string
-	mu      sync.Mutex
-	doc     document
-	changed map[who]chan struct{} // closed when what an identity is given changes
+	file      string
+	mu        sync.Mutex
+	doc       document
+	pressable []string              // the Automations a Guest is given the Tiles of, by id
+	changed   map[who]chan struct{} // closed when what an identity is given changes
 
 	kmu   sync.Mutex // under Home's lock: never held while calling Home, nor taken before mu
 	known known
 }
 
-// who is an identity told of changes: a Person, an Admin apart, or a Kiosk.
-// A Person changing level is not followed: that ends their streams, which
-// listen again under their new level.
+// who is an identity told of changes: a Person, an Admin or a Guest apart,
+// or a Kiosk, a Guest apart. One changing level is not followed: that ends
+// their streams, which listen again under their new level.
 type who struct {
 	kind  access.Kind
 	id    string
 	admin bool
+	guest bool
 }
 
 // whoIs is by, as told of changes.
 func whoIs(by access.Identity) who {
-	return who{by.Kind, by.ID, admin(by)}
+	return who{by.Kind, by.ID, admin(by), !by.Level.Allows(access.Member)}
 }
 
 // admin reports whether by is an Admin Person: a Kiosk or a Program is none,
@@ -163,6 +166,7 @@ func Open(dir string, h *home.Home, persons, kiosks []string) (*Store, error) {
 	defer s.kmu.Unlock()
 	snap, _ := h.Follow(s.deliver)
 	s.known = known{snap.Devices, snap.Aggregates, snap.Flags, snap.Areas, snap.Automations}
+	s.pressable = pressable(snap.Automations)
 	return s, nil
 }
 
@@ -191,12 +195,17 @@ func (s *Store) deliver(u home.Update) {
 }
 
 // prune drops from every Dashboard what no longer exists (ADR 0045), and
-// tells whoever sees one it changed. Nothing is recorded; a failed write is
-// logged, and tried again on the next change of what exists.
+// tells whoever sees one it changed, and every Guest if the Automations it
+// presses changed. Nothing is recorded; a failed write is logged, and tried
+// again on the next change of what exists.
 func (s *Store) prune() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k := s.knownNow()
+	if p := pressable(k.automations); !slices.Equal(p, s.pressable) {
+		s.pressable = p
+		s.tell(func(w who) bool { return w.guest })
+	}
 	ds := slices.Clone(s.doc.Dashboards)
 	var changed []Dashboard
 	for i, d := range ds {
@@ -220,27 +229,40 @@ func (s *Store) knownNow() known {
 	return s.known
 }
 
-// Dashboards are those by sees, and a channel closed once they, by's list, or
-// for an Admin the Kiosks' assignments change: for a Person the shared ones
-// and their own, for a Kiosk the one it is assigned, none for the built-in
-// one. A Program has none, and is never told.
-func (s *Store) Dashboards(by access.Identity) ([]Dashboard, <-chan struct{}) {
+// Given is what an identity is given of the Dashboards (ADR 0041, 0044,
+// 0046), each as it sees it.
+type Given struct {
+	Dashboards []Dashboard       `json:"dashboards,omitzero"`      // none for a Program, [] for a Person without any or a Kiosk showing the built-in one
+	List       []Entry           `json:"list,omitzero"`            // a Person's
+	Kiosks     map[string]string `json:"kioskDashboards,omitzero"` // an Admin's
+}
+
+// Given is what by is given, and a channel closed once it changes: for a
+// Person the shared Dashboards and their own, and their list (ADR 0044); for
+// a Kiosk the one it is assigned, none for the built-in one; for an Admin
+// Person also each Kiosk's assignment, by Kiosk id, those showing the
+// built-in one left out. A Program is given nothing, and never told.
+func (s *Store) Given(by access.Identity) (Given, <-chan struct{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	seen := []Dashboard{}
+	g := Given{Dashboards: []Dashboard{}}
 	switch by.Kind {
 	case access.PersonKind:
 		for _, d := range s.doc.Dashboards {
 			if d.seenBy(by.ID) {
-				seen = append(seen, d)
+				g.Dashboards = append(g.Dashboards, s.seenAt(by, d))
 			}
+		}
+		g.List, _ = reconciled(s.doc.Dashboards, by.ID, s.doc.Lists[by.ID])
+		if admin(by) {
+			g.Kiosks = maps.Clone(s.doc.Kiosks)
 		}
 	case access.KioskKind:
 		if i := s.index(s.doc.Kiosks[by.ID]); i >= 0 {
-			seen = append(seen, s.doc.Dashboards[i])
+			g.Dashboards = append(g.Dashboards, s.seenAt(by, s.doc.Dashboards[i]))
 		}
 	default:
-		return nil, nil
+		return Given{}, nil
 	}
 	w := whoIs(by)
 	ch := s.changed[w]
@@ -248,18 +270,35 @@ func (s *Store) Dashboards(by access.Identity) ([]Dashboard, <-chan struct{}) {
 		ch = make(chan struct{})
 		s.changed[w] = ch
 	}
-	return seen, ch
+	return g, ch
 }
 
-// Assignments are each Kiosk's assigned Dashboard, by Kiosk id, those showing
-// the built-in one left out, for an Admin Person; nil for anyone else.
-func (s *Store) Assignments(by access.Identity) map[string]string {
-	if !admin(by) {
-		return nil
+// seenAt is d as by sees it (ADR 0041): whole if by edits it, so that saving
+// it never erases what by no longer sees; otherwise, for a Guest, without a
+// trace of the Tiles of the Automations it does not press, an own Section
+// left empty kept, its cells empty. Callers hold s.mu.
+func (s *Store) seenAt(by access.Identity, d Dashboard) Dashboard {
+	if by.Level.Allows(access.Member) || d.EditableBy(by) {
+		return d
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return maps.Clone(s.doc.Kiosks)
+	d.Sections = slices.Clone(d.Sections)
+	for i, sec := range d.Sections {
+		d.Sections[i].Tiles = slices.DeleteFunc(slices.Clone(sec.Tiles), func(t Tile) bool {
+			return t.Automation != "" && !slices.Contains(s.pressable, t.Automation)
+		})
+	}
+	return d
+}
+
+// pressable are the ids of those of list a Guest presses.
+func pressable(list []home.AutomationStatus) []string {
+	ids := []string{}
+	for _, a := range list {
+		if a.Pressable() {
+			ids = append(ids, a.ID)
+		}
+	}
+	return ids
 }
 
 // Assign assigns Kiosk k Dashboard id, the built-in one or a shared one, for
@@ -295,19 +334,6 @@ func (s *Store) RemoveKiosk(k string) error {
 	doc.Kiosks = maps.Clone(s.doc.Kiosks)
 	delete(doc.Kiosks, k)
 	return s.save(doc, func(w who) bool { return w.admin })
-}
-
-// List is by's list (ADR 0044): the Dashboards by sees, the built-in one
-// included, in their order, those missing from what by saved at the end,
-// shown. A Kiosk and a Program have none.
-func (s *Store) List(by access.Identity) []Entry {
-	if by.Kind != access.PersonKind {
-		return nil
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	list, _ := reconciled(s.doc.Dashboards, by.ID, s.doc.Lists[by.ID])
-	return list
 }
 
 // SaveList saves by's list, reconciled (ADR 0046): what by does not see
@@ -490,20 +516,26 @@ func (s *Store) write(ds []Dashboard, lists map[string][]Entry, changed ...Dashb
 	})
 }
 
-// save saves doc, which is then dashboards.json, and tells each identity tell
-// reports true for. Callers hold s.mu.
-func (s *Store) save(doc document, tell func(who) bool) error {
+// save saves doc, which is then dashboards.json, and tells each identity
+// told reports true for. Callers hold s.mu.
+func (s *Store) save(doc document, told func(who) bool) error {
 	if err := store.Save(s.file, Format, doc); err != nil {
 		return err
 	}
 	s.doc = doc
+	s.tell(told)
+	return nil
+}
+
+// tell tells each identity told reports true for that what it is given
+// changed. Callers hold s.mu.
+func (s *Store) tell(told func(who) bool) {
 	for w, ch := range s.changed {
-		if tell(w) {
+		if told(w) {
 			close(ch)
 			delete(s.changed, w)
 		}
 	}
-	return nil
 }
 
 // valid is d as saved (ADR 0045): its Name trimmed, two columns if it has

@@ -150,6 +150,12 @@ type AutomationStatus struct {
 	ManualTriggers []ManualTrigger `json:"manualTriggers,omitempty"`
 }
 
+// Pressable reports whether a Guest sees s (ADR 0031): only an Automation
+// with a Manual trigger, as its Tile.
+func (s AutomationStatus) Pressable() bool {
+	return len(s.ManualTriggers) > 0
+}
+
 // ManualTrigger is a Manual trigger Step of an Automation, by its id and Name.
 type ManualTrigger struct {
 	Step string `json:"step"`

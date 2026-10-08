@@ -1,15 +1,14 @@
 package api
 
 import (
-	"slices"
-
 	"github.com/llehouerou/oiko/internal/access"
-	"github.com/llehouerou/oiko/internal/dashboard"
 	"github.com/llehouerou/oiko/internal/home"
 )
 
 // What each Access level sees of the home (ADR 0031): a Member and an Admin
-// see all of it; a Guest only what it can press, never who did what.
+// see all of it; a Guest only what it can press, never who did what. What
+// each identity sees of the Dashboards, dashboard.Store.Given decides: it
+// alone knows who edits which one.
 
 // snapshotFor is snap as level l sees it: of the Automations, a Guest sees
 // only their Tiles, those with a Manual trigger.
@@ -61,40 +60,12 @@ func runEndFor(l access.Level, end home.RunEnd) home.RunEnd {
 	return end
 }
 
-// dashboardsFor is ds as by sees them (ADR 0041): those by edits whole, so
-// that saving one never erases what by no longer sees; from the others, the
-// Tiles by's level may not see are left out without a trace, an own Section
-// left empty kept, its cells empty. automations are all of the home's.
-func dashboardsFor(by access.Identity, ds []dashboard.Dashboard, automations []home.AutomationStatus) []dashboard.Dashboard {
-	if by.Level.Allows(access.Member) {
-		return ds
-	}
-	seen := map[string]bool{}
-	for _, a := range pressable(automations) {
-		seen[a.ID] = true
-	}
-	ds = slices.Clone(ds)
-	for i, d := range ds {
-		if d.EditableBy(by) {
-			continue
-		}
-		d.Sections = slices.Clone(d.Sections)
-		for j, sec := range d.Sections {
-			d.Sections[j].Tiles = slices.DeleteFunc(slices.Clone(sec.Tiles), func(t dashboard.Tile) bool {
-				return t.Automation != "" && !seen[t.Automation]
-			})
-		}
-		ds[i] = d
-	}
-	return ds
-}
-
 // pressable is what a Guest sees of the Automations: their Tiles, those with
 // a Manual trigger only, and their state without its cause.
 func pressable(list []home.AutomationStatus) []home.AutomationStatus {
 	tiles := []home.AutomationStatus{}
 	for _, s := range list {
-		if len(s.ManualTriggers) > 0 {
+		if s.Pressable() {
 			tiles = append(tiles, home.AutomationStatus{ID: s.ID, Name: s.Name, Status: s.Status, ManualTriggers: s.ManualTriggers})
 		}
 	}
