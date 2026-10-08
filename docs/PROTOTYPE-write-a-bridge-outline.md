@@ -6,7 +6,20 @@ from `go mod init` and quotes a first type compiled and tested in the oiko repo
 first, a one-liner build, local-path iteration (#81); Apache-2.0 recommended,
 an OSI license required by the catalogue (#85).
 
-Open points are marked **→ DECIDE**.
+Open points were marked **→ DECIDE**; all are settled:
+
+- The first type's code is the package `docs/write-a-bridge/plug/`, next to the
+  guide, not a godoc `Example`.
+- The first type is the made-up HTTP plug, not an in-memory switch.
+- A test in the plug package fails when a Go block of the guide is not found
+  verbatim in the package's files.
+- Section 5 holds a table of the keys per Role; a test in `web/` fails when it
+  and `roles.ts` disagree.
+- The test runs in `synctest.Test`, the fake plug an `http.Handler` behind an
+  in-memory `RoundTripper`.
+- The manifest's spec stays in the catalogue's README; the guide shows the
+  plug's manifest and links it.
+- One page, in this order.
 
 ## 0. Shape
 
@@ -189,32 +202,35 @@ func (b *Bridge) Send(ctx context.Context, address, function string, values map[
 
 ```go
 func TestPlug(t *testing.T) {
-	fake := newFakePlug(t, status{On: true, Power: 12.5}) // httptest server
-	b, err := open(bridgetest.Env(t, "plugs", `{"plugs": {"Desk lamp": "`+fake.URL+`"}}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	h := bridgetest.New(b)
-	go b.Run(t.Context(), h.Port())
-	waitFor(t, h.Replayed)
+	synctest.Test(t, func(t *testing.T) {
+		fake := &fakePlug{status: status{On: true, Power: 12.5}} // an http.Handler
+		b, err := open(bridgetest.Env(t, "plugs", `{"plugs": {"Desk lamp": "http://plug.test"}}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		b.(*Bridge).client.Transport = handlerTransport(fake) // no sockets: synctest can wait
+		h := bridgetest.New(b)
+		go b.Run(t.Context(), h.Port())
+		synctest.Wait()
 
-	if v, _ := h.Value("Desk lamp", "switch", "power"); v.Data != 12.5 {
-		t.Errorf("power = %v, want 12.5", v.Data)
-	}
-	if err := h.Command("Desk lamp", "switch", map[string]any{"state": false}); err != nil {
-		t.Fatalf("command: %v", err) // ErrRefused, ErrFailed or ErrTimedOut
-	}
-	if fake.on() {
-		t.Error("plug still on")
-	}
+		if v, _ := h.Value("Desk lamp", "switch", "power"); v.Data != 12.5 {
+			t.Errorf("power = %v, want 12.5", v.Data)
+		}
+		if err := h.Command("Desk lamp", "switch", map[string]any{"state": false}); err != nil {
+			t.Fatalf("command: %v", err) // ErrRefused, ErrFailed or ErrTimedOut
+		}
+		if fake.status.On {
+			t.Error("plug still on")
+		}
+	})
 }
 
 func TestUnknownKey(t *testing.T) { /* open refuses {"plug": …} */ }
 ```
 
-    **→ DECIDE** (small): `waitFor` polls `h.Replayed` with a deadline. The
-    bridgetest doc suggests `testing/synctest`, which does not wait on real
-    sockets; a fake `http.RoundTripper` would allow it at the cost of noise.
+    Callouts: `synctest` fast-forwards the 10 s poll (`time.Sleep(time.Minute)`
+    then `synctest.Wait()` shows the next poll); the in-memory transport is
+    the pattern for any HTTP-polled system.
 
 4.2 Build an Oiko with it, from directories, and run it:
 
