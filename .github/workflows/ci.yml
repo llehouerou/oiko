@@ -15,5 +15,6 @@ jobs:
         with:
           args: --offline --no-progress '**/*.md'
       - uses: cachix/install-nix-action@v31
-      # The dev shell pins Go, Node and the Chromium the browser test drives.
-      - run: nix develop -c make test
+      # The dev shell pins Go, Node and the Chromium the browser test drives. A short
+      # TMPDIR: a test's socket path must fit a socket address (107 bytes).
+      - run: nix develop -c env TMPDIR=/tmp make test
