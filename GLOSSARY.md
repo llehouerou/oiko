@@ -10,6 +10,9 @@ Local home automation platform: observe and control the devices of a home in rea
 External system that makes devices known to Oiko and relays their messages: a zigbee2mqtt instance, Oiko's own HomeKit controller, an Arlo account in Arlo's cloud, or a Netatmo account in Netatmo's cloud. Oiko may have several, each known by a name; each is online or offline on its own, and while one is offline, the Availability of its Devices is unknown. Each is of a type compiled into Oiko: one of the four built in, or one a build of Oiko adds; several may share a type.
 _Avoid_: Integration, Adapter, Coordinator, Plugin
 
+**Bridge contract**:
+The public Go API a type of Bridge is written against: the `bridge` package, with `bridge/bridgetest` and `bridge/store`, and the kinds of Function and keys of Capability that shape Tiles. Released with Oiko and broken only where its version allows (ADR 0019); `oiko-build`, the Manifest and the catalogue are tooling around it, not part of it.
+_Avoid_: SDK, plugin API, framework
 **Build**:
 What an Oiko executable is made of: Oiko's version and each type of Bridge compiled into it, built in or added, with the Go package registering it and the module and version that package comes from, as Go records them in the executable. A version is unknown for a development build or a module taken from a directory; an untagged commit has a pseudo-version.
 _Avoid_: recipe, manifest (reserved for a Bridge's), bill of materials
