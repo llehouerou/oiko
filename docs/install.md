@@ -1,7 +1,7 @@
 # Install
 
-Oiko is one binary with its web client embedded. Build it with Go, run the image the
-catalogue gives for Docker, or deploy it with the NixOS module. Then [configure](configure.md)
+Oiko is one binary with its web client embedded. Build it with Go, build it in Docker from
+the catalogue's Dockerfile, or deploy it with the NixOS module. Then [configure](configure.md)
 it, give it a [Public URL](expose.md), and [sign in](sign-in.md).
 
 ## Plain binary
@@ -43,7 +43,7 @@ The flake exports the package and a NixOS module, `nixosModules.default` (`servi
 
 - `listen`: the HTTP listen address, `:8080` by default.
 - `publicUrl`: the [Public URL](expose.md).
-- `mqtt`: the broker of the zigbee2mqtt Bridge.
+- `mqtt` (required): the broker of the zigbee2mqtt Bridge.
 - `settings`: config.json ([Configure](configure.md)); a homekit Bridge is always configured.
 - `credentials`: files holding secrets, which the service reads as
   `/run/credentials/oiko.service/<name>`, where `settings` point to them.
