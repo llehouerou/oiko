@@ -1,6 +1,6 @@
 import type { Capability } from './types'
 
-// Roles (CONTEXT.md, ADR 0014): what each Capability is for on its Function, told
+// Roles (GLOSSARY.md, ADR 0014): what each Capability is for on its Function, told
 // by its key, type, access and category, never by the hardware model. Every view
 // of a Function, from its Tile to its History, reads them from here.
 export interface Roles {

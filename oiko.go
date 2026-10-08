@@ -178,7 +178,7 @@ func parsePublicURL(s string) (*url.URL, error) {
 	return &url.URL{Scheme: "https", Host: strings.TrimSuffix(strings.ToLower(u.Host), ":443")}, nil
 }
 
-// install is how this Oiko runs on its host, its Install (see CONTEXT.md), as
+// install is how this Oiko runs on its host, its Install (see GLOSSARY.md), as
 // OIKO_INSTALL tells: nixos, docker, or a plain binary when unset.
 func install(env string) (string, error) {
 	switch env {

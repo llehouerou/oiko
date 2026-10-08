@@ -145,7 +145,7 @@ Not a solution on its own.
   trigger on `person`). But it serves Arlo only, and puts a model and its
   runtime in a Bridge.
 - **In Oiko**, as something every camera's Recordings go through: it serves
-  any camera system, but it's a new concept for `CONTEXT.md` and probably an
+  any camera system, but it's a new concept for `GLOSSARY.md` and probably an
   ADR. It may change what the `recording` Event's data means.
 - Either way, a filter should drop the **Notification**, never the Recording,
   which stays in the camera's system and History. A missed person (a false

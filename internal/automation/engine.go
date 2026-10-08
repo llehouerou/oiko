@@ -1,4 +1,4 @@
-// Package automation runs Automations (see CONTEXT.md): graphs of Steps that
+// Package automation runs Automations (see GLOSSARY.md): graphs of Steps that
 // react to the home's Updates and to the time by issuing Commands. One
 // goroutine applies a lossless feed of Updates to its own mirror of the home
 // and takes due deadlines from one timer heap, strictly in order, and

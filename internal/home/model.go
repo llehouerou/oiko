@@ -1,4 +1,4 @@
-// Package home holds Oiko's domain model (see CONTEXT.md): the registry of
+// Package home holds Oiko's domain model (see GLOSSARY.md): the registry of
 // Devices, their latest Values and Availability, Commands, and the ordered
 // stream of Updates. It knows nothing about any Bridge protocol.
 package home

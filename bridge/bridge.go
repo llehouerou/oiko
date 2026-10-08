@@ -1,5 +1,5 @@
 // Package bridge is the contract between Oiko and its Bridges (ADR 0017, and
-// CONTEXT.md for the vocabulary): what a Bridge implements, the Port through
+// GLOSSARY.md for the vocabulary): what a Bridge implements, the Port through
 // which it feeds Oiko, the terms its Devices are described in, and the
 // registry through which a type of Bridge is compiled into Oiko. It depends
 // on the standard library only.

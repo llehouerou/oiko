@@ -1,4 +1,4 @@
-// Package release tells whether newer Releases (see CONTEXT.md) exist of Oiko
+// Package release tells whether newer Releases (see GLOSSARY.md) exist of Oiko
 // and of the module of each type of Bridge a build adds, as the Go module
 // proxy lists them. It never applies anything (ADR 0019).
 //

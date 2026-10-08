@@ -32,7 +32,7 @@ import (
 // Access levels it declares, and the web client to anyone (ADR 0023, 0027,
 // 0034). cams are the home's cameras, acc keeps who signs in, dash the custom
 // Dashboards, b is what Oiko is built from, install its Install (see
-// CONTEXT.md), releases what is newer, bridges the type of each Bridge of the
+// GLOSSARY.md), releases what is newer, bridges the type of each Bridge of the
 // configuration, by name, public the Public URL, nil when the configuration
 // has none: the origin sign-in checks.
 func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, cams *camera.Cameras, acc *access.Store, dash *dashboard.Store, b build.Build, install string, releases *release.Checker, bridges map[string]string, public *url.URL, static fs.FS) http.Handler {

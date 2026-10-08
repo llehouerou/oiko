@@ -1,7 +1,7 @@
 # Oiko
 
 Local home automation platform: observe and control the devices of a home in real time.
-Vocabulary: [CONTEXT.md](CONTEXT.md). Decisions: [docs/adr](docs/adr).
+Vocabulary: [GLOSSARY.md](GLOSSARY.md). Decisions: [docs/adr](docs/adr).
 
 Oiko learns about devices through Bridges, each configured by name under `bridges` in
 `data/config.json`, and keeping its state in `data/<its name>/`. A key a Bridge does not

@@ -1,5 +1,5 @@
 // Package build reads what an Oiko executable is made of, its Build (see
-// CONTEXT.md): Oiko's version and each type of Bridge compiled in, with the
+// GLOSSARY.md): Oiko's version and each type of Bridge compiled in, with the
 // package, module and version it comes from, as Go records them in every
 // binary.
 package build
