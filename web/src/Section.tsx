@@ -183,8 +183,9 @@ export function Section({
 // What a Tile's ⋯ opens, for an Admin, who alone has onOpen: its Device's, Aggregate's or Flag's panel.
 const opener = (t: TargetTile, onOpen?: (id: string, back?: () => void) => void) => onOpen && ((back?: () => void) => onOpen(parseTarget(t.subject)!.id, back))
 
-// tiles drawn: a Tile's ⋯ opens its Device's, Aggregate's or Flag's panel, a Manual trigger's
-// result is told; one showing nothing, in the editor alone, is a dashed card saying why.
+// tiles drawn, each under its custom name if it has one: a Tile's ⋯ opens its Device's, Aggregate's
+// or Flag's panel, a Manual trigger's result is told; one showing nothing, in the editor alone, is a
+// dashed card saying why.
 export const tileNodes = (
   tiles: DashboardTile[],
   onResult: (r: { text: string; error?: boolean }) => void,
@@ -192,16 +193,17 @@ export const tileNodes = (
 ): TileNode[] =>
   tiles.map((t) => ({
     ...t,
+    label: t.customName ?? t.label,
     node:
       t.kind === 'manual' ? (
-        <ManualTile key={t.key} automation={t.automation} hideName={t.hideName} onResult={onResult} />
+        <ManualTile key={t.key} automation={{ ...t.automation, name: t.customName ?? t.automation.name }} hideName={t.hideName} onResult={onResult} />
       ) : t.kind === 'dormant' ? (
         <div key={t.key} className="space-y-1 rounded-xl border border-dashed border-neutral-600 p-4 pr-10 text-neutral-400">
           <p className="truncate font-medium">{t.label}</p>
           <p className="text-xs text-neutral-500">{t.why}</p>
         </div>
       ) : (
-        <Tile key={t.key} tile={t} hideName={t.hideName} onOpen={opener(t, onOpen)} />
+        <Tile key={t.key} tile={{ ...t, name: t.customName ?? t.name }} hideName={t.hideName} onOpen={opener(t, onOpen)} />
       ),
   }))
 

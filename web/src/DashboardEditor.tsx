@@ -5,7 +5,8 @@ import { edit, useKioskDashboards } from './store'
 import { api } from './access'
 import type { Kiosk } from './Kiosks'
 import type { Area, CustomDashboard } from './types'
-import { deleting, sectionKey, tileKey, unseenSection, type DashboardSection, type TileChoice } from './dashboard'
+import { deleting, sectionKey, tileKey, unseenSection, type DashboardSection, type DashboardTile, type TileChoice } from './dashboard'
+import { Switch } from './controls'
 import {
   addSection,
   addTile,
@@ -16,7 +17,7 @@ import {
   removeTile,
   resizeSection,
   setDashboardColumns,
-  toggleTileName,
+  nameTile,
   type SectionContent,
 } from './editDashboard'
 import { defaultColumns, maxColumns, move, placements, reflow, type Arranged } from './layout'
@@ -30,8 +31,8 @@ import { Section, tileNodes } from './Section'
 // top holds its Name, its columns, Duplicate, Delete and Done; every free cell of its grid has a +
 // adding a Section there; each Section has a bar that drags it to another cell, steps its size and
 // removes it, and on an own Section edits its Name, Icon and columns. An own Section's Tiles are
-// arranged as an Area's are on Home, a + in each free cell picking one to add, and each may hide its
-// name. An Area's Section
+// arranged as an Area's are on Home, a + in each free cell picking one to add, and each may take a
+// name of its own, or hide it. An Area's Section
 // shows the Area dimmed: it follows the Area, arranged on Home. Each change saves the whole
 // Dashboard at once.
 export function DashboardEditor({
@@ -55,6 +56,9 @@ export function DashboardEditor({
   // Where a Tile is being added: an own Section's key, and a cell of its grid.
   const [addingTile, setAddingTile] = useState<{ section: string; col: number; row: number } | null>(null)
   const tileSection = addingTile && sections.find((s) => s.key === addingTile.section)
+  // The Tile being named: an own Section's key, and the Tile's.
+  const [naming, setNaming] = useState<{ section: string; tile: string } | null>(null)
+  const named = naming && sections.find((s) => s.key === naming.section)?.tiles.find((t) => t.key === naming.tile)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
   // Whether next is saved; a refusal is told.
   const save = async (next: CustomDashboard) => {
@@ -152,7 +156,7 @@ export function DashboardEditor({
                     onLayout={(n, layout) => lay(s, n, layout)}
                     onAdd={(col, row) => setAddingTile({ section: s.key, col, row })}
                     onRemove={(tile) => save(removeTile(d, s.key, tile))}
-                    onToggleName={(tile) => save(toggleTileName(d, s.key, tile))}
+                    onName={(tile) => setNaming({ section: s.key, tile })}
                   />
                 </div>
               ) : (
@@ -180,6 +184,7 @@ export function DashboardEditor({
           onClose={() => setAddingTile(null)}
         />
       )}
+      {naming && named && <TileName tile={named} onName={(change) => save(nameTile(d, naming.section, naming.tile, change))} onClose={() => setNaming(null)} />}
     </div>
   )
 }
@@ -299,6 +304,38 @@ function NameInput({
       onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
       className={`rounded-lg bg-neutral-950/60 px-2 py-1 ${className}`}
     />
+  )
+}
+
+// A Tile's name on this Dashboard: one of its own, its own name when left empty, and whether it shows.
+function TileName({
+  tile,
+  onName,
+  onClose,
+}: {
+  tile: DashboardTile
+  onName: (change: { name?: string; hideName?: boolean }) => Promise<boolean>
+  onClose: () => void
+}) {
+  return (
+    <Panel title={<h2 className="truncate text-lg font-medium">{tile.customName ?? tile.label}</h2>} onClose={onClose}>
+      <div className="space-y-4 text-sm">
+        <label className="block space-y-1">
+          <span className="text-neutral-400">Name on this dashboard</span>
+          <NameInput
+            name={tile.customName ?? ''}
+            label="Name on this dashboard"
+            placeholder={tile.label}
+            onName={(name) => onName({ name })}
+            className="w-full"
+          />
+        </label>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-neutral-400">Show the name</span>
+          <Switch on={!tile.hideName} onChange={(on) => onName({ hideName: !on })} label="Show the name" />
+        </div>
+      </div>
+    </Panel>
   )
 }
 

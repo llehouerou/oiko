@@ -167,7 +167,7 @@ _Avoid_: group (reserved for the Bridge's), card, panel, block, view
 Oiko's own app in a browser, where a Person or a Kiosk signs in and sees its Dashboards.
 _Avoid_: dashboard (reserved for one view of it), UI, frontend
 **Tile**:
-A Device's, Aggregate's, Flag's or Automation's box on a Dashboard; an Automation's holds a button for each of its Manual triggers. A Device's shows those of its Functions that have one: in an Area's Section, those in that Area; in an own Section, all of them, or only one when the Device is placed as that Function. A Target's Tile shows at most one control, its main control; every other settable Capability is a setting, behind its ⋯. Its shape (control bar, state, readings or event) follows from its Capabilities' Roles, never from the hardware model; a camera's shows its Picture. Battery and tamper show on it only when something is wrong. Placed in an own Section, it may hide its name.
+A Device's, Aggregate's, Flag's or Automation's box on a Dashboard; an Automation's holds a button for each of its Manual triggers. A Device's shows those of its Functions that have one: in an Area's Section, those in that Area; in an own Section, all of them, or only one when the Device is placed as that Function. A Target's Tile shows at most one control, its main control; every other settable Capability is a setting, behind its ⋯. Its shape (control bar, state, readings or event) follows from its Capabilities' Roles, never from the hardware model; a camera's shows its Picture. Battery and tamper show on it only when something is wrong. Placed in an own Section, it may take a name of its own on that Dashboard, its own name otherwise, or hide it.
 _Avoid_: card, widget, entity row
 
 **Layout**:

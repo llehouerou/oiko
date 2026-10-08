@@ -57,8 +57,9 @@ export interface TargetTile {
 
 // A Tile of the dashboard: key is its Target, which an Area may hide, or its Automation's id. In
 // an Area, it has a place in its Layout. In the editor, a placement showing nothing is a dormant
-// card, saying why (ADR 0045). In an own Section, its name may be hidden.
-export type DashboardTile = { key: string; label: string; place?: Place; hideName?: true } & (
+// card, saying why (ADR 0045). In an own Section, it may be named otherwise (customName), or its
+// name hidden; label stays its own.
+export type DashboardTile = { key: string; label: string; place?: Place; customName?: string; hideName?: true } & (
   { kind: 'manual'; automation: AutomationStatus } | ({ kind: 'target' } & TargetTile) | { kind: 'dormant'; why: string }
 )
 
@@ -226,7 +227,7 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
     if (s.area !== undefined) return sections.filter((a) => a.area!.id === s.area)
     const own = (s.tiles ?? []).flatMap((t) => {
       const shown = placed(t)
-      return (editing && !shown.length ? [dormant(t)] : shown).map((d) => [{ ...d, hideName: t.hideName }, t] as const)
+      return (editing && !shown.length ? [dormant(t)] : shown).map((d) => [{ ...d, customName: t.name, hideName: t.hideName }, t] as const)
     })
     if (!own.length && !editing) return []
     const tiles = arrange(

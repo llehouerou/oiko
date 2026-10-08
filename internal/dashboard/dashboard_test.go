@@ -109,7 +109,7 @@ func TestAPersonCreatesSavesAndDeletesTheirOwn(t *testing.T) {
 	id, err := s.Create(alice, parse(t, `{"name": " Evening ", "sections": [
 		{"area": "`+string(l.area)+`", "col": 0, "row": 0, "width": 1},
 		{"name": "Favourites", "icon": "sofa", "columns": 2, "col": 1, "row": 0, "width": 1, "height": 2, "tiles": [
-			{"target": "`+l.lamp.Key()+`", "hideName": true, "col": 0, "row": 0, "width": 2},
+			{"target": "`+l.lamp.Key()+`", "name": " Reading lamp ", "hideName": true, "col": 0, "row": 0, "width": 2},
 			{"automation": "night", "col": 0, "row": 1, "width": 1}
 		]}
 	]}`))
@@ -126,7 +126,7 @@ func TestAPersonCreatesSavesAndDeletesTheirOwn(t *testing.T) {
 		t.Fatalf("created: %+v", mine)
 	}
 	own := mine[0].Sections[1]
-	if own.ID == "" || own.Name != "Favourites" || len(own.Tiles) != 2 || own.Tiles[0].Target != l.lamp || !own.Tiles[0].HideName || own.Tiles[1].HideName {
+	if own.ID == "" || own.Name != "Favourites" || len(own.Tiles) != 2 || own.Tiles[0].Target != l.lamp || own.Tiles[0].Name != "Reading lamp" || !own.Tiles[0].HideName || own.Tiles[1].Name != "" || own.Tiles[1].HideName {
 		t.Errorf("its own Section: %+v", own)
 	}
 	if theirs, _ := s.Dashboards(bob); len(theirs) != 0 {
@@ -294,6 +294,7 @@ func TestASaveIsRefusedUnlessItHoldsTogether(t *testing.T) {
 		"a Tile outside":        `{"name": "E", "sections": [{"columns": 1, "col": 0, "row": 0, "width": 1, "tiles": [{` + lamp + `, "col": 0, "row": 0, "width": 2}]}]}`,
 		"a Tile of nothing":     `{"name": "E", "sections": [{"columns": 1, "col": 0, "row": 0, "width": 1, "tiles": [{"col": 0, "row": 0, "width": 1}]}]}`,
 		"a Tile of two things":  `{"name": "E", "sections": [{"columns": 1, "col": 0, "row": 0, "width": 1, "tiles": [{` + lamp + `, "automation": "night", "col": 0, "row": 0, "width": 1}]}]}`,
+		"a Tile name long":      `{"name": "E", "sections": [{"columns": 1, "col": 0, "row": 0, "width": 1, "tiles": [{` + lamp + `, "name": "` + strings.Repeat("x", 101) + `", "col": 0, "row": 0, "width": 1}]}]}`,
 		"two own with one id":   `{"name": "E", "sections": [{"id": "s", "columns": 1, "col": 0, "row": 0, "width": 1}, {"id": "s", "columns": 1, "col": 1, "row": 0, "width": 1}]}`,
 	} {
 		if _, err := s.Create(alice, parse(t, doc)); !errors.Is(err, home.ErrInvalid) {

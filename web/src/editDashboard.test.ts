@@ -9,7 +9,7 @@ import {
   removeTile,
   resizeSection,
   setDashboardColumns,
-  toggleTileName,
+  nameTile,
 } from './editDashboard'
 import { sectionKey, tileKey } from './dashboard'
 import type { CustomDashboard, OwnSection, PlacedTile } from './types'
@@ -125,16 +125,19 @@ test("an own Section's Tiles are added, moved, sized and removed on its Layout a
   expect(addTile(living, 'area:living', [], { target: 'device:lamp' }, 0, 0)).toEqual(living)
 })
 
-test("a Tile's name hides and shows again, the other Tiles' as they were", () => {
+test("a Tile takes a name of its own and hides it, then its own name comes back, the other Tiles' as they were", () => {
   const tiles: PlacedTile[] = [
     { target: 'flag:away', col: 0, row: 0, width: 1 },
-    { automation: 'night', hideName: true, col: 1, row: 0, width: 1 },
+    { automation: 'night', name: 'Bedtime', hideName: true, col: 1, row: 0, width: 1 },
   ]
   let d = addSection(empty, own('fav', tiles), 0, 0)
-  d = toggleTileName(d, 'own:fav', 'flag:away')
-  expect(d.sections[0]).toMatchObject({ tiles: [{ hideName: true }, { hideName: true }] })
-  d = toggleTileName(d, 'own:fav', 'flag:away')
-  expect(JSON.parse(JSON.stringify(d.sections[0])).tiles).toEqual(tiles)
+  d = nameTile(d, 'own:fav', 'flag:away', { name: ' Holidays ' })
+  d = nameTile(d, 'own:fav', 'flag:away', { hideName: true })
+  expect(d.sections[0]).toMatchObject({ tiles: [{ name: 'Holidays', hideName: true }, tiles[1]!] })
+  // an empty name is none, a name shown is stored as nothing
+  d = nameTile(d, 'own:fav', 'flag:away', { name: ' ', hideName: false })
+  expect(d.sections[0]).toMatchObject({ tiles })
+  expect(Object.keys((d.sections[0] as OwnSection).tiles![0]!).sort()).toEqual(['col', 'row', 'target', 'width'])
 })
 
 test('a Tile placed that shows nothing stays placed, moving on when a Tile shown takes its cell (ADR 0045)', () => {

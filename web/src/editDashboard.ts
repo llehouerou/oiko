@@ -78,6 +78,14 @@ export const addTile = (d: CustomDashboard, key: string, layout: Arranged[], til
 export const removeTile = (d: CustomDashboard, key: string, tile: string) =>
   changeOwn(d, key, (s) => ({ ...s, tiles: s.tiles?.filter((t) => tileKey(t) !== tile) }))
 
-// d with Tile tile in own Section key showing its name, or hiding it if it showed.
-export const toggleTileName = (d: CustomDashboard, key: string, tile: string) =>
-  changeOwn(d, key, (s) => ({ ...s, tiles: s.tiles?.map((t) => (tileKey(t) === tile ? { ...t, hideName: t.hideName ? undefined : true } : t)) }))
+// d with Tile tile in own Section key named as change says: a name of its own, none for its own
+// name back, and whether it is hidden. What change leaves out stays.
+export const nameTile = (d: CustomDashboard, key: string, tile: string, change: { name?: string; hideName?: boolean }) =>
+  changeOwn(d, key, (s) => ({
+    ...s,
+    tiles: s.tiles?.map((t) => {
+      if (tileKey(t) !== tile) return t
+      const { name, hideName, ...rest } = { ...t, ...change }
+      return { ...rest, ...(name?.trim() && { name: name.trim() }), ...(hideName && { hideName: true as const }) }
+    }),
+  }))

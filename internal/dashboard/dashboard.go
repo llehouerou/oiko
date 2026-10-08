@@ -71,10 +71,12 @@ type Section struct {
 
 // Tile is a Tile placed in an own Section: a Target's (a Device, one of its
 // Functions, an Aggregate or a Flag) or an Automation's, at its place on the
-// Section's Layout, its name hidden if HideName.
+// Section's Layout, under Name if it has one rather than its own, and with
+// its name hidden if HideName.
 type Tile struct {
 	Target     home.Target `json:"target,omitzero"`
 	Automation string      `json:"automation,omitempty"`
+	Name       string      `json:"name,omitempty"`
 	HideName   bool        `json:"hideName,omitempty"`
 	home.Place
 }
@@ -551,7 +553,7 @@ func (s *Store) valid(d Dashboard) (Dashboard, error) {
 }
 
 // own is own Section sec as saved: its Name trimmed, an id, and each Tile of
-// one Target or Automation.
+// one Target or Automation, its Name trimmed.
 func own(sec Section) (Section, error) {
 	var err error
 	if sec.Name != "" {
@@ -565,9 +567,15 @@ func own(sec Section) (Section, error) {
 	if sec.ID == "" {
 		sec.ID = uuid.NewV7().String()
 	}
-	for _, t := range sec.Tiles {
+	sec.Tiles = slices.Clone(sec.Tiles)
+	for i, t := range sec.Tiles {
 		if t.Target.IsZero() == (t.Automation == "") {
 			return sec, fmt.Errorf("%w: a tile is a target's or an automation's", home.ErrInvalid)
+		}
+		if t.Name != "" {
+			if sec.Tiles[i].Name, err = home.ValidName(t.Name); err != nil {
+				return sec, err
+			}
 		}
 	}
 	return sec, nil
