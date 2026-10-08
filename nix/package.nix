@@ -72,5 +72,8 @@ in
   subPackages = [ "cmd/oiko" ];
   env.CGO_ENABLED = 0;
   postConfigure = "cp -r ${web} web/dist"; # not while fetching the modules
-  meta.mainProgram = "oiko";
+  meta = {
+    mainProgram = "oiko";
+    license = lib.licenses.asl20;
+  };
 }
