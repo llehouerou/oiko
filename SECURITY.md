@@ -5,8 +5,7 @@ This one policy covers every repository of Oiko's ecosystem:
 [oiko-catalogue](https://github.com/llehouerou/oiko-catalogue),
 [oiko-netatmo](https://github.com/llehouerou/oiko-netatmo),
 [oiko-arlo](https://github.com/llehouerou/oiko-arlo) and
-[go-arlo](https://github.com/llehouerou/go-arlo). Each of the others carries a short
-`SECURITY.md` pointing here.
+[go-arlo](https://github.com/llehouerou/go-arlo).
 
 ## Reporting a vulnerability
 
@@ -24,8 +23,9 @@ report is closed without assessment.
 
 The latest release only: nothing is backported
 ([ADR 0019](docs/adr/0019-release-and-compatibility-policy.md)). A fix ships as a patch release.
-A fix that can't land without breaking something ships as the next minor, with the break at the
-top of its release notes; during v0 a minor may break, and no compatibility layer is added.
+A fix that can't land without breaking something ships as the next breaking release (a minor
+during v0, a major after), with the break at the top of its release notes, and no compatibility
+layer is added.
 
 ## What to expect
 
