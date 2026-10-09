@@ -1,0 +1,105 @@
+{
+  "models": {
+    "LED2201G8": {
+      "vendor": "IKEA",
+      "exposes": [
+        {
+          "type": "light",
+          "features": [
+            { "type": "binary", "name": "state", "label": "State", "property": "state", "value_on": "ON", "value_off": "OFF", "access": 7 },
+            { "type": "numeric", "name": "brightness", "label": "Brightness", "property": "brightness", "value_min": 0, "value_max": 254, "access": 7 },
+            {
+              "type": "numeric",
+              "name": "color_temp",
+              "label": "Color temp",
+              "property": "color_temp",
+              "unit": "mired",
+              "value_min": 250,
+              "value_max": 454,
+              "access": 7
+            }
+          ]
+        },
+        { "type": "numeric", "name": "linkquality", "label": "Linkquality", "property": "linkquality", "unit": "lqi", "access": 1, "category": "diagnostic" }
+      ]
+    },
+    "TS011F_plug_1": {
+      "vendor": "Tuya",
+      "exposes": [
+        {
+          "type": "switch",
+          "features": [{ "type": "binary", "name": "state", "label": "State", "property": "state", "value_on": "ON", "value_off": "OFF", "access": 7 }]
+        },
+        { "type": "numeric", "name": "power", "label": "Power", "property": "power", "unit": "W", "access": 5 },
+        { "type": "numeric", "name": "energy", "label": "Energy", "property": "energy", "unit": "kWh", "access": 5 },
+        { "type": "numeric", "name": "linkquality", "label": "Linkquality", "property": "linkquality", "unit": "lqi", "access": 1, "category": "diagnostic" }
+      ]
+    },
+    "WSDCGQ11LM": {
+      "vendor": "Aqara",
+      "exposes": [
+        { "type": "numeric", "name": "temperature", "label": "Temperature", "property": "temperature", "unit": "°C", "access": 1 },
+        { "type": "numeric", "name": "humidity", "label": "Humidity", "property": "humidity", "unit": "%", "access": 1 },
+        { "type": "numeric", "name": "battery", "label": "Battery", "property": "battery", "unit": "%", "access": 1, "category": "diagnostic" },
+        { "type": "numeric", "name": "linkquality", "label": "Linkquality", "property": "linkquality", "unit": "lqi", "access": 1, "category": "diagnostic" }
+      ]
+    },
+    "MCCGQ11LM": {
+      "vendor": "Aqara",
+      "exposes": [
+        { "type": "binary", "name": "contact", "label": "Contact", "property": "contact", "value_on": false, "value_off": true, "access": 1 },
+        { "type": "numeric", "name": "battery", "label": "Battery", "property": "battery", "unit": "%", "access": 1, "category": "diagnostic" },
+        { "type": "numeric", "name": "linkquality", "label": "Linkquality", "property": "linkquality", "unit": "lqi", "access": 1, "category": "diagnostic" }
+      ]
+    },
+    "RTCGQ11LM": {
+      "vendor": "Aqara",
+      "exposes": [
+        { "type": "binary", "name": "occupancy", "label": "Occupancy", "property": "occupancy", "value_on": true, "value_off": false, "access": 1 },
+        { "type": "numeric", "name": "illuminance", "label": "Illuminance", "property": "illuminance", "unit": "lx", "access": 1 },
+        { "type": "numeric", "name": "battery", "label": "Battery", "property": "battery", "unit": "%", "access": 1, "category": "diagnostic" },
+        { "type": "numeric", "name": "linkquality", "label": "Linkquality", "property": "linkquality", "unit": "lqi", "access": 1, "category": "diagnostic" }
+      ]
+    }
+  },
+  "areas": [
+    {
+      "name": "Living room",
+      "icon": "sofa",
+      "devices": [
+        { "name": "Floor lamp", "ieee": "0x000d6f0000000101", "model": "LED2201G8", "state": { "state": "ON", "brightness": 180, "color_temp": 370 } },
+        { "name": "Reading lamp", "ieee": "0x000d6f0000000102", "model": "LED2201G8", "state": { "state": "OFF", "brightness": 254, "color_temp": 300 } },
+        { "name": "TV plug", "ieee": "0xa4c1380000000103", "model": "TS011F_plug_1", "state": { "state": "ON", "power": 64.2, "energy": 12.4 } },
+        { "name": "Living room climate", "ieee": "0x00158d0000000104", "model": "WSDCGQ11LM", "state": { "temperature": 21.5, "humidity": 48, "battery": 90 } },
+        { "name": "Living room motion", "ieee": "0x00158d0000000105", "model": "RTCGQ11LM", "state": { "occupancy": true, "illuminance": 120, "battery": 85 } }
+      ]
+    },
+    {
+      "name": "Kitchen",
+      "icon": "stove",
+      "devices": [
+        { "name": "Kitchen light", "ieee": "0x000d6f0000000201", "model": "LED2201G8", "state": { "state": "ON", "brightness": 254, "color_temp": 280 } },
+        { "name": "Coffee machine", "ieee": "0xa4c1380000000202", "model": "TS011F_plug_1", "state": { "state": "OFF", "power": 0, "energy": 3.1 } },
+        { "name": "Back door", "ieee": "0x00158d0000000203", "model": "MCCGQ11LM", "state": { "contact": true, "battery": 95 } }
+      ]
+    },
+    {
+      "name": "Office",
+      "icon": "desk",
+      "devices": [
+        { "name": "Desk lamp", "ieee": "0x000d6f0000000301", "model": "LED2201G8", "state": { "state": "ON", "brightness": 200, "color_temp": 250 } },
+        { "name": "Office climate", "ieee": "0x00158d0000000302", "model": "WSDCGQ11LM", "state": { "temperature": 22, "humidity": 45, "battery": 80 } },
+        { "name": "Office window", "ieee": "0x00158d0000000303", "model": "MCCGQ11LM", "state": { "contact": false, "battery": 88 } }
+      ]
+    },
+    {
+      "name": "Bedroom",
+      "icon": "bed-king",
+      "devices": [
+        { "name": "Bedside lamp", "ieee": "0x000d6f0000000401", "model": "LED2201G8", "state": { "state": "OFF", "brightness": 120, "color_temp": 454 } },
+        { "name": "Bedroom climate", "ieee": "0x00158d0000000402", "model": "WSDCGQ11LM", "state": { "temperature": 19.5, "humidity": 52, "battery": 75 } },
+        { "name": "Bedroom motion", "ieee": "0x00158d0000000403", "model": "RTCGQ11LM", "state": { "occupancy": false, "illuminance": 4, "battery": 70 } }
+      ]
+    }
+  ]
+}

@@ -59,6 +59,8 @@
           ];
           # The browser test drives it (web/e2e).
           CHROMIUM = pkgs.lib.getExe pkgs.chromium;
+          # make icons renders the social preview's text with Jost, the logo's font, and no other.
+          ICON_FONTS = pkgs.makeFontsConf { fontDirectories = [ pkgs.jost ]; };
           # Versioned hooks: scripts/check-public before each commit.
           shellHook = ''
             git config core.hooksPath .githooks

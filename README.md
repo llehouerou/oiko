@@ -7,6 +7,8 @@ local and in real time.
 > the API or the Bridge contract; Oiko's own data is always migrated
 > ([releases](docs/upgrade.md#releases), ADR 0019).
 
+![Oiko's built-in Dashboard, dark, one Section per Area: Living room, Kitchen, Bedroom and Office. Each Section's header shows its temperature, humidity, motion or door state and its lights; below are tiles for lamps, plugs, climate sensors, motion sensors and door and window contacts with their current readings.](docs/images/dashboard.png)
+
 ## What it does
 
 - **Devices**: zigbee2mqtt and HomeKit built in; any other system through a type of Bridge

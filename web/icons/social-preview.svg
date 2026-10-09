@@ -1,0 +1,22 @@
+<!-- The source of docs/images/social-preview.png (make icons), the repository's social preview on GitHub, uploaded by hand
+     in Settings → General: the mark and name of Logo.tsx over the tagline, which is made again when the tagline changes. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fcd34d" />
+      <stop offset="1" stop-color="#f97316" />
+    </linearGradient>
+    <!-- The AppBar's glow, in the mark's units. -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="3.5" stdDeviation="5.3" flood-color="#f59e0b" flood-opacity="0.25" />
+    </filter>
+  </defs>
+  <rect width="1280" height="640" fill="#0a0a0a" />
+  <g transform="translate(560 130) scale(5)" filter="url(#glow)">
+    <rect width="32" height="32" rx="7.5" fill="url(#g)" />
+    <path d="M7 14.32 16 6.64l9 7.68V19.6a6 6 0 0 1-6 6h-6a6 6 0 0 1-6-6Z" fill="none" stroke="#0a0a0a" stroke-width="3" stroke-linejoin="round" />
+  </g>
+  <!-- 'Jost*' is the family name of the Jost the dev shell gives make icons. -->
+  <text x="640" y="420" text-anchor="middle" font-family="'Jost*'" font-weight="500" font-size="88" letter-spacing="0.42em" fill="#e5e5e5">OIKO</text>
+  <text x="640" y="500" text-anchor="middle" font-family="'Jost*'" font-size="40" fill="#a3a3a3">Self-hosted home automation in one small binary</text>
+</svg>
