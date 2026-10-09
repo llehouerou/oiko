@@ -110,7 +110,10 @@ same license, as its §5 says: no DCO sign-off and no CLA, and you keep your cop
 
 ```sh
 scripts/release v0.3.1             # tags a release carrying the built web client (ADR 0018)
+scripts/publish v0.3.1 notes.md    # pushes it, creates its GitHub Release, announces it
 scripts/notices                    # its third-party notices, as a dry run, after npm run build
 ```
 
-Releases follow [the compatibility rules](docs/upgrade.md#releases) (ADR 0019).
+Release tags sit on no branch (ADR 0018), so `git describe` finds none: what is unreleased is
+`git log $(git merge-base vX.Y.Z main)..main`, which `scripts/release` prints too. Releases
+follow [the compatibility rules](docs/upgrade.md#releases) (ADR 0019).

@@ -6,7 +6,7 @@
 # scripts/notices (ADR 0047). Before anything else, gorelease
 # compares the exported API with the previous release and refuses a version
 # those changes do not allow (ADR 0019): during v0, a patch that breaks or adds
-# anything. Run from the dev shell; pushing the tag publishes it.
+# anything. Run from the dev shell; scripts/publish publishes the tag.
 set -euo pipefail
 
 version=${1:-}
@@ -70,4 +70,9 @@ GIT_INDEX_FILE=$index git update-index --add --cacheinfo "100644,$(git hash-obje
 tree=$(GIT_INDEX_FILE=$index git write-tree)
 commit=$(git commit-tree "$tree" -p HEAD -m "Release $version, with the built web client, its version and the third-party notices")
 git tag -a "$version" "$commit" -m "Oiko $version"
-echo "tagged $version ($commit); publish it with: git push origin $version"
+echo "tagged $version ($commit)"
+if [[ -n $previous ]]; then
+	echo "since $previous:"
+	git log --format='  %h %s' "$(git merge-base "$previous" HEAD)..HEAD"
+fi
+echo "write its notes in the shape of $previous's (gh release view $previous), then: scripts/publish $version notes.md"
