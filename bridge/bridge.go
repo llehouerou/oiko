@@ -164,16 +164,17 @@ type Device struct {
 // e.g. "light" or "switch/l2", unique within its Device; Kind and the
 // Capability keys shape its Tile (ADR 0014).
 //
-// A Bridge may give any Kind; Functions of the same Kind are aggregated and
-// grouped together. The kinds Oiko knows are:
-//   - "light": its brightness and colour adjust its main control; each Area
-//     aggregates its lights (ADR 0013)
-//   - "switch" (a plug) and "alarm" (a siren): a bar with its own icon
+// A Bridge may give any Kind; an Aggregate's members are all of one Kind.
+// The kinds Oiko treats apart are:
+//   - "light": its brightness and colour adjust its state, not settings
 //   - "camera": see Cameras (ADR 0036)
-//   - "occupancy", "contact" (a door or window), "temperature", "humidity"
-//     and "co2": each Area aggregates them
-//   - "button", "pressure" and "illuminance": grouped in the History, as are
-//     the kinds above
+//   - "switch" (a plug) and "alarm" (a siren): an icon of their own on their
+//     Tile
+//   - "light", "occupancy", "contact" (a door or window), "temperature",
+//     "humidity" and "co2": each Area aggregates its own (ADR 0013)
+//   - "light", "switch", "contact", "tamper", "occupancy", "temperature",
+//     "humidity", "pressure", "illuminance" and "button": the History groups
+//     them by what they are; it puts other kinds under Other
 //
 // Oiko's own Flags are of kind "flag".
 type Function struct {
@@ -218,7 +219,7 @@ type Category string
 
 const (
 	Primary    Category = "primary"    // what its Function is for: its control, state, readings and Events
-	Config     Category = "config"     // a setting that changes how the Device behaves: only an Admin sets it, never through an Aggregate (ADR 0023)
+	Config     Category = "config"     // a setting that changes how the Device behaves: only an Admin sets it (ADR 0023)
 	Diagnostic Category = "diagnostic" // how the Device itself is doing (link quality, firmware): shown apart from what its Function does
 )
 
