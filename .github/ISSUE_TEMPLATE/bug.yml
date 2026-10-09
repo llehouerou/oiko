@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Oiko does not work as it should.
+description: Something in Oiko does not work as it should. A bug in an external type of Bridge goes on that type's repository.
 labels: [bug, needs-triage]
 body:
   - type: textarea
@@ -27,7 +27,7 @@ body:
     id: version
     attributes:
       label: Output of `oiko -version`
-      description: Oiko's version and each compiled-in type of Bridge with its version.
+      description: "The Build: Oiko's version and each type of Bridge compiled into it."
       render: text
     validations:
       required: true
@@ -43,6 +43,7 @@ body:
       label: How Oiko was installed
       options:
         - oiko-build
+        - Docker, from the catalogue's Dockerfile
         - NixOS module
         - From source
   - type: textarea
