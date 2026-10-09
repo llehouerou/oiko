@@ -67,4 +67,5 @@ per brand.
 - Bugs: [Issues](https://github.com/llehouerou/oiko/issues). Questions and ideas:
   [Discussions](https://github.com/llehouerou/oiko/discussions).
 - Contributing: [CONTRIBUTING.md](CONTRIBUTING.md) and the [code of conduct](CODE_OF_CONDUCT.md).
+- Security: report a vulnerability privately, never in an issue; see [SECURITY.md](SECURITY.md).
 - License: Apache-2.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE).

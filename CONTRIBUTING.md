@@ -36,7 +36,8 @@ type's repository. Give `oiko -version`, what happened, what you expected and th
 there. Redact your logs: names, addresses and tokens of your home have no place in a public issue.
 
 A vulnerability is never an issue: report it privately through
-[GitHub's private reporting](https://github.com/llehouerou/oiko/security/advisories/new) instead.
+[GitHub's private reporting](https://github.com/llehouerou/oiko/security/advisories/new), as
+[SECURITY.md](SECURITY.md) says.
 
 ## Before a pull request: an issue first
 
@@ -95,7 +96,7 @@ your pull request description and replies are your own words. Unreviewed bulk ou
 ## Response times
 
 One maintainer, spare time, best effort: a reply usually comes within a couple of weeks. A
-security report is acknowledged within 7 days.
+security report is acknowledged within 7 days ([SECURITY.md](SECURITY.md)).
 
 ## Conduct
 
