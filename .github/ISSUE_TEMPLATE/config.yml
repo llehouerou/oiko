@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question
+    url: https://github.com/llehouerou/oiko/discussions/categories/q-a
+    about: How do I…, why does Oiko…? Ask in Discussions › Q&A.
+  - name: Idea
+    url: https://github.com/llehouerou/oiko/discussions/categories/ideas
+    about: A feature you would like. Propose it in Discussions › Ideas.
+  - name: Request a type of Bridge
+    url: https://github.com/llehouerou/oiko/discussions/categories/types-of-bridge
+    about: A system Oiko doesn't reach yet. Ask in Discussions › Types of Bridge.
+  - name: Report a vulnerability
+    url: https://github.com/llehouerou/oiko/security/advisories/new
+    about: Never in a public issue. Report it privately, as SECURITY.md says.
