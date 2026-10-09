@@ -52,7 +52,7 @@ _Avoid_: unavailable (as a state value)
 ### Functional
 
 **Function**:
-What a Device does in the home (light, switch, cover, thermostat, occupancy, temperature, contact, button, camera…). The unit of display and control; belongs to exactly one Device, unless it is a Group, an Aggregate or a Flag. A sensor measuring several quantities provides one Function per quantity, so each can be named, placed and aggregated on its own. Identified within its Device by its kind and endpoint (e.g. `switch/l2`).
+What a Device does in the home (light, switch, cover, thermostat, occupancy, temperature, contact, button, camera…). The unit of display and control; belongs to exactly one Device, unless it is a Group, an Aggregate, a Flag or a Presence. A sensor measuring several quantities provides one Function per quantity, so each can be named, placed and aggregated on its own. Identified within its Device by its kind and endpoint (e.g. `switch/l2`).
 _Avoid_: Entity, Endpoint, Service, Channel
 
 **Group**:
@@ -66,6 +66,10 @@ _Avoid_: Group (reserved for the Bridge's), helper, virtual device
 **Flag**:
 Binary Function held by Oiko itself, with no Device or Bridge: on or off, set by a Command from anyone (a Person, a Kiosk, a Program, an Automation) and remembered across restarts. Created, renamed and deleted by an Admin; starts off. Always online. Has no Area unless assigned one, and may be a member of an Aggregate of Flags. State private to a single automation is not a Flag.
 _Avoid_: Mode, helper, input_boolean, variable, virtual switch
+
+**Presence**:
+Whether a Person is home or away: a binary Function Oiko derives for every Person, with no Device or Bridge, its Value computed by a rule from the sources bound to the Person, or set by hand; no Value while nothing has told. Always online, with no Area, shown under its Person's Name; may be a member of an Aggregate of Presences. Removed with its Person, History included.
+_Avoid_: location, whereabouts, tracker, home status, occupancy (reserved for a sensor's)
 
 **Capability**:
 Typed property of a Function (on, brightness, temperature…), or of the Device itself for configuration and diagnostic properties (battery, link quality, power-on behavior…). Has a type, unit, bounds, access (observable, settable, queryable) and category (primary, configuration, diagnostic). Identified within its owner by its property name (e.g. `brightness`). A numeric Capability may be a counter: a running total that only rises, except when the device resets it (energy in kWh); what was used over a period is its rise above its highest reading, a drop of more than 1 % counting as a restart from zero and a smaller one as the device's rounding.
@@ -104,7 +108,7 @@ What issued a Command: a Person, a Kiosk, a Program or a Run of an Automation, b
 _Avoid_: source, author, actor, issuer
 
 **Target**:
-What a Command addresses and what a Value belongs to: a Function (a Device's, a Group, an Aggregate or a Flag) or a Device itself, by stable identity, never by Name. Every kind of Target is read, watched and commanded the same way; only how a Command reaches it differs.
+What a Command addresses and what a Value belongs to: a Function (a Device's, a Group, an Aggregate, a Flag or a Presence) or a Device itself, by stable identity, never by Name. Every kind of Target is read, watched and commanded the same way; only how a Command reaches it differs.
 _Avoid_: entity, member (when not in an Aggregate), address
 
 **Update**:
@@ -132,6 +136,10 @@ _Avoid_: Node, Block
 **Code Step**:
 Step running a Starlark `run(trigger, state)` written by an Admin. It reaches targets only through aliases bound to them in its params, and fires the output handles it declares. A call that fails issues nothing, fires nothing and keeps its previous state; the error goes into the Trace.
 _Avoid_: Function node, Script
+
+**Presence simulation**:
+Step that switches on and off at random within a daily window, so the home looks lived in while it is empty. Never called Presence alone: that is a Person's.
+_Avoid_: Presence, vacation mode, away mode
 
 **Manual trigger**:
 Trigger Step started from the web client rather than by the home: a button named after the Step, on its Automation's Tile, or in the editor. Its Run is like any other, with a Trace; only an enabled Automation, neither broken nor runaway, runs.
@@ -188,7 +196,7 @@ _Avoid_: symbol, image
 ### Access
 
 **Person**:
-A human known to Oiko: a member of the household or a temporary guest, under an identity that survives a change of Name or of credentials. May sign in to the web client, or never do so (a child presence will later track). Created by an Admin, who invites them by creating a Sign-in link for them.
+A human known to Oiko: a member of the household or a temporary guest, under an identity that survives a change of Name or of credentials. May sign in to the web client, or never do so (a child, whose Presence Oiko still tracks). Created by an Admin, who invites them by creating a Sign-in link for them.
 _Avoid_: User, account, member (as the term), occupant, resident
 
 **Kiosk**:
