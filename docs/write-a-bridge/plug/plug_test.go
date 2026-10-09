@@ -68,7 +68,7 @@ func TestOpen(t *testing.T) {
 		{"one plug", `{"plugs": {"Desk lamp": "http://192.0.2.10"}}`, ""},
 		{"no plugs", `{}`, "no plugs"},
 		{"no scheme", `{"plugs": {"Desk lamp": "192.0.2.10"}}`, "Desk lamp"},
-		{"unknown key", `{"plug": {"Desk lamp": "http://192.0.2.10"}}`, "plug"},
+		{"unknown key", `{"plug": {"Desk lamp": "http://192.0.2.10"}}`, `"plug"`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := open(bridgetest.Env(t, "plug", c.config))

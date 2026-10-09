@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/llehouerou/oiko/bridge"
@@ -94,17 +95,25 @@ func (b *Bridge) Run(ctx context.Context, port bridge.Port) {
 	}
 }
 
+// poll reads every plug at once: one that doesn't answer delays neither the
+// others nor the Replay by more than the client's timeout.
 func (b *Bridge) poll(ctx context.Context) {
+	var wg sync.WaitGroup
 	for name, addr := range b.plugs {
-		s, err := b.status(ctx, http.MethodGet, addr, nil)
-		if err != nil {
-			b.log.Debug("poll", "plug", name, "err", err) // every 10 s: Debug, not Warn
-			b.port.SetAvailability(name, bridge.Offline)
-			continue
-		}
-		b.port.SetAvailability(name, bridge.Online)
-		b.report(name, s)
+		wg.Go(func() {
+			s, err := b.call(ctx, http.MethodGet, addr, nil)
+			switch {
+			case ctx.Err() != nil: // Oiko is stopping: the plug is no less reachable
+			case err != nil:
+				b.log.Debug("poll", "plug", name, "err", err) // every 10 s: Debug, not Warn
+				b.port.SetAvailability(name, bridge.Offline)
+			default:
+				b.port.SetAvailability(name, bridge.Online)
+				b.report(name, s)
+			}
+		})
 	}
+	wg.Wait()
 }
 
 func (b *Bridge) report(name string, s status) {
@@ -119,7 +128,7 @@ func (b *Bridge) Send(ctx context.Context, address, function string, values map[
 	if !ok {
 		return errors.New("no state")
 	}
-	s, err := b.status(ctx, http.MethodPost, b.plugs[address], map[string]bool{"on": on})
+	s, err := b.call(ctx, http.MethodPost, b.plugs[address], map[string]bool{"on": on})
 	if err != nil {
 		return err // fails the Command
 	}
@@ -133,9 +142,9 @@ type status struct {
 	Power float64 `json:"power"` // W
 }
 
-// status sends the plug at addr a request for its status: GET reads it, POST
+// call sends the plug at addr a request for its status: GET reads it, POST
 // sets body and returns the new one.
-func (b *Bridge) status(ctx context.Context, method, addr string, body any) (status, error) {
+func (b *Bridge) call(ctx context.Context, method, addr string, body any) (status, error) {
 	var data []byte
 	if body != nil {
 		var err error

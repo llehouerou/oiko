@@ -30,6 +30,9 @@ under `bridges`:
 - `plugs`: each plug's name and the base URL of its API, at least one. The name is the
   Device's address in Oiko: renaming a plug makes it a new Device.
 
+The plugs need no secret. A type that does takes it as a `…File` key naming a file that
+holds it, so the secret stays out of the configuration.
+
 Any other key stops Oiko from starting.
 
 ## Add it to Oiko
@@ -54,7 +57,7 @@ services.oiko.settings.bridges.plug = {
 ```
 
 Its entry in the [catalogue](https://llehouerou.github.io/oiko-catalogue/#plug) gives both,
-with the latest versions.
+with the latest versions (a made-up plug has no entry: the link shows where a real type's is).
 
 ## Versions
 
