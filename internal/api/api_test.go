@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -161,6 +162,20 @@ func eventually[T any](t *testing.T, what string, get func() (T, bool)) T {
 			t.Fatalf("%s: %+v", what, v)
 		}
 	}
+}
+
+// enabled waits until the engine has Automations ids enabled. It follows Home
+// through a mirror, a little behind it (ADR 0005): an Automation created
+// right after its target is broken until the mirror has the target too.
+func enabled(t *testing.T, h *home.Home, ids ...string) {
+	t.Helper()
+	eventually(t, "Automations enabled", func() ([]home.AutomationStatus, bool) {
+		s, _, cancel := h.Subscribe()
+		cancel()
+		return s.Automations, !slices.ContainsFunc(ids, func(id string) bool {
+			return !slices.ContainsFunc(s.Automations, func(a home.AutomationStatus) bool { return a.ID == id && a.Status == home.AutomationEnabled })
+		})
+	})
 }
 
 func TestTraceAndCommandHistoryEndpoints(t *testing.T) {

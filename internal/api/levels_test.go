@@ -239,7 +239,8 @@ func TestAGuestSeesOnlyWhatTheyCanPressAndNeverWho(t *testing.T) {
 	manual := `{"id": "go", "kind": "manualTrigger", "name": "Go", "params": {}}`
 	leave := create("Leave", manual, "flag:"+string(flag))
 	create("Gone", manual, "flag:unknown")
-	create("Night", fmt.Sprintf(`{"id": "go", "kind": "valueTrigger", "params": {"target": "flag:%s", "capability": "on", "op": "eq", "value": true}}`, flag), "flag:"+string(flag))
+	night := create("Night", fmt.Sprintf(`{"id": "go", "kind": "valueTrigger", "params": {"target": "flag:%s", "capability": "on", "op": "eq", "value": true}}`, flag), "flag:"+string(flag))
+	enabled(t, h, leave, night)
 	streams := map[string]<-chan map[string]any{
 		"a Member's":        stream(t, member),
 		"a Guest's":         stream(t, guest["Session"]),

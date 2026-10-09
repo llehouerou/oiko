@@ -85,6 +85,7 @@ func TestAManualTriggerRecordsWhoStartedIt(t *testing.T) {
 		{"id": "go", "kind": "manualTrigger", "params": {}},
 		{"id": "set", "kind": "command", "params": {"targets": ["flag:%s"], "values": {"on": true}}}
 	], "edges": [{"from": {"step": "go", "handle": "out"}, "to": {"step": "set", "handle": "in"}}]}`, flag), cookie), http.StatusCreated)
+	enabled(t, h, auto.ID)
 
 	end := decodeAs[home.RunEnd](t, do("POST", "/api/automations/"+auto.ID+"/steps/go/run", "", cookie), http.StatusOK)
 	alices := home.Origin{Person: alice.ID}
