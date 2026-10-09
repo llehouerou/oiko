@@ -15,14 +15,17 @@ export interface Roles {
   charted?: Capability // what its 24 h chart shows, and so which series the tiles load
 }
 
+// The keys below are listed for authors of a type of Bridge in docs/write-a-bridge.md, whose
+// Roles table roles.test.ts keeps true to them.
+
 // In order of precedence: a light's main control is its state.
-const mainControls = ['state', 'on', 'alarm', 'mode']
-const lightAdjustments = ['brightness', 'color_temp', 'color_hs']
+export const mainControls = ['state', 'on', 'alarm', 'mode']
+export const lightAdjustments = ['brightness', 'color_temp', 'color_hs']
 // The Bridge turns a contact's "closed" into off: on is open.
-const stateKeys = ['occupancy', 'presence', 'contact', 'water_leak', 'smoke']
-const healthKeys = ['battery', 'battpercentage', 'battery_low', 'tamper']
+export const stateKeys = ['occupancy', 'presence', 'contact', 'water_leak', 'smoke']
+export const healthKeys = ['battery', 'battpercentage', 'battery_low', 'tamper']
 // A plug's current and voltage follow its power.
-const diagnosticKeys = ['current', 'voltage']
+export const diagnosticKeys = ['current', 'voltage']
 
 // roles sorts the Capabilities of a Function of kind, or of a Device itself
 // (kind ''), by Role. Each lands in one Role at most: a light's composites
@@ -54,7 +57,7 @@ export function roles(kind: string, caps: Capability[]): Roles {
   return r
 }
 
-const readingOrder = ['temperature', 'humidity', 'co2', 'noise', 'pressure', 'illuminance']
+export const readingOrder = ['temperature', 'humidity', 'co2', 'noise', 'pressure', 'illuminance']
 const readingRank = (key: string) => (readingOrder.includes(key) ? readingOrder.indexOf(key) : readingOrder.length)
 export const byReading = (a: string, b: string) => readingRank(a) - readingRank(b)
 

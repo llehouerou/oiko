@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest'
-import { byReading, co2Level, presses, roles, turns } from './roles'
+import guide from '../../docs/write-a-bridge.md?raw'
+import { byReading, co2Level, diagnosticKeys, healthKeys, lightAdjustments, mainControls, presses, readingOrder, roles, stateKeys, turns } from './roles'
 import type { Capability } from './types'
 
 const cap = (key: string, type: Capability['type'], more: Partial<Capability> = {}): Capability => ({
@@ -154,4 +155,21 @@ test('CO₂ asks for airing above 1000 ppm, at once above 1500', () => {
   expect(co2Level('co2', 1200)).toBe('raised')
   expect(co2Level('co2', 1600)).toBe('high')
   expect(co2Level('temperature', 1600)).toBeUndefined()
+})
+
+// Authors of a type of Bridge read these keys in the guide's Roles table.
+test("the guide's Roles table lists the keys of each Role, in order", () => {
+  const row = (role: string) => {
+    const line = guide.split('\n').find((l) => l.startsWith(`| ${role} |`)) ?? ''
+    return [...(line.split('|')[2] ?? '').matchAll(/`([^`]+)`/g)].map((m) => m[1])
+  }
+  const table = ['Main control', 'Adjustment', 'State', 'Health', 'Diagnostic', 'Reading']
+  expect(Object.fromEntries(table.map((role) => [role, row(role)]))).toEqual({
+    'Main control': mainControls,
+    Adjustment: lightAdjustments,
+    State: stateKeys,
+    Health: healthKeys,
+    Diagnostic: diagnosticKeys,
+    Reading: readingOrder,
+  })
 })
