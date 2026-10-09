@@ -63,7 +63,7 @@ make icons                         # the PNG icons and the social preview, from 
 Whoever visibly changes the built-in Dashboard reruns `make screenshots` in the same pull request.
 
 Without Nix, install Go 1.27, Node 24, Mosquitto, make, Chromium (its path in `CHROMIUM`),
-ImageMagick and the Jost font (for `make icons`), then run `git config core.hooksPath .githooks`.
+go-licenses 2 built with that Go, ImageMagick and the Jost font (for `make icons`), then run `git config core.hooksPath .githooks`.
 Nothing promises this path keeps working.
 
 CI runs an offline link check of every Markdown file (lychee), then `make test` in the dev shell.
@@ -73,7 +73,8 @@ After changing `web/package-lock.json` or `go.sum`, update `npmDepsHash` or `ven
 
 ## Pull request terms
 
-- CI is green (`make test`).
+- CI is green (`make test`). It runs `scripts/check-licenses`: a new dependency's license is
+  in its allowlist (ADR 0047).
 - Everything is in English, and nothing carries personal data: the rules are in
   [AGENTS.md](AGENTS.md), and the hooks run `scripts/check-public`.
 - A hard-to-reverse decision comes with an ADR in [docs/adr](docs/adr); a new term goes into
@@ -109,6 +110,7 @@ same license, as its §5 says: no DCO sign-off and no CLA, and you keep your cop
 
 ```sh
 scripts/release v0.3.1             # tags a release carrying the built web client (ADR 0018)
+scripts/notices                    # its third-party notices, as a dry run, after npm run build
 ```
 
 Releases follow [the compatibility rules](docs/upgrade.md#releases) (ADR 0019).

@@ -16,6 +16,7 @@ build: web/node_modules
 test: web/node_modules
 	test -z "$$(gofmt -l .)" || { gofmt -l .; echo 'gofmt: the files above are not formatted'; exit 1; }
 	go vet ./...
+	scripts/check-licenses
 	go test -race ./...
 	cd docs/write-a-bridge/plug && go vet ./... && go test -race ./... # the guide's type, a module of its own
 	cd web && npm run lint && npm test && npm run build && npm run test:browser

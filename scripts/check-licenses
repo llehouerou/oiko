@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Fails on a dependency whose license is outside the allowlist (ADR 0047):
+# permissive licenses, MPL-2.0, EPL-2.0, and OFL-1.1 for fonts. It covers the Go
+# packages cmd/... builds, transitive included, and the web client's packages
+# that are not dev dependencies, read from web/package-lock.json: dev
+# dependencies don't ship, so they are not checked. A license given as an SPDX
+# expression, such as "(MIT OR Apache-2.0)", passes only if listed as such.
+# Run from the dev shell.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+allowed=MIT,BSD-2-Clause,BSD-3-Clause,ISC,0BSD,Apache-2.0,MPL-2.0,EPL-2.0,OFL-1.1
+
+# tadglines/go-pkgs is Apache-2.0, given as a header the classifier can't read.
+go-licenses check ./cmd/... --ignore github.com/llehouerou/oiko --ignore github.com/tadglines/go-pkgs \
+	--allowed_licenses="$allowed"
+
+ALLOWED=$allowed node -e '
+const allowed = process.env.ALLOWED.split(",")
+const lock = require("./web/package-lock.json")
+const refused = Object.entries(lock.packages)
+	.filter(([path, pkg]) => path && !pkg.dev && !allowed.includes(pkg.license))
+	.map(([path, pkg]) => `${path.replace(/^.*node_modules\//, "")}: ${pkg.license ?? "no license"}`)
+if (refused.length) {
+	console.error(refused.join("\n"))
+	console.error("check-licenses: the web packages above have a license outside the allowlist (ADR 0047)")
+	process.exit(1)
+}
+'

@@ -17,7 +17,10 @@ search() {
 	if ((${#files[@]})); then
 		grep -HonP -- "$1" "${files[@]}" || true
 	else
-		git grep --cached -IonP -- "$1" -- . ':!scripts/check-public*' ':!go.sum' ':!web/package-lock.json' || true
+		# What a release commit adds is built from third-party code, license texts and their
+		# authors' emails included.
+		git grep --cached -IonP -- "$1" -- . ':!scripts/check-public*' ':!go.sum' ':!web/package-lock.json' \
+			':!web/dist' ':!THIRD_PARTY_NOTICES.md' || true
 	fi
 }
 

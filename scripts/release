@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Releases Oiko as version vX.Y.Z (ADR 0018): tags a commit, child of HEAD and
 # on no branch, that adds the built web client, so that the module the Go
-# proxy serves embeds it, and stamps the version in internal/build/release.go,
-# for builds where Go records none (Nix). Before anything else, gorelease
+# proxy serves embeds it, stamps the version in internal/build/release.go,
+# for builds where Go records none (Nix), and adds THIRD_PARTY_NOTICES.md from
+# scripts/notices (ADR 0047). Before anything else, gorelease
 # compares the exported API with the previous release and refuses a version
 # those changes do not allow (ADR 0019): during v0, a patch that breaks or adds
 # anything. Run from the dev shell; pushing the tag publishes it.
@@ -51,6 +52,7 @@ fi
 make test
 nix build --no-link # the flake's package lists its sources: a new root file must be in it
 (cd web && npm run build)
+notices=$(scripts/notices)
 
 stamp=internal/build/release.go
 stamped=$(sed "s/^const release = \"\"\$/const release = \"$version\"/" "$stamp")
@@ -64,7 +66,8 @@ trap 'rm -f "$index"' EXIT
 GIT_INDEX_FILE=$index git read-tree HEAD
 GIT_INDEX_FILE=$index git add -f web/dist
 GIT_INDEX_FILE=$index git update-index --cacheinfo "100644,$(git hash-object -w --stdin <<<"$stamped"),$stamp"
+GIT_INDEX_FILE=$index git update-index --add --cacheinfo "100644,$(git hash-object -w --stdin <<<"$notices"),THIRD_PARTY_NOTICES.md"
 tree=$(GIT_INDEX_FILE=$index git write-tree)
-commit=$(git commit-tree "$tree" -p HEAD -m "Release $version, with the built web client and its version")
+commit=$(git commit-tree "$tree" -p HEAD -m "Release $version, with the built web client, its version and the third-party notices")
 git tag -a "$version" "$commit" -m "Oiko $version"
 echo "tagged $version ($commit); publish it with: git push origin $version"

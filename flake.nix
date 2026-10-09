@@ -56,6 +56,11 @@
             pkgs.mosquitto
             pkgs.gnumake
             pkgs.imagemagick # make icons
+            # scripts/check-licenses and scripts/notices; built with the shell's Go, which it must match.
+            (pkgs.go-licenses.override {
+              buildGoModule = pkgs.buildGo127Module;
+              go = pkgs.go_1_27;
+            })
           ];
           # The browser test drives it (web/e2e).
           CHROMIUM = pkgs.lib.getExe pkgs.chromium;
