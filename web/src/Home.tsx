@@ -10,7 +10,7 @@ import { Svg } from './icons'
 import { CustomDashboardView, Dashboard } from './Dashboard'
 import { CreateDashboard, DashboardMenu } from './DashboardMenu'
 import { DashboardEditor } from './DashboardEditor'
-import { FlagPill } from './Tiles'
+import { FlagPill } from './FlagPill'
 import { AggregatePanel, AreaPanel, DevicePanel, FlagPanel } from './HomePanels'
 
 // The Home page: the Dashboard hash opens, at #dashboard/<id>, the Person's first one shown

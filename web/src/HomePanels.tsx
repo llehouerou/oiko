@@ -10,7 +10,7 @@ import { AreaIconPicker, IconPicker } from './icons'
 import { roles, type Roles } from './roles'
 import { aggregateSummary } from './tiles'
 import { Panel } from './Panel'
-import { CommandNote, Control, Reading } from './Tiles'
+import { CommandNote, Control, Reading } from './Capabilities'
 
 // Creates an Area, or renames and deletes one and gathers Devices in it at once; its Icon is saved
 // with its Name. Its place among the others is arranged on the dashboard.

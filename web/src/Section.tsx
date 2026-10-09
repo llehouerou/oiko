@@ -8,7 +8,9 @@ import type { DashboardSection, DashboardTile, TargetTile } from './dashboard'
 import { maxColumns } from './layout'
 import { tileLayout, type SavedLayout } from './tileLayout'
 import { ArrangedGrid, cells, Stepper, type TileNode } from './Arrange'
-import { ManualTile, ReadingText, readingIcons, StateText, Tile } from './Tiles'
+import { Tile } from './Tiles'
+import { ManualTile } from './ManualTile'
+import { ReadingText, readingIcons, StateText } from './Capabilities'
 
 // The narrowest a column of a Layout gets, in px (14rem), and the gap between two.
 const minColumn = 224
