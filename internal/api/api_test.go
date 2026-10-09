@@ -73,8 +73,10 @@ func handlerIn(t *testing.T, dir string, public *url.URL, now func() time.Time) 
 	ctx, cancel := context.WithCancel(context.Background())
 	stored := make(chan struct{})
 	t.Cleanup(func() { cancel(); <-stored }) // before the store closes: its last writes and logs belong to this test
-	go e.Run(ctx)
-	go func() { store.Run(ctx); close(stored) }()
+	// Both start late, as on a slow CI runner: a test reading what they
+	// write must wait for it (eventually, enabled), or it fails every run.
+	go func() { time.Sleep(lag); e.Run(ctx) }()
+	go func() { time.Sleep(lag); store.Run(ctx); close(stored) }()
 	return h, acc, Handler(h, e, store, camera.New(h, store.LiveView), acc, dash, build.Build{}, "binary", release.New(build.Build{}), nil, public, static)
 }
 
@@ -149,6 +151,9 @@ func TestAutomationEndpoints(t *testing.T) {
 		t.Errorf("list after delete = %+v", docs)
 	}
 }
+
+// lag is how late handlerAt starts the engine and the history store.
+const lag = 50 * time.Millisecond
 
 // eventually retries get until it succeeds, for up to 5 s.
 func eventually[T any](t *testing.T, what string, get func() (T, bool)) T {
