@@ -45,6 +45,10 @@ type Bridge interface {
 	// run concurrently. ctx ends when the Command times out: past it, a
 	// transmission is pointless. An error fails the Command; otherwise it
 	// waits for a Report confirming it.
+	//
+	// Oiko refuses Commands while the Bridge is offline, so Send never comes
+	// before Run has called port.SetOnline(true). A Command accepted just
+	// before SetOnline(false) may still be sent after it.
 	Send(ctx context.Context, address, function string, values map[string]any, transition time.Duration) error
 }
 
@@ -157,9 +161,21 @@ type Device struct {
 }
 
 // Function is what a Device does for the household. Key is kind + endpoint,
-// e.g. "light" or "switch/l2", unique within its Device; Kind ("light",
-// "occupancy", "temperature"…) and the Capability keys shape its Tile
-// (ADR 0014).
+// e.g. "light" or "switch/l2", unique within its Device; Kind and the
+// Capability keys shape its Tile (ADR 0014).
+//
+// A Bridge may give any Kind; Functions of the same Kind are aggregated and
+// grouped together. The kinds Oiko knows are:
+//   - "light": its brightness and colour adjust its main control; each Area
+//     aggregates its lights (ADR 0013)
+//   - "switch" (a plug) and "alarm" (a siren): a bar with its own icon
+//   - "camera": see Cameras (ADR 0036)
+//   - "occupancy", "contact" (a door or window), "temperature", "humidity"
+//     and "co2": each Area aggregates them
+//   - "button", "pressure" and "illuminance": grouped in the History, as are
+//     the kinds above
+//
+// Oiko's own Flags are of kind "flag".
 type Function struct {
 	Key          string
 	Kind         string
@@ -197,18 +213,20 @@ const (
 	List      ValueType = "list"      // []any
 )
 
+// Category is what a Capability is for.
 type Category string
 
 const (
-	Primary    Category = "primary"
-	Config     Category = "config"
-	Diagnostic Category = "diagnostic"
+	Primary    Category = "primary"    // what its Function is for: its control, state, readings and Events
+	Config     Category = "config"     // a setting that changes how the Device behaves: only an Admin sets it, never through an Aggregate (ADR 0023)
+	Diagnostic Category = "diagnostic" // how the Device itself is doing (link quality, firmware): shown apart from what its Function does
 )
 
+// Access is what can be done with a Capability's Value.
 type Access struct {
-	Observable bool `json:"observable"` // reported by the device
-	Settable   bool `json:"settable"`
-	Queryable  bool `json:"queryable"`
+	Observable bool `json:"observable"` // the device reports it: a Command waits for a Report confirming it
+	Settable   bool `json:"settable"`   // a Command may set it
+	Queryable  bool `json:"queryable"`  // the device answers when asked for it; Oiko never asks
 }
 
 // Capability is a typed property of a Function, or of a Device for
