@@ -152,7 +152,7 @@ func TestAutomationEndpoints(t *testing.T) {
 	}
 }
 
-// lag is how late handlerAt starts the engine and the history store.
+// lag is how late handlerIn starts the engine and the history store.
 const lag = 50 * time.Millisecond
 
 // eventually retries get until it succeeds, for up to 5 s.
