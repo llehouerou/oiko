@@ -340,11 +340,13 @@ func TestPeriodsEndpoint(t *testing.T) {
 			Previous   *struct{ Value, Total any }
 		}
 	}
-	resp := query("span", "time_on", on)
-	if err := json.NewDecoder(resp.Body).Decode(&answer); err != nil || resp.StatusCode != http.StatusOK {
-		t.Fatalf("%d: %v", resp.StatusCode, err)
-	}
-	if len(answer.Items) != 1 || len(answer.Items[0]) != 1 || answer.End != now.Add(time.Hour).UnixMilli() || answer.First == nil {
+	eventually(t, "the flag's periods", func() (any, bool) {
+		resp := query("span", "time_on", on)
+		answer.Items, answer.First = nil, nil
+		json.NewDecoder(resp.Body).Decode(&answer)
+		return answer, resp.StatusCode == http.StatusOK && answer.First != nil
+	})
+	if len(answer.Items) != 1 || len(answer.Items[0]) != 1 || answer.End != now.Add(time.Hour).UnixMilli() {
 		t.Fatalf("answer = %+v, want one period over the span", answer)
 	}
 	if p := answer.Items[0][0]; p.Start != now.Add(-time.Hour).UnixMilli() || p.Value != 0.0 || !p.Incomplete || p.Previous == nil {
