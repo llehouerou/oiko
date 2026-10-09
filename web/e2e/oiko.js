@@ -19,6 +19,14 @@ export const freePort = () =>
     })
   })
 
+// Waits for check to hold, ten seconds at most; what names what it waits for.
+export async function until(check, what) {
+  for (let tries = 0; !(await check()); tries++) {
+    if (tries === 100) throw new Error(`${what}: still not after 10 s`)
+    await new Promise((r) => setTimeout(r, 100))
+  }
+}
+
 // Oiko with config.json holding config, if given. base is where sign-in works without a Public URL.
 export async function start(config) {
   if (!process.env.CHROMIUM) throw new Error('CHROMIUM is unset: run from the dev shell')
@@ -56,10 +64,7 @@ export async function start(config) {
         (r) => r.ok,
         () => false,
       )
-    for (let tries = 0; !(await up()); tries++) {
-      if (tries === 100) throw new Error(`oiko does not answer on ${base}`)
-      await new Promise((r) => setTimeout(r, 100))
-    }
+    await until(up, `oiko answering on ${base}`)
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM })
   } catch (e) {
     await stop()

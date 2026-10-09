@@ -8,7 +8,7 @@ import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { freePort, start } from './oiko.js'
+import { freePort, start, until } from './oiko.js'
 
 const home = JSON.parse(readFileSync(new URL('home.json', import.meta.url)))
 const out = fileURLToPath(new URL('../../docs/images/dashboard.png', import.meta.url))
@@ -23,10 +23,7 @@ try {
     new Promise((resolve) => {
       const s = connect(port, '127.0.0.1', () => resolve(s.end() && true)).on('error', () => resolve(false))
     })
-  for (let tries = 0; !(await listening()); tries++) {
-    if (tries === 100) throw new Error(`mosquitto does not listen on ${port}`)
-    await new Promise((r) => setTimeout(r, 100))
-  }
+  await until(listening, `mosquitto listening on ${port}`)
   // What zigbee2mqtt would have left on the broker, before Oiko subscribes.
   const publish = (topic, message) =>
     execFileSync('mosquitto_pub', ['-h', '127.0.0.1', '-p', `${port}`, '-q', '1', '-r', '-t', `zigbee2mqtt/${topic}`, '-m', JSON.stringify(message)])
@@ -68,9 +65,10 @@ try {
     }
   }, home.areas)
   await page.goto(oiko.base)
-  await page.getByText(home.areas.at(-1).devices.at(-1).name).waitFor()
+  // Every Device was placed before the page loads: one Tile drawn means all are.
+  await page.getByText('Bedroom motion').waitFor()
   await page.evaluate(() => document.fonts.ready)
-  await page.waitForTimeout(1000) // the 24 h charts' History
+  await page.waitForTimeout(1000) // shortcut: a fixed settle for the 24 h charts' History; wait on the charts if two runs ever differ
   await page.screenshot({ path: out, animations: 'disabled', caret: 'hide' })
   console.log(`wrote ${out}`)
 } finally {
