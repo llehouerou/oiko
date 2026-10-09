@@ -3,11 +3,12 @@
 # module cmd/oiko builds and each package the web client bundles, with its
 # license text. scripts/release ships them in the release commit; run alone, it
 # is a dry run. Reads the web client's list from its last build (npm run build).
+# A bundled package that ships no license file has its text in web/licenses.
 # Run from the dev shell.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-web=web/dist/.vite/license.md
+web=web/dist/.vite/license.json
 if [[ ! -f $web ]]; then
 	echo "notices: no $web: build the web client first (cd web && npm run build)" >&2
 	exit 1
@@ -36,5 +37,20 @@ read -r version dir < <(go list -m -f '{{.Version}} {{.Dir}}' github.com/tadglin
 printf '\n## github.com/tadglines/go-pkgs - %s (Apache-2.0)\n\n' "$version"
 cat "$dir/LICENSE"
 printf '\n'
-printf '\n# Web client\n\n'
-sed -n '/^## /,$p' "$web"
+printf '\n# Web client\n'
+node -e '
+const fs = require("fs")
+const text = (file) => fs.readFileSync(file, "utf8").trim()
+const bundled = JSON.parse(text(process.argv[1]))
+// Tailwind writes CSS of its own (preflight) into the bundle, which imports no module of it.
+const tailwind = require("./web/node_modules/tailwindcss/package.json")
+bundled.push({ name: "tailwindcss", version: tailwind.version, identifier: tailwind.license, text: text("web/node_modules/tailwindcss/LICENSE") })
+for (const pkg of bundled) pkg.text ??= fs.existsSync(`web/licenses/${pkg.name}`) ? text(`web/licenses/${pkg.name}`) : undefined
+const missing = bundled.filter((pkg) => !pkg.text).map((pkg) => pkg.name)
+if (missing.length) {
+	console.error(`notices: no license text for ${missing.join(", ")}: add it to web/licenses`)
+	process.exit(1)
+}
+for (const pkg of bundled.sort((a, b) => a.name.localeCompare(b.name)))
+	console.log(`\n## ${pkg.name} - ${pkg.version} (${pkg.identifier})\n\n${pkg.text}`)
+' "$web"

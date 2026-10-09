@@ -6,7 +6,9 @@
 #   scripts/check-public            what is staged (the pre-commit hook, CI)
 #   scripts/check-public <file>...  those files (the commit-msg hook)
 #
-# A match listed in scripts/check-public.allow, one per line, passes.
+# A match listed in scripts/check-public.allow, one per line, passes. What a
+# release commit adds, web/dist and THIRD_PARTY_NOTICES.md, is not searched: it
+# is third-party code and license texts, their authors' emails included.
 # ponytail: a pattern list, not a scanner: names, host names and coordinates of
 # a real home still need a human eye.
 set -euo pipefail
@@ -17,8 +19,6 @@ search() {
 	if ((${#files[@]})); then
 		grep -HonP -- "$1" "${files[@]}" || true
 	else
-		# What a release commit adds is built from third-party code, license texts and their
-		# authors' emails included.
 		git grep --cached -IonP -- "$1" -- . ':!scripts/check-public*' ':!go.sum' ':!web/package-lock.json' \
 			':!web/dist' ':!THIRD_PARTY_NOTICES.md' || true
 	fi

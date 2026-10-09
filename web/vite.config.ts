@@ -8,5 +8,5 @@ export default defineConfig({
   server: { port: 5180, strictPort: true, proxy: { '/api': 'http://localhost:8080' } },
   // The CSP allows no data: URL (ADR 0034). The license file lists what the bundle holds, for
   // scripts/notices.
-  build: { assetsInlineLimit: 0, license: true },
+  build: { assetsInlineLimit: 0, license: { fileName: '.vite/license.json' } },
 })

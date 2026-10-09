@@ -52,7 +52,7 @@ Chromium the browser test drives, and turns on the hooks that run `scripts/check
 ```sh
 direnv allow                       # or `nix develop`
 make dev                           # API on :8080 + UI with hot reload on http://localhost:5180
-make test                          # gofmt, go vet, Go tests, web lint, tests and browser test
+make test                          # gofmt, go vet, licenses, Go tests, web lint, tests and browser test
 make build                         # single ./oiko binary with the UI embedded
 ./oiko
 go test -run=^$ -bench=. ./internal/zigbee2mqtt   # hot-path latency
@@ -63,7 +63,8 @@ make icons                         # the PNG icons and the social preview, from 
 Whoever visibly changes the built-in Dashboard reruns `make screenshots` in the same pull request.
 
 Without Nix, install Go 1.27, Node 24, Mosquitto, make, Chromium (its path in `CHROMIUM`),
-go-licenses 2 built with that Go, ImageMagick and the Jost font (for `make icons`), then run `git config core.hooksPath .githooks`.
+go-licenses 2.0 built with that Go, ImageMagick and the Jost font (for `make icons`), then run
+`git config core.hooksPath .githooks`.
 Nothing promises this path keeps working.
 
 CI runs an offline link check of every Markdown file (lychee), then `make test` in the dev shell.
