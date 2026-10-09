@@ -1,0 +1,10 @@
+{
+  "types": {
+    "plug": {
+      "description": "Smart plugs on the local network through their HTTP API, polled every 10 seconds: whether each is on, its power draw, and whether it answers. Each can be switched on and off.",
+      "config": {
+        "plugs": {"Desk lamp": "http://192.0.2.10"}
+      }
+    }
+  }
+}
