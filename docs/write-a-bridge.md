@@ -33,35 +33,37 @@ Dashboards, in Automations and in the History like any other.
  external system ──► port: SyncDevices, SetOnline, SetAvailability, Report, Replayed ──► Oiko
 ```
 
-The words in bold are [GLOSSARY.md](../GLOSSARY.md)'s, which says more of each.
+Each linked term is [GLOSSARY.md](../GLOSSARY.md)'s, which says more of it.
 
-**Bridge** and **Port**. Oiko creates each Bridge with your Module's `New`, from its section of
-the configuration, calls its `Run` once and its `Send` for each Command
+[**Bridge**](../GLOSSARY.md) and **Port**. Oiko creates each Bridge with your Module's `New`,
+from its section of the configuration, calls its `Run` once and its `Send` for each Command
 ([`Bridge`][Bridge]). `Run` follows the external system until its context ends: it never returns
 before, and reconnects by itself, since Oiko never restarts it. What it learns it hands Oiko
 through the [`Port`][Port].
 
-**Device**, **Function** and **Capability**. A Device is the hardware as your Bridge describes it,
-found by its Native Address: unique within the Bridge, and stable. Oiko gives it its identity and
-keeps its Name, Icon and Areas; the Name you give only names a new Device. A Function is what the
-Device does for the household (`switch`, `light`, `temperature`): a sensor measuring several
-quantities has one Function each. A Capability is a typed property of a Function (`state`,
-`brightness`), or of the Device itself for its settings and diagnostics.
+[**Device**](../GLOSSARY.md), [**Function**](../GLOSSARY.md) and
+[**Capability**](../GLOSSARY.md). A Device is the hardware as your Bridge describes it, found by
+its Native Address: unique within the Bridge, and stable. Oiko gives it its identity and keeps
+its Name, Icon and Areas; the Name you give only names a new Device. A Function is what the Device
+does for the household (`switch`, `light`, `temperature`): a sensor measuring several quantities
+has one Function each. A Capability is a typed property of a Function (`state`, `brightness`), or
+of the Device itself for its settings and diagnostics.
 
 **Reading**. A Capability's data in a Report, as of when the device sent it: a Value, or an Event
 for a Stateless Capability, such as a button press.
 
-**Command**. Oiko checks the values against the Capabilities, calls `Send`, and waits for a Report
-that confirms them. An error from `Send` fails the Command; a `Send` that returns nil without a
-Report following times out.
+[**Command**](../GLOSSARY.md). Oiko checks the values against the Capabilities, calls `Send`, and
+waits for a Report that confirms them. An error from `Send` fails the Command; a `Send` that
+returns nil without a Report following times out.
 
-**online** and **Availability**. Whether the external system is reachable, for the Bridge as a
-whole, and whether each Device is. A Bridge starts offline, and Oiko refuses Commands to it until
-it says otherwise; while it is offline, its Devices' Availability is unknown.
+**online** and [**Availability**](../GLOSSARY.md). Whether the external system is reachable, for
+the Bridge as a whole, and whether each Device is. A Bridge starts offline, and Oiko refuses
+Commands to it until it says otherwise; while it is offline, its Devices' Availability is unknown.
 
-**Replay**. What your Bridge hands Oiko on connecting so that its Devices' state is known. Once
-the state is as known as it gets, your Bridge says so; the automation engine waits for every
-Bridge's, about 10 s at most. A replayed Value is state, not a change: it fires no Value trigger.
+[**Replay**](../GLOSSARY.md). What your Bridge hands Oiko on connecting so that its Devices' state
+is known. Once the state is as known as it gets, your Bridge says so; the automation engine waits
+for every Bridge's, about 10 s at most. A replayed Value is state, not a change: it fires no Value
+trigger.
 
 ## Your first type: `plug`
 
@@ -245,10 +247,10 @@ func (b *Bridge) Send(ctx context.Context, address, function string, values map[
 ```
 
 The values are keyed by Capability key and already checked: `state` is a bool, a toggle already
-resolved ([`Bridge.Send`][Bridge] says what else Oiko guarantees, such as one `Send` at a time per
-Function). The plug answers with its new status, so `Send` reports it at once. A system that tells
-later, through its event stream or the next poll, returns nil and lets that Report confirm the
-Command. `call`, which reads or sets a status with `net/http`, is in
+resolved ([`Bridge.Send`][Bridge] says what else Oiko guarantees, such as one `Send` at a time
+per Function or Device). The plug answers with its new status, so `Send` reports it at once. A
+system that tells later, through its event stream or the next poll, returns nil and lets that
+Report confirm the Command. `call`, which reads or sets a status with `net/http`, is in
 [`plug.go`](write-a-bridge/plug/plug.go).
 
 ## Test it, then run it
@@ -354,7 +356,7 @@ Function, told by its key:
 
 The other Roles go by type, not key. A Stateless Capability's are Events (under `action`, a
 button's presses), and every other Settable Capability, with any of Category Config, is a setting
-behind the Tile's ⋯.
+behind the Tile's ⋯, but for a light's composites other than its colour, which have none.
 
 - A main control under a key the table doesn't list shows no control: the Tile shows it as a
   setting. Automations see every Capability, whatever the Tile shows.
@@ -392,7 +394,7 @@ A camera is a Function of kind `camera`, which may have no Capability. Its Bridg
 so it must never wake the camera, and the URL of a Live view, RTSP, which Oiko plays as H.264 and
 AAC without transcoding ([ADR 0036](adr/0036-cameras-a-picture-and-a-live-view-relayed-by-oiko.md)).
 
-When the camera's system keeps the clips it records, implement
+When the camera's system keeps Recordings of its own, implement
 [`bridge.Recordings`][Recordings] too: Oiko lists them and relays their video, keeping none
 ([ADR 0038](adr/0038-recordings-stay-with-the-cameras-system-oiko-lists-and-relays-them.md)).
 Announce each new Recording with an Event of the camera's [`RecordingEvent`][RecordingEvent]
@@ -408,9 +410,9 @@ The reference is [oiko-arlo][arlo], cameras with Recordings in Arlo's cloud.
 
 ## More you may need
 
-- **Commands.** A pairing or a sign-in the user runs once is a [`Module.Commands`][Module] entry,
-  run as `oiko <bridge> <command> [args]` while Oiko is not serving, such as homekit's
-  [`pair`](configure.md#homekit).
+- **Command-line commands.** A pairing or a sign-in the user runs once is a
+  [`Module.Commands`][Module] entry, run as `oiko <bridge> <command> [args]` while Oiko is not
+  serving, such as homekit's [`pair`](configure.md#homekit).
 - **Reconnecting.** When the system goes away, call `SetOnline(false)`, retry with a growing delay,
   and `SetOnline(true)` once back. `Run` never returns before its context ends.
 - **Never panic.** In `Run` or `Send`, a panic takes all of Oiko down: return an error, or log one.
