@@ -52,7 +52,7 @@ _Avoid_: unavailable (as a state value)
 ### Functional
 
 **Function**:
-What a Device does in the home (light, switch, cover, thermostat, occupancy, temperature, contact, button, camera…). The unit of display and control; belongs to exactly one Device, unless it is a Group, an Aggregate, a Flag or a Presence. A sensor measuring several quantities provides one Function per quantity, so each can be named, placed and aggregated on its own. Identified within its Device by its kind and endpoint (e.g. `switch/l2`).
+What a Device does in the home (light, switch, cover, thermostat, occupancy, temperature, contact, button, camera…). The unit of display and control; belongs to exactly one Device, unless it is a Group, an Aggregate, a Flag, a Presence or the Home presence. A sensor measuring several quantities provides one Function per quantity, so each can be named, placed and aggregated on its own. Identified within its Device by its kind and endpoint (e.g. `switch/l2`).
 _Avoid_: Entity, Endpoint, Service, Channel
 
 **Group**:
@@ -72,8 +72,20 @@ Whether a Person is home or away: a binary Function Oiko derives for every Perso
 _Avoid_: location, whereabouts, tracker, home status, occupancy (reserved for a sensor's)
 
 **Presence source**:
-Binary Function an Admin binds to a Person's Presence: any but a Presence, true meaning home. Counts as home while true, and for its departure delay after turning false; ignored with no Value or while offline. Always called a Presence source, never a source alone.
+Binary Function an Admin binds to a Person's Presence: any but a Presence or the Home presence, true meaning home. Counts as home while true, and for its departure delay after turning false; ignored with no Value or while offline. Always called a Presence source, never a source alone.
 _Avoid_: tracker, sensor, input, witness
+
+**Home presence**:
+Whether someone is home, Persons or not: the one binary Function Oiko derives for the home, home while any Person's Presence is or while someone has been seen inside since an Entrance door last closed. Always present and online, with no Area, no override and the Name "Home"; no Value while nothing has told.
+_Avoid_: anyone home, someone home, home status, occupancy (reserved for a sensor's), household presence
+
+**Entrance door**:
+Binary Function an Admin binds to the Home presence, true meaning open: its closing, followed by no Sign of life within the exit grace, tells that whoever was inside has left.
+_Avoid_: perimeter, front door (as the term)
+
+**Sign of life**:
+Binary Function an Admin binds to the Home presence, true meaning someone is there (an occupancy sensor, a "Guests" Flag): turning true tells that someone is home until an Entrance door next closes with no Sign of life following.
+_Avoid_: occupancy evidence, activity, motion (as the term)
 
 **Capability**:
 Typed property of a Function (on, brightness, temperature…), or of the Device itself for configuration and diagnostic properties (battery, link quality, power-on behavior…). Has a type, unit, bounds, access (observable, settable, queryable) and category (primary, configuration, diagnostic). Identified within its owner by its property name (e.g. `brightness`). A numeric Capability may be a counter: a running total that only rises, except when the device resets it (energy in kWh); what was used over a period is its rise above its highest reading, a drop of more than 1 % counting as a restart from zero and a smaller one as the device's rounding.
@@ -112,7 +124,7 @@ What issued a Command: a Person, a Kiosk, a Program or a Run of an Automation, b
 _Avoid_: source, author, actor, issuer
 
 **Target**:
-What a Command addresses and what a Value belongs to: a Function (a Device's, a Group, an Aggregate, a Flag or a Presence) or a Device itself, by stable identity, never by Name. Every kind of Target is read, watched and commanded the same way; only how a Command reaches it differs.
+What a Command addresses and what a Value belongs to: a Function (a Device's, a Group, an Aggregate, a Flag, a Presence or the Home presence) or a Device itself, by stable identity, never by Name. Every kind of Target is read, watched and commanded the same way; only how a Command reaches it differs.
 _Avoid_: entity, member (when not in an Aggregate), address
 
 **Update**:
