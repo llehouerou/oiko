@@ -68,8 +68,12 @@ Binary Function held by Oiko itself, with no Device or Bridge: on or off, set by
 _Avoid_: Mode, helper, input_boolean, variable, virtual switch
 
 **Presence**:
-Whether a Person is home or away: a binary Function Oiko derives for every Person, with no Device or Bridge, its Value computed by a rule from the sources bound to the Person, or set by hand; no Value while nothing has told. Always online, with no Area, shown under its Person's Name; may be a member of an Aggregate of Presences. Removed with its Person, History included.
+Whether a Person is home or away: a binary Function Oiko derives for every Person, with no Device or Bridge, its Value computed by a rule from the Person's Presence sources (home while any counts as home), or set by hand; no Value while nothing has told, its last one kept while no source counts. Always online, with no Area, shown under its Person's Name; may be a member of an Aggregate of Presences. Removed with its Person, History included.
 _Avoid_: location, whereabouts, tracker, home status, occupancy (reserved for a sensor's)
+
+**Presence source**:
+Binary Function an Admin binds to a Person's Presence: any but a Presence, true meaning home. Counts as home while true, and for its departure delay after turning false; ignored with no Value or while offline. Always called a Presence source, never a source alone.
+_Avoid_: tracker, sensor, input, witness
 
 **Capability**:
 Typed property of a Function (on, brightness, temperature…), or of the Device itself for configuration and diagnostic properties (battery, link quality, power-on behavior…). Has a type, unit, bounds, access (observable, settable, queryable) and category (primary, configuration, diagnostic). Identified within its owner by its property name (e.g. `brightness`). A numeric Capability may be a counter: a running total that only rises, except when the device resets it (energy in kWh); what was used over a period is its rise above its highest reading, a drop of more than 1 % counting as a restart from zero and a smaller one as the device's rounding.
