@@ -589,14 +589,14 @@ function VariantB({ sim }: { sim: Sim }) {
 
 // ---- variant C: faces in a banner, a sheet per Person ----------------------------------------
 
-function Face({ p, size = 'size-14' }: { p: Person; size?: string }) {
+function Face({ p, size = 'size-14', small = false }: { p: Person; size?: string; small?: boolean }) {
   const ring = p.value === undefined ? 'border-2 border-dashed border-neutral-600 text-neutral-500' : p.value ? 'bg-emerald-500/25 ring-2 ring-emerald-400 text-emerald-100' : 'bg-neutral-800 text-neutral-500'
   return (
-    <span className={`relative grid ${size} shrink-0 place-items-center rounded-full text-xl font-semibold ${ring}`}>
+    <span className={`relative grid ${size} shrink-0 place-items-center rounded-full font-semibold ${small ? 'text-sm' : 'text-xl'} ${ring}`}>
       {p.name[0]}
       {p.forced !== undefined && (
-        <span className="absolute -right-1 -bottom-1 grid size-6 place-items-center rounded-full bg-amber-400 text-neutral-900">
-          <Manual />
+        <span className={`absolute -right-1 -bottom-1 grid place-items-center rounded-full bg-amber-400 text-neutral-900 ${small ? 'size-4' : 'size-6'}`}>
+          <Manual className={small ? 'size-3' : 'size-4'} />
         </span>
       )}
     </span>
@@ -786,49 +786,113 @@ function HomeSheet({ sim, onClose }: { sim: Sim; onClose: () => void }) {
   )
 }
 
-function VariantC({ sim }: { sim: Sim }) {
+type Density = 'tall' | 'small' | 'inline'
+
+// C's banner, at three heights: tall faces with names and ages (C), small faces with names (D),
+// one line of face chips (E).
+function Banner({ w, density, onOpen }: { w: World; density: Density; onOpen: (id: string) => void }) {
+  const since = (p: Person) => (p.value === undefined ? 'unknown' : `${said(p.value)} · ${ago(w.now - p.since)}`)
+  const homeTint = w.homeValue ? 'bg-emerald-500/25 text-emerald-300' : 'bg-neutral-800 text-neutral-500'
+  const homeLabel = w.homeValue ? 'Someone home' : 'Nobody home'
+  const stranger = w.homeValue && !w.persons.some((p) => p.value) ? ' · not one of you' : ''
+  if (density === 'inline')
+    return (
+      <section className="flex flex-wrap items-center gap-2">
+        <button onClick={() => onOpen('home')} className={`flex h-9 items-center gap-1.5 rounded-full pr-3 pl-2 text-sm hover:brightness-125 ${homeTint}`}>
+          <Svg path={w.homeValue ? mdiHome : mdiHomeOutline} className="size-5" />
+          <span className="font-medium">{homeLabel}</span>
+          <span className="opacity-70">
+            {ago(w.now - w.homeSince)}
+            {stranger}
+          </span>
+        </button>
+        {w.persons.map((p) => (
+          <button key={p.id} onClick={() => onOpen(p.id)} title={since(p)} className="flex h-9 items-center gap-2 rounded-full bg-neutral-900 pr-3 pl-1 text-sm hover:bg-neutral-800">
+            <Face p={p} size="size-7" small />
+            <span className={p.value ? '' : 'text-neutral-400'}>{p.name}</span>
+            <span className="text-xs text-neutral-500">{p.value === undefined ? '—' : ago(w.now - p.since)}</span>
+          </button>
+        ))}
+        {w.aggregates.map((a) => (
+          <span key={a.id} className="flex h-9 items-center gap-1.5 rounded-full bg-neutral-900 px-3 text-sm text-neutral-300">
+            <Svg path={mdiAccountGroup} className={`size-5 ${aggValue(w, a) ? 'text-emerald-300' : 'text-neutral-500'}`} />
+            {a.name}
+            <span className="text-xs text-neutral-500">
+              {aggHome(w, a)}/{a.members.length}
+            </span>
+          </span>
+        ))}
+      </section>
+    )
+  const tall = density === 'tall'
+  return (
+    <section
+      className={`flex flex-wrap items-center rounded-2xl border border-neutral-800 bg-linear-to-r from-neutral-800/60 to-transparent ${tall ? 'gap-x-8 gap-y-4 px-5 py-4' : 'gap-x-6 gap-y-2 px-3 py-2'}`}
+    >
+      <button onClick={() => onOpen('home')} className="flex items-center gap-3 text-left hover:text-amber-200">
+        <span className={`grid place-items-center ${tall ? 'size-14 rounded-2xl' : 'size-9 rounded-xl'} ${homeTint}`}>
+          <Svg path={w.homeValue ? mdiHome : mdiHomeOutline} className={tall ? 'size-8' : 'size-5'} />
+        </span>
+        {tall ? (
+          <span>
+            <span className="block text-xl font-semibold">{homeLabel}</span>
+            <span className="block text-sm text-neutral-400">
+              {ago(w.now - w.homeSince)}
+              {stranger}
+            </span>
+          </span>
+        ) : (
+          <span className="font-semibold">
+            {homeLabel}
+            <span className="font-normal text-neutral-400">
+              {' · '}
+              {ago(w.now - w.homeSince)}
+              {stranger}
+            </span>
+          </span>
+        )}
+      </button>
+      <div className={`flex flex-wrap ${tall ? 'gap-4' : 'gap-3'}`}>
+        {w.persons.map((p) => (
+          <button key={p.id} onClick={() => onOpen(p.id)} title={since(p)} className={`flex flex-col items-center hover:text-amber-200 ${tall ? 'w-16 gap-1' : 'w-12 gap-0.5'}`}>
+            <Face p={p} size={tall ? 'size-14' : 'size-9'} small={!tall} />
+            <span className={`w-full truncate text-center ${tall ? 'text-sm' : 'text-xs'}`}>{p.name}</span>
+            {tall && <span className="text-xs text-neutral-500">{p.value === undefined ? '—' : ago(w.now - p.since)}</span>}
+          </button>
+        ))}
+        {w.aggregates.map((a) => (
+          <div key={a.id} className={`flex flex-col items-center whitespace-nowrap ${tall ? 'w-16 gap-1' : 'min-w-12 gap-0.5'}`}>
+            <span
+              className={`grid place-items-center rounded-full ${tall ? 'size-14' : 'size-9'} ${aggValue(w, a) ? 'bg-emerald-500/15 text-emerald-200' : 'bg-neutral-800 text-neutral-500'}`}
+            >
+              <Svg path={mdiAccountGroup} className={tall ? 'size-7' : 'size-5'} />
+            </span>
+            <span className={tall ? 'text-sm' : 'text-xs'}>
+              {a.name}
+              {!tall && ` ${aggHome(w, a)}/${a.members.length}`}
+            </span>
+            {tall && (
+              <span className="text-xs text-neutral-500">
+                {aggHome(w, a)}/{a.members.length}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function VariantC({ sim, density }: { sim: Sim; density: Density }) {
   const { w } = sim
   const [open, setOpen] = useState<string | null>(null)
   const person = w.persons.find((p) => p.id === open)
   return (
     <div className="space-y-6">
-      <section className="flex flex-wrap items-center gap-x-8 gap-y-4 rounded-2xl border border-neutral-800 bg-linear-to-r from-neutral-800/60 to-transparent px-5 py-4">
-        <button onClick={() => setOpen('home')} className="flex items-center gap-3 text-left hover:text-amber-200">
-          <span className={`grid size-14 place-items-center rounded-2xl ${w.homeValue ? 'bg-emerald-500/25 text-emerald-300' : 'bg-neutral-800 text-neutral-500'}`}>
-            <Svg path={w.homeValue ? mdiHome : mdiHomeOutline} className="size-8" />
-          </span>
-          <span>
-            <span className="block text-xl font-semibold">{w.homeValue ? 'Someone home' : 'Nobody home'}</span>
-            <span className="block text-sm text-neutral-400">
-              {ago(w.now - w.homeSince)}
-              {w.homeValue && !w.persons.some((p) => p.value) && ' · not one of you'}
-            </span>
-          </span>
-        </button>
-        <div className="flex flex-wrap gap-4">
-          {w.persons.map((p) => (
-            <button key={p.id} onClick={() => setOpen(p.id)} className="flex w-16 flex-col items-center gap-1 hover:text-amber-200">
-              <Face p={p} />
-              <span className="w-full truncate text-center text-sm">{p.name}</span>
-              <span className="text-xs text-neutral-500">{p.value === undefined ? '—' : ago(w.now - p.since)}</span>
-            </button>
-          ))}
-          {w.aggregates.map((a) => (
-            <div key={a.id} className="flex w-16 flex-col items-center gap-1">
-              <span className={`grid size-14 place-items-center rounded-full ${aggValue(w, a) ? 'bg-emerald-500/15 text-emerald-200' : 'bg-neutral-800 text-neutral-500'}`}>
-                <Svg path={mdiAccountGroup} className="size-7" />
-              </span>
-              <span className="text-sm">{a.name}</span>
-              <span className="text-xs text-neutral-500">
-                {aggHome(w, a)}/{a.members.length}
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
+      <Banner w={w} density={density} onOpen={setOpen} />
       <p className="text-xs text-neutral-500">
         A banner over every Dashboard: a tap on a face opens its sheet (Home / Away, its sources live, its day); an Admin edits the sources right there. The house
-        opens the Home presence's sheet.
+        opens the Home presence's sheet.{density !== 'tall' && ' Hover a face for its state and since.'}
       </p>
       <PhoneTiles w={w} />
       {open === 'home' && <HomeSheet sim={sim} onClose={() => setOpen(null)} />}
@@ -872,7 +936,7 @@ function SimBar({ sim }: { sim: Sim }) {
   )
 }
 
-const variants = { A: 'Pills beside the Flags', B: 'A Household Section', C: 'Faces and sheets' } as const
+const variants = { A: 'Pills beside the Flags', B: 'A Household Section', C: 'Faces and sheets', D: 'C, small faces', E: 'C, one line of chips' } as const
 type Key = keyof typeof variants
 const keys = Object.keys(variants) as Key[]
 
@@ -921,7 +985,9 @@ export function PresencePrototype() {
     <div className="rounded-2xl border border-dashed border-fuchsia-500/40 p-4">
       {variant === 'A' && <VariantA sim={sim} />}
       {variant === 'B' && <VariantB sim={sim} />}
-      {variant === 'C' && <VariantC sim={sim} />}
+      {variant === 'C' && <VariantC sim={sim} density="tall" />}
+      {variant === 'D' && <VariantC sim={sim} density="small" />}
+      {variant === 'E' && <VariantC sim={sim} density="inline" />}
       <SimBar sim={sim} />
       <Switcher current={variant} onPick={pick} />
     </div>
