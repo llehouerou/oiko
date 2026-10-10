@@ -68,7 +68,7 @@ Binary Function held by Oiko itself, with no Device or Bridge: on or off, set by
 _Avoid_: Mode, helper, input_boolean, variable, virtual switch
 
 **Presence**:
-Whether a Person is home or away: a binary Function Oiko derives for every Person, with no Device or Bridge, its Value computed by a rule from the Person's Presence sources (home while any counts as home), or set by hand; no Value while nothing has told, its last one kept while no source counts. Always online, with no Area, shown under its Person's Name; may be a member of an Aggregate of Presences. Removed with its Person, History included.
+Whether a Person is home or away: a binary Function Oiko derives for every Person, with no Device or Bridge, its Value computed by a rule from the Person's Presence sources (home while any counts as home); no Value while nothing has told, its last one kept while no source counts. Set by hand by a Command from anyone who may issue one, it holds that Value until the rule computes the same, remembered across restarts and shown as manual meanwhile; a Person with no Presence source is set only by hand. Always online, with no Area, shown under its Person's Name; may be a member of an Aggregate of Presences. Removed with its Person, History included.
 _Avoid_: location, whereabouts, tracker, home status, occupancy (reserved for a sensor's)
 
 **Presence source**:
