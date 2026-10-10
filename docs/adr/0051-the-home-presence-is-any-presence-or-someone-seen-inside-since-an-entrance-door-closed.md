@@ -20,4 +20,4 @@ We chose this because not everyone in the home is a Person: a guest, a cleaner o
 - Home, the API and the web client learn `presence:home` beside each Person's `presence:<id>`. Person ids are UUIDs, so the key cannot collide.
 - The Home presence's Value may change with no Sign of life or door reporting, when an exit grace runs out.
 - A pet's motion or an unbound door can keep the home occupied until someone next goes through an Entrance door. The Admin's choice of Signs of life is the defence.
-- Who sees the Home presence and its History is decided together with the Persons' Presences.
+- Who sees the Home presence and its History is decided together with the Persons' Presences: like any Target (ADR 0053).
