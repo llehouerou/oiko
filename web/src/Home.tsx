@@ -12,6 +12,7 @@ import { CreateDashboard, DashboardMenu } from './DashboardMenu'
 import { DashboardEditor } from './DashboardEditor'
 import { FlagPill } from './FlagPill'
 import { AggregatePanel, AreaPanel, DevicePanel, FlagPanel } from './HomePanels'
+import { PresencePrototype } from './PresencePrototype' // PROTOTYPE, throwaway
 
 // The Home page: the Dashboard hash opens, at #dashboard/<id>, the Person's first one shown
 // otherwise, and the panels an Admin opens from it. The built-in Dashboard is drawn from the
@@ -90,6 +91,7 @@ export function Home({ hash }: { hash: string }) {
       />
       <main className="mx-auto max-w-[120rem] space-y-6 p-4 pb-24 lg:px-8">
         {admin && <ReleaseBanner />}
+        {import.meta.env.DEV && new URLSearchParams(location.search).has('variant') && <PresencePrototype />}
         {!current && pills.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {pills.map((f) => (
