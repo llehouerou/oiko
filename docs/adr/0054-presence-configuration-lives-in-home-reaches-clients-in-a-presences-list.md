@@ -22,4 +22,5 @@ We chose this because a Presence is a Target, and Home owns Targets: it alone ca
 - There is no `POST` or `DELETE`: Oiko derives every Presence (ADR 0048, ADR 0051).
 - Guests receive the `presences` Update and list (ADR 0053).
 - Starlark, the History API and the Command history take `presence:<id>` and `presence:home` as any Target key; the History records `home` and `manual` as any Capability.
+- A recalled Value is replayed state, as a Flag's is on load. A change of a Presence or of the Home presence moved only by what it reads replaying (its Presence sources' first Values, the Presences', Entrance doors' and Signs of life's) is replayed state too, as an Aggregate's is: it fires no Value trigger. Alice leaving while Oiko is down fires no "when Alice leaves" at startup; a departure delay or an exit grace running out after the start is a change and fires.
 - Everything here is added, nothing changed: presence ships in a minor release (ADR 0019). A later rule's per-source parameters (ADR 0049) are new optional fields beside `departureDelay`.
