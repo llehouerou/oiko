@@ -151,7 +151,7 @@ test('a binary Value turns open, occupied, connected or on', () => {
   expect(turns(cap('state', 'binary'))).toEqual(['on', 'Times on'])
 })
 
-test('a binary Value at rest is closed, not connected or clear', () => {
+test("a binary Value at rest is 'closed', 'not connected' or 'clear'", () => {
   expect(rests(cap('contact', 'binary'))).toBe('closed')
   expect(rests(cap('connected', 'binary'))).toBe('not connected')
   expect(rests(cap('occupancy', 'binary'))).toBe('clear')
