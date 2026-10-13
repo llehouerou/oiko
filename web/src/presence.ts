@@ -46,7 +46,7 @@ export function readCapability(kind: string, caps: Capability[]): Capability | u
 // home, until when if only by its departure delay.
 export type SourceState = { ignored: 'unavailable' | 'offline' | 'no value' } | { said: string; counts: boolean; until?: number }
 
-// sourceState derives it from what the source is read through (undefined once it vanished), its
+// sourceState derives it from what the Presence source is read through (undefined once it vanished), its
 // Value, and whether its Device or Bridge is offline or it is Detached.
 export function sourceState(source: PresenceSource, cap: Capability | undefined, value: Value | undefined, offline: boolean, now: number): SourceState {
   if (!cap) return { ignored: 'unavailable' }

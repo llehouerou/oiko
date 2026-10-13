@@ -135,7 +135,7 @@ function PresenceSheet({ presence, onClose }: { presence: Presence; onClose: () 
   )
 }
 
-// A Presence's sources, each with its live state. An Admin edits them in place, the live state still
+// A Presence's Presence sources, each with its live state. An Admin edits them in place, the live state still
 // in sight, and saves them whole.
 function Sources({ presence }: { presence: Presence }) {
   const admin = useAllows('admin')

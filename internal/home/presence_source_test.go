@@ -2,7 +2,10 @@ package home
 
 import (
 	"errors"
+	"os"
+	"regexp"
 	"slices"
+	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -79,6 +82,32 @@ func sourcesOf(h *Home, id PersonID) []PresenceSource {
 		}
 	}
 	return nil
+}
+
+// A Presence source is read through the Roles the guide's table lists, as
+// web/src/roles.test.ts keeps the web client's.
+func TestPresenceSourcesReadTheGuidesRoles(t *testing.T) {
+	guide, err := os.ReadFile("../../docs/write-a-bridge.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := func(role string) []string {
+		var keys []string
+		for line := range strings.Lines(string(guide)) {
+			if cells := strings.Split(line, "|"); strings.HasPrefix(line, "| "+role+" |") && len(cells) > 2 {
+				for _, m := range regexp.MustCompile("`([^`]+)`").FindAllStringSubmatch(cells[2], -1) {
+					keys = append(keys, m[1])
+				}
+			}
+		}
+		return keys
+	}
+	if got := row("Main control"); !slices.Equal(got, mainControls) {
+		t.Errorf("the guide's main controls are %v, Home's %v", got, mainControls)
+	}
+	if got := row("State"); !slices.Equal(got, stateKeys) {
+		t.Errorf("the guide's states are %v, Home's %v", got, stateKeys)
+	}
 }
 
 func TestAPresenceIsHomeWhileAnySourceCounts(t *testing.T) {
@@ -175,7 +204,7 @@ func TestAnOverrideHoldsUntilTheRuleAgrees(t *testing.T) {
 		bind(t, h, alice, PresenceSource{TargetFlag(other), 0}) // rebinding: the rule now agrees
 		presenceIs(t, h, alice, true, false)
 
-		set(bob, true) // no source: nothing ends it
+		set(bob, true) // no Presence source: nothing ends it
 		time.Sleep(24 * time.Hour)
 		synctest.Wait()
 		presenceIs(t, h, bob, true, true)
@@ -221,7 +250,7 @@ func TestPresenceSourcesAreChecked(t *testing.T) {
 	// A light's state, a Flag's on, an Aggregate's main control and a state; the phone listed twice.
 	want := []PresenceSource{{mobile, 900}, {light, 0}, {flag, 60}, {TargetAggregate(lights), 0}, {hall, 300}}
 	bind(t, h, alice, append(want, PresenceSource{mobile, 0})...)
-	bind(t, h, bob, PresenceSource{mobile, 0}) // one source, two Persons
+	bind(t, h, bob, PresenceSource{mobile, 0}) // one Presence source, two Persons
 	if got := sourcesOf(h, alice); !slices.Equal(got, want) {
 		t.Errorf("sources = %v, want %v", got, want)
 	}

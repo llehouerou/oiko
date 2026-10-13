@@ -18,3 +18,4 @@ We chose this because it depends only on the sources' current Values and the clo
 - A type of Bridge reporting whether a phone is connected must report it as a Value, with the phone's Device online while the Bridge reaches the router, never through Availability: an offline source is ignored, not away.
 - A Presence's Value may change with no source reporting, when a departure delay runs out.
 - Per-source parameters are where a later statistical rule puts its own (a reliability, a prior), beside or instead of the departure delay.
+- Home reads a Presence source's main control or state by the keys of the Roles (ADR 0014), which only the web client read until now; the guide's Roles table holds both to the same keys.

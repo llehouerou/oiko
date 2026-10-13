@@ -171,7 +171,7 @@ func TestAnAdminBindsPresenceSources(t *testing.T) {
 			want = http.StatusNoContent
 		}
 		if resp := do("PUT", "/api/presences/p2", body); resp.StatusCode != want {
-			t.Errorf("%s binding Alice's sources: %d, want %d", who, resp.StatusCode, want)
+			t.Errorf("%s binding Alice's Presence sources: %d, want %d", who, resp.StatusCode, want)
 		}
 	}
 	if got := sourcesIn(next(t, guest, "presences"), "p2"); len(got) != 1 || got[0].(map[string]any)["target"] != flag || got[0].(map[string]any)["departureDelay"] != 60.0 {

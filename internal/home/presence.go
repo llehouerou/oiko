@@ -209,10 +209,20 @@ func (h *Home) dropSources(drop func(Target) bool) error {
 }
 
 // followPresences brings every Presence in line with its rule, after its
-// Presence sources' Availability or definition may have changed. Callers hold h.mu.
+// Presence sources' Availability or definition may have changed. Until the
+// home is known, that is its Bridges replaying: a Bridge may report its
+// retained state before it says it is online. Callers hold h.mu.
 func (h *Home) followPresences() {
-	for id := range h.presences {
-		h.followRule(id, false)
+	h.checkKnown()
+	select {
+	case <-h.known:
+		for id := range h.presences {
+			h.followRule(id, false)
+		}
+	default:
+		for id := range h.presences {
+			h.followRule(id, true)
+		}
 	}
 }
 

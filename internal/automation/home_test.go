@@ -170,6 +170,13 @@ func TestAPresenceSetByHandFiresItsValueTriggerUntilItsPersonGoes(t *testing.T) 
 }
 
 func TestAPresenceFiresItsValueTriggerOnItsRuleNotOnReplayedValues(t *testing.T) {
+	// A Bridge may replay retained state before it says it is online, or after.
+	for _, onlineFirst := range []bool{true, false} {
+		t.Run(fmt.Sprintf("online first %v", onlineFirst), func(t *testing.T) { replayedPresence(t, onlineFirst) })
+	}
+}
+
+func replayedPresence(t *testing.T, onlineFirst bool) {
 	synctest.Test(t, func(t *testing.T) {
 		const alice = home.PersonID("0190a1ce-0000-7000-8000-000000000001")
 		phone := bridge.Device{NativeAddress: "0xphone", Functions: []bridge.Function{{Key: "network", Kind: "network", Capabilities: []home.Capability{
@@ -211,7 +218,9 @@ func TestAPresenceFiresItsValueTriggerOnItsRuleNotOnReplayedValues(t *testing.T)
 		}
 		h.Recall(func(home.Ref, any) (time.Time, bool) { return time.Now().Add(-time.Hour), true })
 		c := &counted{Home: h, z: h.Attach("zigbee2mqtt", nopBridge{})}
-		c.z.SetOnline(true)
+		if onlineFirst {
+			c.z.SetOnline(true)
+		}
 		h.SetPersons([]home.Person{{ID: alice, Name: "Alice"}})
 		e := New(c, []Document{doc("alice leaves",
 			[]string{
@@ -223,6 +232,7 @@ func TestAPresenceFiresItsValueTriggerOnItsRuleNotOnReplayedValues(t *testing.T)
 			t.Fatalf("home = %v as Oiko starts, want home", v)
 		}
 		connected(c.z, false)
+		c.z.SetOnline(true)
 		c.z.Replayed()
 		settle(e)
 		if v := presenceHome(h, alice); v != false {
