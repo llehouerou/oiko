@@ -119,11 +119,12 @@ type Engine struct {
 	values    map[home.Ref]home.Value // the mirror
 	// Availability of each Target that owns one; absent means unknown.
 	availability map[home.Target]home.Availability
-	// The Devices, Aggregates and Flags as last announced, and the Targets
-	// they make.
+	// The Devices, Aggregates, Flags and Presences as last announced, and the
+	// Targets they make.
 	devices    []home.Device
 	aggregates []home.Aggregate
 	flags      []home.Flag
+	presences  []home.Presence
 	targets    map[home.Target]bool
 	onEvent    map[eventKey][]trigger // live triggers, by what they watch
 	onValue    map[home.Ref][]trigger
@@ -201,8 +202,8 @@ func fromSaved(dir string, h Home, docs []Document, state map[string]State, plac
 	for t, a := range snap.Availability {
 		e.availability[t] = a
 	}
-	e.devices, e.aggregates, e.flags = snap.Devices, snap.Aggregates, snap.Flags
-	e.targets = home.Targets(e.devices, e.aggregates, e.flags)
+	e.devices, e.aggregates, e.flags, e.presences = snap.Devices, snap.Aggregates, snap.Flags, snap.Presences
+	e.targets = home.Targets(e.devices, e.aggregates, e.flags, e.presences)
 	if state == nil {
 		state = map[string]State{}
 	}
@@ -344,6 +345,9 @@ func (e *Engine) apply(u home.Update) {
 	case home.FlagsChanged:
 		e.flags = u.Flags
 		e.recheck()
+	case home.PresencesChanged:
+		e.presences = u.Presences
+		e.recheck()
 	}
 }
 
@@ -442,10 +446,10 @@ func (e *Engine) load(doc Document, order int) *automation {
 	return a
 }
 
-// recheck follows a change of the Devices, Aggregates or Flags, and so of the
-// targets. Callers hold e.mu.
+// recheck follows a change of the Devices, Aggregates, Flags or Presences,
+// and so of the targets. Callers hold e.mu.
 func (e *Engine) recheck() {
-	e.targets = home.Targets(e.devices, e.aggregates, e.flags)
+	e.targets = home.Targets(e.devices, e.aggregates, e.flags, e.presences)
 	for _, a := range e.autos {
 		e.refresh(a)
 	}

@@ -13,6 +13,7 @@ import type {
   Device,
   Flag,
   ListEntry,
+  Presence,
   Ref,
   ReleaseStatus,
   Releases,
@@ -30,6 +31,7 @@ type Listener = () => void
 let devices: Device[] = []
 let aggregates: Aggregate[] = []
 let flags: Flag[] = []
+let presences: Presence[] = []
 let areas: Area[] = []
 let automations: AutomationStatus[] = []
 let bridges: Record<string, boolean> = {}
@@ -78,6 +80,7 @@ function apply(msg: Snapshot | Update) {
       devices = msg.devices
       aggregates = msg.aggregates
       flags = msg.flags
+      presences = msg.presences
       areas = msg.areas
       automations = msg.automations
       bridges = msg.bridges
@@ -110,6 +113,9 @@ function apply(msg: Snapshot | Update) {
       targets = null
       notify('catalogue')
       return notify('flags')
+    case 'presences':
+      presences = msg.presences ?? []
+      return notify('presences')
     case 'areas':
       areas = msg.areas ?? []
       return notify('areas')
@@ -297,6 +303,9 @@ export const useAggregates = () => useSyncExternalStore(subscribeTo('aggregates'
 
 export const useFlags = () => useSyncExternalStore(subscribeTo('flags'), () => flags)
 
+// Every Person's Presence, by Name.
+export const usePresences = () => useSyncExternalStore(subscribeTo('presences'), () => presences)
+
 export const useAreas = () => useSyncExternalStore(subscribeTo('areas'), () => areas)
 
 // Every Target of the home, resolved (targets.ts).
@@ -327,7 +336,7 @@ export function useLastEvent(ref: Ref) {
   return useSyncExternalStore(subscribeTo(`event|${k}`), () => events.get(k))
 }
 
-// Of a Device, an Aggregate or a Flag; a Function's is its Device's.
+// Of a Device, an Aggregate, a Flag or a Presence; a Function's is its Device's.
 export function useAvailability(target: Target) {
   const t = owner(target)
   return useSyncExternalStore(subscribeTo(`availability|${t}`), () => availability.get(t) ?? 'unknown')

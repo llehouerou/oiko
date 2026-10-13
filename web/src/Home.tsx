@@ -11,13 +11,15 @@ import { CustomDashboardView, Dashboard } from './Dashboard'
 import { CreateDashboard, DashboardMenu } from './DashboardMenu'
 import { DashboardEditor } from './DashboardEditor'
 import { FlagPill } from './FlagPill'
+import { PresenceRow } from './PresenceRow'
 import { AggregatePanel, AreaPanel, DevicePanel, FlagPanel } from './HomePanels'
 
 // The Home page: the Dashboard hash opens, at #dashboard/<id>, the Person's first one shown
-// otherwise, and the panels an Admin opens from it. The built-in Dashboard is drawn from the
-// Sections derived from the Areas, under the Flags without an Area as pills. A Person switches
-// Dashboards from the menu that takes the Home tab's place; a Kiosk shows the one it is assigned
-// alone, whatever the address (ADR 0044).
+// otherwise, and the panels an Admin opens from it. Every Dashboard starts with the Presence row,
+// a custom one and a Kiosk's as the built-in one until each Dashboard has its own setting (ADR 0055).
+// The built-in Dashboard is drawn from the Sections derived from the Areas, under the Flags
+// without an Area as pills. A Person switches Dashboards from the menu that takes the Home tab's
+// place; a Kiosk shows the one it is assigned alone, whatever the address (ADR 0044).
 export function Home({ hash }: { hash: string }) {
   const devices = useDevices()
   const aggregates = useAggregates()
@@ -90,6 +92,7 @@ export function Home({ hash }: { hash: string }) {
       />
       <main className="mx-auto max-w-[120rem] space-y-6 p-4 pb-24 lg:px-8">
         {admin && <ReleaseBanner />}
+        <PresenceRow />
         {!current && pills.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {pills.map((f) => (

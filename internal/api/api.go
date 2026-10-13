@@ -202,11 +202,12 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 
 	// Access rules its own endpoints: anyone signs in and manages their own
 	// credentials; only an Admin Person manages access (ADR 0023).
-	handleAccess(mux, acc, public)
+	tell := tellHome(h, acc)
+	handleAccess(mux, tell, acc, public)
 	handlePasskeys(mux, acc, public)
 	handlePrograms(mux, acc)
 	handleKiosks(mux, acc, dash, public)
-	handlePersons(mux, acc, dash, public)
+	handlePersons(mux, tell, acc, dash, public)
 	handleSessions(mux, acc)
 	handleAudit(mux, acc, hist)
 

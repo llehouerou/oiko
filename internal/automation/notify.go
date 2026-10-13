@@ -100,5 +100,10 @@ func (e *Engine) nameOf(t home.Target) string {
 			return f.Name
 		}
 	}
+	for _, p := range e.presences {
+		if p.ID == t.Presence() {
+			return p.Name
+		}
+	}
 	return ""
 }

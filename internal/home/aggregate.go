@@ -102,6 +102,8 @@ func (h *Home) define(id AggregateID, name string, members []Target, binary Bina
 			if h.aggregates[id] == nil {
 				return fmt.Errorf("%w: unknown member aggregate %s", ErrNotFound, id)
 			}
+		} else if m.Presence() != "" {
+			return fmt.Errorf("%w: a presence cannot be a member yet", ErrInvalid) // Aggregates of Presences are to come (#127)
 		} else if _, ok := h.member(m); !ok {
 			return fmt.Errorf("%w: unknown member %s", ErrNotFound, m)
 		}

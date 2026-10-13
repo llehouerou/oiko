@@ -8,15 +8,17 @@ import (
 )
 
 // Target is what a Command addresses and what a Value belongs to, by stable
-// id: a Device, one of its Functions, an Aggregate or a Flag. Build one with
-// TargetDevice, TargetAggregate or TargetFlag, or parse its Key; the zero
-// Target is none. Its Key is the same string on the wire, in the web client,
-// in Starlark, in the Command history and in saved documents (ADR 0009):
+// id: a Device, one of its Functions, an Aggregate, a Flag or a Presence.
+// Build one with TargetDevice, TargetAggregate, TargetFlag or TargetPresence,
+// or parse its Key; the zero Target is none. Its Key is the same string on
+// the wire, in the web client, in Starlark, in the Command history and in
+// saved documents (ADR 0009):
 //
 //	device:<id>             the Device itself
 //	device:<id>/<function>  one of its Functions, e.g. device:0193…/switch/l2
 //	aggregate:<id>
 //	flag:<id>
+//	presence:<person-id>
 //
 // Ids never contain "/", so a Function key may.
 type Target struct {
@@ -32,6 +34,7 @@ const (
 	deviceKind
 	aggregateKind
 	flagKind
+	presenceKind
 )
 
 // TargetDevice is Function function of Device d, or d itself when function
@@ -43,6 +46,8 @@ func TargetDevice(d DeviceID, function string) Target {
 func TargetAggregate(a AggregateID) Target { return Target{kind: aggregateKind, id: string(a)} }
 
 func TargetFlag(f FlagID) Target { return Target{kind: flagKind, id: string(f)} }
+
+func TargetPresence(p PersonID) Target { return Target{kind: presenceKind, id: string(p)} }
 
 // Device is the Device t is or belongs to, if any.
 func (t Target) Device() DeviceID {
@@ -69,6 +74,14 @@ func (t Target) Flag() FlagID {
 	return FlagID(t.id)
 }
 
+// Presence is the Person whose Presence t is, if any.
+func (t Target) Presence() PersonID {
+	if t.kind != presenceKind {
+		return ""
+	}
+	return PersonID(t.id)
+}
+
 func (t Target) IsZero() bool { return t.kind == noTarget }
 
 // Key is t's identity in one string; "" for none.
@@ -83,6 +96,8 @@ func (t Target) Key() string {
 		return "aggregate:" + t.id
 	case flagKind:
 		return "flag:" + t.id
+	case presenceKind:
+		return "presence:" + t.id
 	}
 	return ""
 }
@@ -101,6 +116,8 @@ func ParseTarget(key string) (Target, error) {
 		return TargetAggregate(AggregateID(id)), nil
 	case kind == "flag" && !hasFunction:
 		return TargetFlag(FlagID(id)), nil
+	case kind == "presence" && !hasFunction:
+		return TargetPresence(PersonID(id)), nil
 	}
 	return Target{}, fmt.Errorf("%w: bad target %q", ErrInvalid, key)
 }
@@ -125,9 +142,9 @@ func (t *Target) UnmarshalText(text []byte) error {
 // Ref is Capability key of t.
 func (t Target) Ref(key string) Ref { return Ref{Target: t, Capability: key} }
 
-// Targets is every Target among devices, aggregates and flags: each Device,
-// each of its Functions, each Aggregate and each Flag.
-func Targets(devices []Device, aggregates []Aggregate, flags []Flag) map[Target]bool {
+// Targets is every Target among devices, aggregates, flags and presences:
+// each Device, each of its Functions, each Aggregate, Flag and Presence.
+func Targets(devices []Device, aggregates []Aggregate, flags []Flag, presences []Presence) map[Target]bool {
 	all := map[Target]bool{}
 	for _, d := range devices {
 		all[TargetDevice(d.ID, "")] = true
@@ -140,6 +157,9 @@ func Targets(devices []Device, aggregates []Aggregate, flags []Flag) map[Target]
 	}
 	for _, f := range flags {
 		all[TargetFlag(f.ID)] = true
+	}
+	for _, p := range presences {
+		all[TargetPresence(p.ID)] = true
 	}
 	return all
 }
@@ -155,8 +175,8 @@ type resolved interface {
 }
 
 // direct is a resolved Target that carries out its Commands itself rather
-// than relaying them: a Device, one of its Functions, or a Flag. The members
-// of an Aggregate resolve to direct ones.
+// than relaying them: a Device, one of its Functions, a Flag or a Presence.
+// The members of an Aggregate resolve to direct ones.
 type direct interface {
 	resolved
 	target() Target
@@ -186,13 +206,17 @@ func (h *Home) lookup(t Target) (resolved, bool) {
 	return h.lookupDirect(t)
 }
 
-// lookupDirect resolves t, a Device, one of its Functions or a Flag.
-// Callers hold h.mu.
+// lookupDirect resolves t, a Device, one of its Functions, a Flag or a
+// Presence. Callers hold h.mu.
 func (h *Home) lookupDirect(t Target) (direct, bool) {
 	switch t.kind {
 	case flagKind:
 		if _, ok := h.flags[t.Flag()]; ok {
 			return flagTarget{h, t.Flag()}, true
+		}
+	case presenceKind:
+		if _, ok := h.presences[t.Presence()]; ok {
+			return presenceTarget{h, t.Presence()}, true
 		}
 	case deviceKind:
 		d, ok := h.devices[t.Device()]

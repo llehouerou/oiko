@@ -303,6 +303,14 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 		log.Fatal(err)
 	}
 	h.Recall(hist.Recall)
+	acc, err := access.Open(dataDir, time.Now, hist.Audit)
+	if err != nil {
+		log.Fatalf("access: %v", err)
+	}
+	// Before the engine loads the Automations, which may refer to Presences.
+	if err := h.SetPersons(api.HomePersons(acc)); err != nil {
+		log.Fatalf("presences: %v", err)
+	}
 	running := make([]func(), 0, len(bridges))
 	for _, b := range bridges {
 		br, err := b.module.New(b.env)
@@ -346,10 +354,6 @@ func serve(listen, dataDir, configFile, install string, c config, public *url.UR
 	types := map[string]string{} // each Bridge's type, by name
 	for _, b := range bridges {
 		types[b.env.Name] = b.module.Type
-	}
-	acc, err := access.Open(dataDir, time.Now, hist.Audit)
-	if err != nil {
-		log.Fatalf("access: %v", err)
 	}
 	if secret, ok := acc.Setup(); ok {
 		log.Printf("oiko: no Admin yet: open %s/setup#%s to claim this Oiko", setupOrigin(listen, public), secret)

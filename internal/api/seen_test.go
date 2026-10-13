@@ -17,7 +17,7 @@ func TestEachLevelSeesTheUpdatesADR0031Allows(t *testing.T) {
 	}
 	shown := []home.UpdateKind{home.DevicesChanged, home.ValueChanged, home.ValueRefreshed, home.EventOccurred,
 		home.AvailabilityChanged, home.BridgeChanged, home.CommandChanged, home.AggregatesChanged,
-		home.FlagsChanged, home.AreasChanged, home.AutomationsChanged, home.TargetDeleted, home.DeviceReplaced}
+		home.FlagsChanged, home.PresencesChanged, home.AreasChanged, home.AutomationsChanged, home.TargetDeleted, home.DeviceReplaced}
 	hidden := []home.UpdateKind{home.RunEnded, "made-up"}
 
 	for _, l := range allLevels {

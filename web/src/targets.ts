@@ -6,14 +6,16 @@ import type { Aggregate, Capability, Device, Flag, Fn } from './types'
 //   device:<id>/<function>  one of its Functions, e.g. device:0193…/switch/l2
 //   aggregate:<id>
 //   flag:<id>
+//   presence:<person-id>
 export type Target = string
 
 export const deviceTarget = (device: string, fn = ''): Target => (fn ? `device:${device}/${fn}` : `device:${device}`)
 export const aggregateTarget = (id: string): Target => `aggregate:${id}`
 export const flagTarget = (id: string): Target => `flag:${id}`
+export const presenceTarget = (person: string): Target => `presence:${person}`
 
 export interface ParsedTarget {
-  kind: 'device' | 'aggregate' | 'flag'
+  kind: 'device' | 'aggregate' | 'flag' | 'presence'
   id: string
   function: string // of a Device's Function, else ''
 }
@@ -28,7 +30,7 @@ export function parseTarget(t: Target): ParsedTarget | undefined {
   const id = slash < 0 ? rest : rest.slice(0, slash)
   const fn = slash < 0 ? '' : rest.slice(slash + 1)
   if (colon < 0 || !id || (slash >= 0 && (kind !== 'device' || !fn))) return undefined
-  if (kind !== 'device' && kind !== 'aggregate' && kind !== 'flag') return undefined
+  if (kind !== 'device' && kind !== 'aggregate' && kind !== 'flag' && kind !== 'presence') return undefined
   return { kind, id, function: fn }
 }
 
@@ -39,7 +41,7 @@ export function owner(t: Target): Target {
 }
 
 // What kind of Target t is: a Device's Function, the Device itself, an
-// Aggregate or a Flag; undefined if it is none or malformed.
+// Aggregate, a Flag or a Presence; undefined if it is none or malformed.
 export function targetKind(t: Target) {
   const p = parseTarget(t)
   return p?.kind === 'device' ? (p.function ? 'function' : 'device') : p?.kind

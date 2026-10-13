@@ -57,6 +57,9 @@ func handlerIn(t *testing.T, dir string, public *url.URL, now func() time.Time) 
 		t.Fatal(err)
 	}
 	h := home.New(store.Command)
+	if err := h.SetPersons(HomePersons(acc)); err != nil {
+		t.Fatal(err)
+	}
 	e := automation.New(h, nil, nil, store.Record)
 	h.Follow(store.Follow)
 	var persons, kiosks []string

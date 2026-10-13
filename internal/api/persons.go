@@ -4,17 +4,43 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/llehouerou/oiko/internal/access"
 	"github.com/llehouerou/oiko/internal/dashboard"
+	"github.com/llehouerou/oiko/internal/home"
 )
+
+// HomePersons is every Person, as Home derives their Presences (ADR 0048).
+func HomePersons(acc *access.Store) []home.Person {
+	var ps []home.Person
+	for _, p := range acc.HostPersons() {
+		ps = append(ps, home.Person{ID: home.PersonID(p.ID), Name: p.Name})
+	}
+	return ps
+}
+
+// tellHome answers what tells h of the Persons as acc has them now, to call
+// after each Person is created, renamed or removed: their Presences follow
+// (ADR 0054). Calls are serialized, so the last one tells the latest.
+func tellHome(h *home.Home, acc *access.Store) func() {
+	var mu sync.Mutex
+	return func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if err := h.SetPersons(HomePersons(acc)); err != nil {
+			slog.Error("home: saving the Presences", "err", err)
+		}
+	}
+}
 
 // handlePersons serves the Persons to an Admin Person, their Sign-in links,
 // a Person's own Name, and signing in by link (ADR 0026, 0030). A link's
 // secret travels in request bodies only, never in a URL: its page has it in
-// its fragment. dash drops a removed Person's list.
-func handlePersons(mux *http.ServeMux, acc *access.Store, dash *dashboard.Store, public *url.URL) {
+// its fragment. tell has Home follow each change of the Persons, dash drops a
+// removed Person's list.
+func handlePersons(mux *http.ServeMux, tell func(), acc *access.Store, dash *dashboard.Store, public *url.URL) {
 	type named struct {
 		ID   string `json:"id"`
 		Name string `json:"name,omitempty"` // none once they are removed
@@ -74,22 +100,29 @@ func handlePersons(mux *http.ServeMux, acc *access.Store, dash *dashboard.Store,
 			reply(w, err)
 			return
 		}
+		tell()
 		writeJSON(w, http.StatusCreated, map[string]string{"id": p.ID})
 	})
 	mux.HandleFunc("PUT /api/persons/{id}", func(w http.ResponseWriter, r *http.Request) {
 		var req definition
-		if decode(w, r, &req) {
-			reply(w, acc.EditPerson(by(r), r.PathValue("id"), req.Name, req.Level, req.Ends))
+		if !decode(w, r, &req) {
+			return
 		}
+		err := acc.EditPerson(by(r), r.PathValue("id"), req.Name, req.Level, req.Ends)
+		if err == nil {
+			tell()
+		}
+		reply(w, err)
 	})
-	// A removed Person's list of Dashboards goes with them; left behind, it is
-	// dropped on load.
+	// A removed Person's Presence goes with them, and their list of
+	// Dashboards; left behind, each is dropped on load.
 	mux.HandleFunc("DELETE /api/persons/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		if err := acc.RemovePerson(by(r), id); err != nil {
 			reply(w, err)
 			return
 		}
+		tell()
 		if err := dash.RemovePerson(id); err != nil {
 			slog.Error("dashboards: dropping a removed Person's list", "err", err)
 		}
@@ -117,9 +150,14 @@ func handlePersons(mux *http.ServeMux, acc *access.Store, dash *dashboard.Store,
 		var req struct {
 			Name string `json:"name"`
 		}
-		if decode(w, r, &req) {
-			reply(w, acc.Rename(by(r), req.Name))
+		if !decode(w, r, &req) {
+			return
 		}
+		err := acc.Rename(by(r), req.Name)
+		if err == nil {
+			tell()
+		}
+		reply(w, err)
 	})
 
 	// Whom a Sign-in link signs in, for its welcome page, before it is spent:

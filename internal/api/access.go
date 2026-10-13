@@ -131,8 +131,9 @@ func bearer(r *http.Request) (string, bool) {
 	return f[1], true
 }
 
-// handleAccess serves who a request is, the Setup link and signing out.
-func handleAccess(mux *http.ServeMux, acc *access.Store, public *url.URL) {
+// handleAccess serves who a request is, the Setup link and signing out. tell
+// has Home follow the first Person.
+func handleAccess(mux *http.ServeMux, tell func(), acc *access.Store, public *url.URL) {
 	var publicURL *string
 	if public != nil {
 		s := public.String()
@@ -168,6 +169,7 @@ func handleAccess(mux *http.ServeMux, acc *access.Store, public *url.URL) {
 			reply(w, err)
 			return
 		}
+		tell()
 		setCookie(w, sessionCookie, secret, int(access.SessionLimit.Seconds()))
 		w.WriteHeader(http.StatusNoContent)
 	}))

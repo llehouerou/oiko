@@ -30,7 +30,7 @@ func updateFor(l access.Level, u home.Update) (any, bool) {
 	switch u.Kind {
 	case home.DevicesChanged, home.ValueChanged, home.ValueRefreshed, home.EventOccurred,
 		home.AvailabilityChanged, home.BridgeChanged, home.CommandChanged, home.AggregatesChanged,
-		home.FlagsChanged, home.AreasChanged, home.AutomationsChanged, home.TargetDeleted, home.DeviceReplaced:
+		home.FlagsChanged, home.PresencesChanged, home.AreasChanged, home.AutomationsChanged, home.TargetDeleted, home.DeviceReplaced:
 	default: // home.RunEnded, and any kind not decided yet
 		return nil, false
 	}

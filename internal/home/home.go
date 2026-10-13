@@ -63,10 +63,11 @@ const (
 	CommandChanged      UpdateKind = "command"
 	AggregatesChanged   UpdateKind = "aggregates"
 	FlagsChanged        UpdateKind = "flags"
+	PresencesChanged    UpdateKind = "presences"
 	AreasChanged        UpdateKind = "areas"
 	AutomationsChanged  UpdateKind = "automations"
 	RunEnded            UpdateKind = "run"
-	TargetDeleted       UpdateKind = "deleted"  // Target: a Device, an Aggregate or a Flag, gone with its History
+	TargetDeleted       UpdateKind = "deleted"  // Target: a Device, an Aggregate, a Flag or a Presence, gone with its History
 	DeviceReplaced      UpdateKind = "replaced" // Target: the kept Device, which took over Device Replaced's hardware
 )
 
@@ -82,7 +83,7 @@ type Update struct {
 	// With a Value or an Event: the new hardware's, announced again under the
 	// kept identity by a Replace. Not a new reading.
 	Moved        bool               `json:"moved,omitempty"`
-	Target       Target             `json:"target,omitzero"` // with Availability: a Device, an Aggregate or a Flag
+	Target       Target             `json:"target,omitzero"` // with Availability: a Device, an Aggregate, a Flag or a Presence
 	Availability Availability       `json:"availability,omitempty"`
 	Replaced     DeviceID           `json:"replaced,omitempty"` // with DeviceReplaced
 	Bridge       string             `json:"bridge,omitempty"`   // with BridgeOnline
@@ -91,6 +92,7 @@ type Update struct {
 	Devices      []Device           `json:"devices,omitempty"`
 	Aggregates   []Aggregate        `json:"aggregates,omitempty"`
 	Flags        []Flag             `json:"flags,omitempty"`
+	Presences    []Presence         `json:"presences,omitempty"`
 	Areas        []Area             `json:"areas,omitempty"`
 	Automations  []AutomationStatus `json:"automations,omitempty"`
 	Run          *RunEnd            `json:"run,omitempty"`
@@ -239,9 +241,10 @@ type Snapshot struct {
 	Devices    []Device        `json:"devices"`
 	Aggregates []Aggregate     `json:"aggregates"`
 	Flags      []Flag          `json:"flags"`
-	Areas      []Area          `json:"areas"` // in the order an Admin set
-	// Availability is that of every Device, Aggregate and Flag; a Function's
-	// is its Device's.
+	Presences  []Presence      `json:"presences"` // by Name
+	Areas      []Area          `json:"areas"`     // in the order an Admin set
+	// Availability is that of every Device, Aggregate, Flag and Presence; a
+	// Function's is its Device's.
 	Availability map[Target]Availability `json:"availability"`
 	Values       []RefValue              `json:"values"`
 	Events       []RefValue              `json:"events"` // last occurrence of each Event
@@ -269,8 +272,10 @@ type Home struct {
 	availability map[DeviceID]Availability
 	values       map[Ref]Value // every Target's; an Aggregate's are derived, never saved
 	aggregates   map[AggregateID]*Aggregate
-	flags        map[FlagID]Flag // with no Kind or Capabilities: they are flagFunction's
-	areas        []Area          // in the order an Admin set
+	flags        map[FlagID]Flag            // with no Kind or Capabilities: they are flagFunction's
+	presences    map[PersonID]string        // each Person's Name
+	recalled     map[PersonID]SavedPresence // from presences.json, until the Persons are given
+	areas        []Area                     // in the order an Admin set
 	// derived, as last announced; absent means unknown
 	aggregateAvailability map[AggregateID]Availability
 	lastEvents            map[Ref]Value
@@ -286,16 +291,18 @@ const (
 	devicesFile    = "devices.json"
 	aggregatesFile = "aggregates.json"
 	flagsFile      = "flags.json"
+	presencesFile  = "presences.json"
 	areasFile      = "areas.json"
 )
 
-var devicesFormat, aggregatesFormat, flagsFormat, areasFormat store.Format
+var devicesFormat, aggregatesFormat, flagsFormat, presencesFormat, areasFormat store.Format
 
 // saved are a Home's documents, as its directory holds them.
 type saved struct {
 	devices    []Device
 	aggregates []Aggregate
 	flags      []SavedFlag
+	presences  []SavedPresence
 	areas      []Area
 }
 
@@ -328,6 +335,7 @@ func load(dir string) (saved, error) {
 		{devicesFile, devicesFormat, &s.devices},
 		{aggregatesFile, aggregatesFormat, &s.aggregates},
 		{flagsFile, flagsFormat, &s.flags},
+		{presencesFile, presencesFormat, &s.presences},
 		{areasFile, areasFormat, &s.areas},
 	} {
 		path := filepath.Join(dir, doc.file)
@@ -351,6 +359,8 @@ func fromSaved(dir string, s saved, history func(CommandRecord)) *Home {
 		values:                map[Ref]Value{},
 		aggregates:            map[AggregateID]*Aggregate{},
 		flags:                 map[FlagID]Flag{},
+		presences:             map[PersonID]string{},
+		recalled:              map[PersonID]SavedPresence{},
 		aggregateAvailability: map[AggregateID]Availability{},
 		lastEvents:            map[Ref]Value{},
 		senders:               map[Target]*sender{},
@@ -368,6 +378,9 @@ func fromSaved(dir string, s saved, history func(CommandRecord)) *Home {
 	for _, f := range s.flags {
 		h.flags[f.ID] = Flag{ID: f.ID, Name: f.Name, Area: f.Area}
 		h.values[flagRef(f.ID)] = f.Value
+	}
+	for _, p := range s.presences {
+		h.recalled[p.ID] = p
 	}
 	h.deriveAll()                 // once all are loaded: nested ones resolve through each other
 	h.syncAggregateValues()       // from the Flags' Values
@@ -629,7 +642,7 @@ func (h *Home) Command(t Target, req Request) (string, error) {
 	case err != nil:
 		return "", err
 	case t.IsZero():
-		return "", fmt.Errorf("%w: a command targets one Function, Device, Aggregate or Flag", ErrInvalid)
+		return "", fmt.Errorf("%w: a command targets one Function, Device, Aggregate, Flag or Presence", ErrInvalid)
 	}
 	r, ok := h.lookup(t)
 	if !ok {
@@ -800,6 +813,7 @@ func (h *Home) snapshot() Snapshot {
 		Devices:      h.deviceList(),
 		Aggregates:   h.aggregateList(),
 		Flags:        h.flagList(),
+		Presences:    h.presenceList(),
 		Areas:        append([]Area{}, h.areas...), // [] rather than null in JSON
 		Availability: map[Target]Availability{},
 		Values:       make([]RefValue, 0, len(h.values)),
@@ -817,6 +831,9 @@ func (h *Home) snapshot() Snapshot {
 	}
 	for id := range h.flags {
 		s.Availability[TargetFlag(id)] = Online
+	}
+	for id := range h.presences {
+		s.Availability[TargetPresence(id)] = Online
 	}
 	for ref, v := range h.values {
 		s.Values = append(s.Values, RefValue{Ref: ref, Value: v})

@@ -91,6 +91,15 @@ export interface Flag {
   capabilities: Capability[]
 }
 
+// A Person's Presence, derived by Oiko under their Name: kind 'presence', Capabilities 'home'
+// (settable: setting it is an override) and 'manual' (true while the override holds).
+export interface Presence {
+  id: string // the Person's
+  name: string
+  kind: string
+  capabilities: Capability[]
+}
+
 export interface Value {
   data: unknown
   at: string // when last reported
@@ -230,8 +239,9 @@ export interface Snapshot {
   devices: Device[]
   aggregates: Aggregate[]
   flags: Flag[]
+  presences: Presence[] // by Name
   areas: Area[]
-  availability: Record<Target, Availability> // of each Device, Aggregate and Flag
+  availability: Record<Target, Availability> // of each Device, Aggregate, Flag and Presence
   values: { ref: Ref; value: Value }[]
   events: { ref: Ref; value: Value }[]
   automations: AutomationStatus[]
@@ -301,6 +311,7 @@ export interface Update {
     | 'devices'
     | 'aggregates'
     | 'flags'
+    | 'presences'
     | 'areas'
     | 'value'
     | 'refresh'
@@ -314,7 +325,7 @@ export interface Update {
     | 'replaced'
   ref?: Ref
   value?: Value
-  target?: Target // with availability: a Device, an Aggregate or a Flag
+  target?: Target // with availability: a Device, an Aggregate, a Flag or a Presence
   availability?: Availability
   bridge?: string // with bridgeOnline
   bridgeOnline?: boolean
@@ -322,6 +333,7 @@ export interface Update {
   devices?: Device[]
   aggregates?: Aggregate[]
   flags?: Flag[]
+  presences?: Presence[]
   areas?: Area[]
   automations?: AutomationStatus[]
   run?: RunEnd

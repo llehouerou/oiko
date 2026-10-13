@@ -140,6 +140,34 @@ func TestRetainedStateReplayedIntoAnAggregateFiresNoValueTrigger(t *testing.T) {
 	}
 }
 
+func TestAPresenceSetByHandFiresItsValueTriggerUntilItsPersonGoes(t *testing.T) {
+	c, lamp, _ := realHome(t)
+	const alice = home.PersonID("0190a1ce-0000-7000-8000-000000000001")
+	c.SetPersons([]home.Person{{ID: alice, Name: "Alice"}})
+	e := New(c, []Document{doc("alice arrives",
+		[]string{
+			fmt.Sprintf(`on valueTrigger {"target": "presence:%s", "capability": "home", "op": "eq", "value": true}`, alice),
+			lampOn(lamp),
+		}, "on.out act.in")}, nil, nil)
+	set := func(v bool) {
+		c.Home.Command(home.TargetPresence(alice), home.Request{Values: map[string]any{"home": v}})
+		settle(e)
+	}
+
+	set(false) // the first Value: unknown before
+	set(true)
+	if n := c.n.Load(); n != 1 {
+		t.Errorf("the arrival fired %d Commands, want 1", n)
+	}
+	if err := c.SetPersons(nil); err != nil { // Alice is removed
+		t.Fatal(err)
+	}
+	settle(e)
+	if s := statusIn(c.Home, e.Documents()[0].ID); s.Status != home.AutomationBroken {
+		t.Errorf("once Alice is removed: %+v, want broken", s)
+	}
+}
+
 func TestAutomationsTriggeringEachOtherBecomeRunaway(t *testing.T) {
 	c, _, _ := realHome(t)
 	x, _ := c.CreateFlag("X")
