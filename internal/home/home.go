@@ -390,7 +390,7 @@ func fromSaved(dir string, s saved, history func(CommandRecord)) *Home {
 	}
 	h.deriveAll()                 // once all are loaded: nested ones resolve through each other
 	h.syncAggregateValues()       // from the Flags' Values
-	h.syncAggregateAvailability() // unknown until the Bridge is online, unless made of Flags
+	h.syncAggregateAvailability() // unknown until the Bridge is online, unless made of Flags or Presences
 	return h
 }
 

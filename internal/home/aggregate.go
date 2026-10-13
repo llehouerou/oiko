@@ -343,7 +343,7 @@ func (h *Home) member(m Target) (direct, bool) {
 }
 
 // countedMembers returns the Functions a resolves to that contribute to its
-// Values and Availability: Flags, and Functions of attached Devices.
+// Values and Availability: Flags, Presences, and Functions of attached Devices.
 func (h *Home) countedMembers(a *Aggregate) []direct {
 	ms, _ := h.resolve(a)
 	var counted []direct
