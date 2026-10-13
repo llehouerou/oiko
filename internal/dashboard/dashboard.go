@@ -145,10 +145,7 @@ func admin(by access.Identity) bool {
 
 // known is what exists in the home, as last announced.
 type known struct {
-	devices     []home.Device
-	aggregates  []home.Aggregate
-	flags       []home.Flag
-	presences   []home.Presence
+	targets     home.Targets
 	areas       []home.Area
 	automations []home.AutomationStatus
 }
@@ -175,7 +172,7 @@ func Open(dir string, h *home.Home, persons, kiosks []string) (*Store, error) {
 	s.kmu.Lock()
 	defer s.kmu.Unlock()
 	snap, _ := h.Follow(s.deliver)
-	s.known = known{snap.Devices, snap.Aggregates, snap.Flags, snap.Presences, snap.Areas, snap.Automations}
+	s.known = known{home.TargetsIn(snap), snap.Areas, snap.Automations}
 	s.pressable = pressable(snap.Automations)
 	return s, nil
 }
@@ -188,20 +185,14 @@ func (s *Store) deliver(u home.Update) {
 	s.kmu.Lock()
 	defer s.kmu.Unlock()
 	switch u.Kind {
-	case home.DevicesChanged:
-		s.known.devices = u.Devices
-	case home.AggregatesChanged:
-		s.known.aggregates = u.Aggregates
-	case home.FlagsChanged:
-		s.known.flags = u.Flags
-	case home.PresencesChanged:
-		s.known.presences = u.Presences
 	case home.AreasChanged:
 		s.known.areas = u.Areas
 	case home.AutomationsChanged:
 		s.known.automations = u.Automations
 	default:
-		return
+		if !s.known.targets.Apply(u) {
+			return
+		}
 	}
 	go s.prune()
 }
@@ -677,18 +668,11 @@ func (k known) automation(id string) bool {
 // target reports whether t exists: a Function only as its Device, whose keys
 // come and go, and an Area Aggregate as its Area, whose members do.
 func (k known) target(t home.Target) bool {
-	switch {
-	case t.Device() != "":
-		return slices.ContainsFunc(k.devices, func(d home.Device) bool { return d.ID == t.Device() })
-	case t.Flag() != "":
-		return slices.ContainsFunc(k.flags, func(f home.Flag) bool { return f.ID == t.Flag() })
-	case t.Presence() != "":
-		return slices.ContainsFunc(k.presences, func(p home.Presence) bool { return p.ID == t.Presence() })
-	case t.Aggregate() != "":
-		if area, ok := home.AreaAggregate(t.Aggregate()); ok {
-			return k.area(area)
-		}
-		return slices.ContainsFunc(k.aggregates, func(a home.Aggregate) bool { return a.ID == t.Aggregate() })
+	if area, ok := home.AreaAggregate(t.Aggregate()); ok {
+		return k.area(area)
 	}
-	return false
+	if t.Device() != "" {
+		t = home.TargetDevice(t.Device(), "")
+	}
+	return k.targets.Has(t)
 }

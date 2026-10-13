@@ -29,11 +29,11 @@ type Target struct {
 }
 
 // targetKind is what kind of Target one is. A new kind is wired, beyond this
-// file's Key, ParseTarget, Targets and lookupDirect, into:
+// file's Key, ParseTarget and lookupDirect, into:
+//   - Targets (targets.go), which the automation engine and the dashboard
+//     Store follow the home with;
 //   - Home's snapshot (its list and Availability), its Update kind for that
 //     list, and api's seen.go, which decides who sees that Update;
-//   - the automation engine's apply and nameOf;
-//   - the dashboard Store's known, which prunes Tiles of what is gone;
 //   - the web client's parseTarget (targets.ts) and store.ts.
 type targetKind uint8
 
@@ -149,28 +149,6 @@ func (t *Target) UnmarshalText(text []byte) error {
 
 // Ref is Capability key of t.
 func (t Target) Ref(key string) Ref { return Ref{Target: t, Capability: key} }
-
-// Targets is every Target among devices, aggregates, flags and presences:
-// each Device, each of its Functions, each Aggregate, Flag and Presence.
-func Targets(devices []Device, aggregates []Aggregate, flags []Flag, presences []Presence) map[Target]bool {
-	all := map[Target]bool{}
-	for _, d := range devices {
-		all[TargetDevice(d.ID, "")] = true
-		for _, f := range d.Functions {
-			all[TargetDevice(d.ID, f.Key)] = true
-		}
-	}
-	for _, a := range aggregates {
-		all[TargetAggregate(a.ID)] = true
-	}
-	for _, f := range flags {
-		all[TargetFlag(f.ID)] = true
-	}
-	for _, p := range presences {
-		all[TargetPresence(p.ID)] = true
-	}
-	return all
-}
 
 // resolved is a Target as Home knows it, whatever its kind: what a Command
 // needs of it. Callers hold h.mu.

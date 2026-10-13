@@ -46,11 +46,11 @@ func parseNotify(s *step, p notifyParams, _ *Place) error {
 
 func (s *notifyStep) reached(x visit, _ int) {
 	trigger := x.e.trace.Trigger
-	name := x.e.nameOf(trigger.Target)
+	name := x.e.targets.Name(trigger.Target)
 	n := Notification{Title: strings.ReplaceAll(s.p.Title, "{name}", name), Message: strings.ReplaceAll(s.p.Message, "{name}", name)}
 	r := x.record()
 	if s.p.Video {
-		if trigger.Capability == bridge.RecordingEvent && x.e.isCamera(trigger.Target) {
+		if f, ok := x.e.targets.Function(trigger.Target); ok && f.Kind == home.Camera && trigger.Capability == bridge.RecordingEvent {
 			n.Recording = &RecordingAt{trigger.Target, trigger.Time}
 		} else {
 			r.Error = "no video: the Run did not start from a camera's recording Event"
@@ -65,45 +65,6 @@ func (s *notifyStep) reached(x visit, _ int) {
 	x.fire(0)
 }
 
-// isCamera reports whether t is a camera Function.
-func (e *Engine) isCamera(t home.Target) bool {
-	for _, d := range e.devices {
-		if d.ID == t.Device() {
-			for _, f := range d.Functions {
-				if f.Key == t.Function() {
-					return f.Kind == home.Camera
-				}
-			}
-		}
-	}
-	return false
-}
-
 // NotifyThrough has Notifications handed to send, which must return at once.
 // Without it, a notify Step fails. Call it before Run.
 func (e *Engine) NotifyThrough(send func(Notification)) { e.notify = send }
-
-// nameOf is the Name of t, of its Device for a Function; "" for none.
-func (e *Engine) nameOf(t home.Target) string {
-	for _, d := range e.devices {
-		if d.ID == t.Device() {
-			return d.Name
-		}
-	}
-	for _, a := range e.aggregates {
-		if a.ID == t.Aggregate() {
-			return a.Name
-		}
-	}
-	for _, f := range e.flags {
-		if f.ID == t.Flag() {
-			return f.Name
-		}
-	}
-	for _, p := range e.presences {
-		if p.ID == t.Presence() {
-			return p.Name
-		}
-	}
-	return ""
-}

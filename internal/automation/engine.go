@@ -119,23 +119,17 @@ type Engine struct {
 	values    map[home.Ref]home.Value // the mirror
 	// Availability of each Target that owns one; absent means unknown.
 	availability map[home.Target]home.Availability
-	// The Devices, Aggregates, Flags and Presences as last announced, and the
-	// Targets they make.
-	devices    []home.Device
-	aggregates []home.Aggregate
-	flags      []home.Flag
-	presences  []home.Presence
-	targets    map[home.Target]bool
-	onEvent    map[eventKey][]trigger // live triggers, by what they watch
-	onValue    map[home.Ref][]trigger
-	onAvail    map[home.Target][]trigger
-	pending    deadlines // the timer heap
-	published  []home.AutomationStatus
-	trace      *Trace      // of the Run under way
-	runner     *runner     // runs Code Steps
-	started    time.Time   // when the clock started: deadlines before it are caught up
-	dirty      bool        // the Step state changed since it was last written
-	flush      *time.Timer // Flushes it, once armed by touch
+	targets      home.Targets           // as last announced
+	onEvent      map[eventKey][]trigger // live triggers, by what they watch
+	onValue      map[home.Ref][]trigger
+	onAvail      map[home.Target][]trigger
+	pending      deadlines // the timer heap
+	published    []home.AutomationStatus
+	trace        *Trace      // of the Run under way
+	runner       *runner     // runs Code Steps
+	started      time.Time   // when the clock started: deadlines before it are caught up
+	dirty        bool        // the Step state changed since it was last written
+	flush        *time.Timer // Flushes it, once armed by touch
 }
 
 // The documents an Engine saves in its directory, and their formats (ADR
@@ -202,8 +196,7 @@ func fromSaved(dir string, h Home, docs []Document, state map[string]State, plac
 	for t, a := range snap.Availability {
 		e.availability[t] = a
 	}
-	e.devices, e.aggregates, e.flags, e.presences = snap.Devices, snap.Aggregates, snap.Flags, snap.Presences
-	e.targets = home.Targets(e.devices, e.aggregates, e.flags, e.presences)
+	e.targets = home.TargetsIn(snap)
 	if state == nil {
 		state = map[string]State{}
 	}
@@ -336,18 +329,10 @@ func (e *Engine) apply(u home.Update) {
 				e.run(t.a, t.step, 0, observed(*u.Ref, *u.Value))
 			}
 		}
-	case home.DevicesChanged:
-		e.devices = u.Devices
-		e.recheck()
-	case home.AggregatesChanged:
-		e.aggregates = u.Aggregates
-		e.recheck()
-	case home.FlagsChanged:
-		e.flags = u.Flags
-		e.recheck()
-	case home.PresencesChanged:
-		e.presences = u.Presences
-		e.recheck()
+	default:
+		if e.targets.Apply(u) {
+			e.recheck()
+		}
 	}
 }
 
@@ -446,10 +431,8 @@ func (e *Engine) load(doc Document, order int) *automation {
 	return a
 }
 
-// recheck follows a change of the Devices, Aggregates, Flags or Presences,
-// and so of the targets. Callers hold e.mu.
+// recheck follows a change of the Targets. Callers hold e.mu.
 func (e *Engine) recheck() {
-	e.targets = home.Targets(e.devices, e.aggregates, e.flags, e.presences)
 	for _, a := range e.autos {
 		e.refresh(a)
 	}
@@ -472,7 +455,7 @@ func (e *Engine) refresh(a *automation) {
 func (e *Engine) missing(a *automation) problem {
 	for i, s := range a.steps {
 		for _, t := range s.targets {
-			if !e.targets[t] {
+			if !e.targets.Has(t) {
 				id := a.doc.Steps[i].ID
 				return problem{id, fmt.Sprintf("step %q: target %+v is deleted", id, t)}
 			}
