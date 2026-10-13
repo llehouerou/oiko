@@ -7,6 +7,7 @@ import type {
   Area,
   AreaSection,
   AutomationStatus,
+  BuiltinDashboard,
   Capability,
   CustomDashboard,
   CustomSection,
@@ -331,12 +332,22 @@ export function shown(hash: string, dashboards: CustomDashboard[], list: ListEnt
   return dashboards.find((d) => d.id === id) ?? dashboards.find((d) => d.id === first)
 }
 
+// Whether Dashboard d, undefined for the built-in one, shows the Presence row (ADR 0055): the
+// built-in one unless an Admin turned it off, a custom one once its editor turned it on.
+export const presenceRowShown = (d: CustomDashboard | undefined, builtin: BuiltinDashboard) => (d ? d.presenceRow === true : builtin.presenceRow !== false)
+
 // What a duplicate of Dashboard d, undefined for the built-in one, holds, built from what its viewer
 // sees (ADR 0041): a custom one's Sections and Tiles as they reach the viewer, the built-in one's
-// Areas' Sections two per row, in their order, without Others. It never follows d.
-export function copied(d: CustomDashboard | undefined, areas: Area[]): Pick<CustomDashboard, 'columns' | 'sections'> {
-  if (d) return { columns: d.columns, sections: d.sections }
-  return { columns: 2, sections: areas.map((a, i) => ({ area: a.id, col: i % 2, row: Math.floor(i / 2), width: 1 })) }
+// Areas' Sections two per row, in their order, without Others, and whether d shows the Presence
+// row. It never follows d.
+export function copied(
+  d: CustomDashboard | undefined,
+  areas: Area[],
+  builtin: BuiltinDashboard,
+): Pick<CustomDashboard, 'columns' | 'sections' | 'presenceRow'> {
+  const row = presenceRowShown(d, builtin) ? { presenceRow: true as const } : {}
+  if (d) return { columns: d.columns, sections: d.sections, ...row }
+  return { columns: 2, sections: areas.map((a, i) => ({ area: a.id, col: i % 2, row: Math.floor(i / 2), width: 1 })), ...row }
 }
 
 // What deleting Dashboard name asks, naming the Kiosks showing it, which then show the built-in one

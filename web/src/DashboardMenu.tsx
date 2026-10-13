@@ -160,7 +160,7 @@ export function CreateDashboard({
   onClose,
 }: {
   title: string
-  copy?: Pick<CustomDashboard, 'columns' | 'sections'>
+  copy?: Pick<CustomDashboard, 'columns' | 'sections' | 'presenceRow'>
   onCreated: (id: string) => void
   onClose: () => void
 }) {

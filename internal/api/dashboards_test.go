@@ -443,3 +443,44 @@ func TestAKioskShowsTheDashboardAnAdminAssignsIt(t *testing.T) {
 		t.Errorf("an Admin's stream once the Kiosk is removed: %v", got)
 	}
 }
+
+func TestAnAdminTurnsTheBuiltinDashboardsPresenceRowOffForEveryone(t *testing.T) {
+	as := identities(t)
+	everyone := []string{"Carol", "Bob", "Alice", "Kiosk", "Program"}
+	streams := map[string]<-chan map[string]any{}
+	for _, who := range everyone {
+		streams[who] = stream(t, as[who])
+		if got := next(t, streams[who], "snapshot")["builtin"]; !reflect.DeepEqual(got, map[string]any{}) {
+			t.Errorf("%s's snapshot: %v", who, got)
+		}
+	}
+
+	// An Admin Person's alone: not an Admin Program's.
+	for _, who := range []string{"Carol", "Bob", "Kiosk", "Program"} {
+		read(t, as[who]("PUT", "/api/dashboards/builtin", `{"presenceRow": false}`), http.StatusForbidden)
+	}
+	off := map[string]any{"presenceRow": false}
+	read(t, as["Alice"]("PUT", "/api/dashboards/builtin", `{"presenceRow": false}`), http.StatusNoContent)
+	for _, who := range everyone {
+		if got := next(t, streams[who], "dashboards")["builtin"]; !reflect.DeepEqual(got, off) {
+			t.Errorf("%s's stream: %v", who, got)
+		}
+		if got := next(t, stream(t, as[who]), "snapshot")["builtin"]; !reflect.DeepEqual(got, off) {
+			t.Errorf("%s's snapshot once turned off: %v", who, got)
+		}
+	}
+}
+
+func TestACustomDashboardsPresenceRowIsSavedWithIt(t *testing.T) {
+	as := identities(t)
+	bob := as["Bob"]
+	created := decodeAs[struct{ ID string }](t, bob("POST", "/api/dashboards", `{"name": "Evening"}`), http.StatusCreated)
+	shows := func(m map[string]any) any { return m["dashboards"].([]any)[0].(map[string]any)["presenceRow"] }
+	if got := shows(next(t, stream(t, bob), "snapshot")); got != nil {
+		t.Errorf("a new one: %v", got)
+	}
+	read(t, bob("PUT", "/api/dashboards/"+created.ID, `{"name": "Evening", "presenceRow": true}`), http.StatusNoContent)
+	if got := shows(next(t, stream(t, bob), "snapshot")); got != true {
+		t.Errorf("once turned on: %v", got)
+	}
+}

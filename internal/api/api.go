@@ -73,6 +73,14 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 		by, _ := identity(r)
 		reply(w, dash.Delete(by, r.PathValue("id")))
 	})
+	// The built-in Dashboard's setting, an Admin Person's (ADR 0055).
+	handle(guest, "PUT /api/dashboards/builtin", func(w http.ResponseWriter, r *http.Request) {
+		var b dashboard.BuiltinDashboard
+		if decode(w, r, &b) {
+			by, _ := identity(r)
+			reply(w, dash.SaveBuiltin(by, b))
+		}
+	})
 	// A Person's list of the Dashboards they see: their order, the hidden ones
 	// (ADR 0044).
 	handle(guest, "PUT /api/me/dashboards", func(w http.ResponseWriter, r *http.Request) {

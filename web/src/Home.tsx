@@ -1,8 +1,20 @@
 import { useEffect, useState } from 'react'
 import { mdiCheck, mdiContentCopy, mdiViewDashboardEditOutline } from '@mdi/js'
-import { useAggregates, useAreas, useAutomationStatuses, useDashboardList, useDashboards, useDevices, useFlags, usePresences } from './store'
+import {
+  edit,
+  useAggregates,
+  useAreas,
+  useAutomationStatuses,
+  useBuiltinDashboard,
+  useDashboardList,
+  useDashboards,
+  useDevices,
+  useFlags,
+  usePresences,
+} from './store'
 import { useAllows, useMe } from './access'
-import { copied, dashboard, shown } from './dashboard'
+import { copied, dashboard, presenceRowShown, shown } from './dashboard'
+import { Switch } from './controls'
 import { ActionSetting, AppBar, ChartsSetting, CreateButton } from './AppBar'
 import { ReleaseBanner } from './About'
 import { ChartsShown } from './MiniChart'
@@ -15,8 +27,9 @@ import { PresenceRow } from './PresenceRow'
 import { AggregatePanel, AreaPanel, DevicePanel, FlagPanel } from './HomePanels'
 
 // The Home page: the Dashboard hash opens, at #dashboard/<id>, the Person's first one shown
-// otherwise, and the panels an Admin opens from it. Every Dashboard starts with the Presence row,
-// a custom one and a Kiosk's as the built-in one until each Dashboard has its own setting (ADR 0055).
+// otherwise, and the panels an Admin opens from it. A Dashboard starts with the Presence row as its
+// setting says, a Kiosk's as its assigned one's (ADR 0055); an Admin turns the built-in one's off
+// or on while arranging it.
 // The built-in Dashboard is drawn from the Sections derived from the Areas, under the Flags
 // without an Area as pills. A Person switches Dashboards from the menu that takes the Home tab's
 // place; a Kiosk shows the one it is assigned alone, whatever the address (ADR 0044).
@@ -29,6 +42,7 @@ export function Home({ hash }: { hash: string }) {
   const automations = useAutomationStatuses() // their Tiles: those with a Manual trigger show
   const dashboards = useDashboards()
   const list = useDashboardList()
+  const builtin = useBuiltinDashboard()
   const identity = useMe()?.identity
   const person = !!identity && 'person' in identity
   const kiosk = !!identity && 'kiosk' in identity
@@ -93,7 +107,20 @@ export function Home({ hash }: { hash: string }) {
       />
       <main className="mx-auto max-w-[120rem] space-y-6 p-4 pb-24 lg:px-8">
         {admin && <ReleaseBanner />}
-        <PresenceRow />
+        {arrange && (
+          <div className="flex w-fit items-center gap-3 rounded-2xl border border-amber-400/40 bg-neutral-900 p-3 text-sm text-neutral-300">
+            Presence row
+            <Switch
+              on={presenceRowShown(undefined, builtin)}
+              onChange={async (on) => {
+                const err = await edit('PUT', 'dashboards/builtin', on ? {} : { presenceRow: false })
+                if (err) setToast({ text: err, error: true })
+              }}
+              label="Presence row"
+            />
+          </div>
+        )}
+        {presenceRowShown(current, builtin) && <PresenceRow />}
         {!current && pills.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {pills.map((f) => (
@@ -148,7 +175,7 @@ export function Home({ hash }: { hash: string }) {
       {duplicating && (
         <CreateDashboard
           title={`Duplicate ${current?.name ?? 'Home'}`}
-          copy={copied(current, areas)}
+          copy={copied(current, areas, builtin)}
           onCreated={setEditingId}
           onClose={() => setDuplicating(false)}
         />

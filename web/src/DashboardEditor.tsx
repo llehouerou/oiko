@@ -28,13 +28,12 @@ import { ArrangedGrid, Cells, cells, landing, SizeSteppers, Stepper } from './Ar
 import { Section, tileNodes } from './Section'
 
 // A custom Dashboard turned into its editor, in place: everything live and at full size. A bar on
-// top holds its Name, its columns, Duplicate, Delete and Done; every free cell of its grid has a +
-// adding a Section there; each Section has a bar that drags it to another cell, steps its size and
-// removes it, and on an own Section edits its Name, Icon and columns. An own Section's Tiles are
-// arranged as an Area's are on Home, a + in each free cell picking one to add, and each may take a
-// name of its own, or hide it. An Area's Section
-// shows the Area dimmed: it follows the Area, arranged on Home. Each change saves the whole
-// Dashboard at once.
+// top holds its Name, its columns, whether it shows the Presence row, Duplicate, Delete and Done;
+// every free cell of its grid has a + adding a Section there; each Section has a bar that drags it
+// to another cell, steps its size and removes it, and on an own Section edits its Name, Icon and
+// columns. An own Section's Tiles are arranged as an Area's are on Home, a + in each free cell
+// picking one to add, and each may take a name of its own, or hide it. An Area's Section shows the
+// Area dimmed: it follows the Area, arranged on Home. Each change saves the whole Dashboard at once.
 export function DashboardEditor({
   dashboard: d,
   sections,
@@ -106,6 +105,10 @@ export function DashboardEditor({
           onChange={(n) => save(setDashboardColumns(d, n))}
           className="text-sm"
         />
+        <span className="flex items-center gap-2 text-sm text-neutral-300">
+          Presence row
+          <Switch on={!!d.presenceRow} onChange={(on) => save({ ...d, presenceRow: on || undefined })} label="Presence row" />
+        </span>
         <button onClick={onDuplicate} className="flex items-center gap-1 rounded-full px-3 py-1.5 text-sm text-neutral-300 hover:bg-neutral-800">
           <Svg path={mdiContentCopy} className="size-5" />
           Duplicate

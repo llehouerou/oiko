@@ -8,6 +8,7 @@ import type {
   AutomationStatus,
   Availability,
   CommandState,
+  BuiltinDashboard,
   CustomDashboard,
   Dashboards,
   Device,
@@ -39,6 +40,7 @@ let releases: ReleaseStatus[] = []
 let dashboards: CustomDashboard[] = [] // those this Person sees, the shared ones and their own, or this Kiosk's
 let list: ListEntry[] = [] // this Person's: every Dashboard they see, in their order
 let kioskDashboards: Record<string, string> = {} // each Kiosk's shared Dashboard, to an Admin
+let builtin: BuiltinDashboard = {} // the built-in Dashboard's setting
 let connected = false
 let now = Date.now()
 const values = new Map<string, Value>()
@@ -88,6 +90,7 @@ function apply(msg: Snapshot | Update) {
       dashboards = msg.dashboards ?? []
       list = msg.list ?? []
       kioskDashboards = msg.kioskDashboards ?? {}
+      builtin = msg.builtin
       values.clear()
       for (const { ref, value } of msg.values) values.set(refKey(ref), value)
       events.clear()
@@ -204,6 +207,7 @@ export function connect() {
         dashboards = msg.dashboards
         list = msg.list ?? []
         kioskDashboards = msg.kioskDashboards ?? {}
+        builtin = msg.builtin
         return notify('dashboards')
       }
       apply(msg)
@@ -383,6 +387,9 @@ export const useDashboardList = () => useSyncExternalStore(subscribeTo('dashboar
 // Each Kiosk's shared Dashboard, by Kiosk id, to an Admin; a Kiosk missing shows the built-in one.
 // Assigned with edit('PUT', `kiosks/${id}/dashboard`, { dashboard }).
 export const useKioskDashboards = () => useSyncExternalStore(subscribeTo('dashboards'), () => kioskDashboards)
+
+// The built-in Dashboard's setting, an Admin's to change with edit('PUT', 'dashboards/builtin', …).
+export const useBuiltinDashboard = () => useSyncExternalStore(subscribeTo('dashboards'), () => builtin)
 
 // 'disconnected', 'online', or the names of the Bridges offline.
 export const useConnection = () =>

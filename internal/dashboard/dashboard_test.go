@@ -883,3 +883,77 @@ func TestARemovedKioskTakesItsAssignmentWithIt(t *testing.T) {
 		t.Errorf("an assignment of a Kiosk no longer known: %v", got)
 	}
 }
+
+// shown reports whether by is given the built-in Dashboard with its Presence
+// row.
+func shown(s *Store, by access.Identity) bool {
+	g, _ := s.Given(by)
+	return g.Builtin.PresenceRow == nil || *g.Builtin.PresenceRow
+}
+
+func TestAnAdminTurnsTheBuiltinDashboardsPresenceRowOffForEveryone(t *testing.T) {
+	dir := t.TempDir()
+	s := opened(t, dir, home.New(nil))
+	script := access.Identity{Kind: access.ProgramKind, ID: "script", Level: access.Admin}
+	everyone := []access.Identity{alice, bob, carol, hall, script}
+	for _, by := range everyone {
+		if !shown(s, by) {
+			t.Errorf("a %s %s is not shown it by default", by.Level, by.Kind)
+		}
+	}
+
+	// Only an Admin Person turns it off: not a Kiosk or a Program, whatever its level.
+	off := false
+	for _, by := range []access.Identity{alice, carol, {Kind: access.KioskKind, ID: "hall", Level: access.Admin}, script} {
+		if err := s.SaveBuiltin(by, BuiltinDashboard{PresenceRow: &off}); !errors.Is(err, access.ErrRefused) {
+			t.Errorf("a %s %s turning it off: %v", by.Level, by.Kind, err)
+		}
+	}
+	told := map[string]<-chan struct{}{}
+	for _, by := range everyone {
+		_, told[by.ID] = s.Given(by)
+	}
+	if err := s.SaveBuiltin(bob, BuiltinDashboard{PresenceRow: &off}); err != nil {
+		t.Fatal(err)
+	}
+	for _, by := range everyone {
+		select {
+		case <-told[by.ID]:
+		default:
+			t.Errorf("a %s %s is not told", by.Level, by.Kind)
+		}
+		if shown(s, by) {
+			t.Errorf("a %s %s is still shown it", by.Level, by.Kind)
+		}
+	}
+	if shown(opened(t, dir, home.New(nil)), alice) {
+		t.Error("a restart shows it again")
+	}
+
+	// Turned on again, nothing is left stored.
+	on := true
+	if err := s.SaveBuiltin(bob, BuiltinDashboard{PresenceRow: &on}); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := s.Given(alice); g.Builtin.PresenceRow != nil {
+		t.Errorf("turned on again: %v", *g.Builtin.PresenceRow)
+	}
+}
+
+func TestACustomDashboardShowsThePresenceRowOnlyWhenItsEditorTurnsItOn(t *testing.T) {
+	dir := t.TempDir()
+	s := opened(t, dir, home.New(nil))
+	id, err := s.Create(alice, parse(t, `{"name": "Evening"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ds, _ := dashboards(s, alice); ds[0].PresenceRow {
+		t.Error("a new one shows it")
+	}
+	if err := s.Save(alice, id, parse(t, `{"name": "Evening", "presenceRow": true}`)); err != nil {
+		t.Fatal(err)
+	}
+	if ds, _ := dashboards(opened(t, dir, home.New(nil)), alice); !ds[0].PresenceRow {
+		t.Error("turned on, it does not show it after a restart")
+	}
+}

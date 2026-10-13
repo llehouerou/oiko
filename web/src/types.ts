@@ -266,6 +266,7 @@ export interface Snapshot {
   dashboards?: CustomDashboard[]
   list?: ListEntry[] // a Person's
   kioskDashboards?: Record<string, string> // each Kiosk's shared Dashboard, by Kiosk id, to an Admin; none: the built-in one
+  builtin: BuiltinDashboard
 }
 
 // Sent again each time a check finds something else; not an Update.
@@ -280,6 +281,13 @@ export interface Dashboards {
   dashboards: CustomDashboard[]
   list?: ListEntry[]
   kioskDashboards?: Record<string, string>
+  builtin: BuiltinDashboard
+}
+
+// Mirrors dashboard.BuiltinDashboard: all that is stored of the built-in Dashboard, an Admin's to
+// change with edit('PUT', 'dashboards/builtin', …).
+export interface BuiltinDashboard {
+  presenceRow?: false // shown when absent
 }
 
 // Mirrors dashboard.Entry: a Dashboard in a Person's list, by id ('builtin' for the built-in one),
@@ -290,12 +298,13 @@ export interface ListEntry {
 }
 
 // Mirrors dashboard.Dashboard: a custom Dashboard, shared (an Admin's to edit, every Person's to
-// see) or personal, its Sections on a Layout of its columns.
+// see) or personal, whether it shows the Presence row, and its Sections on a Layout of its columns.
 export interface CustomDashboard {
   id: string
   shared?: true
   owner?: string // the Person whose personal Dashboard it is
   name: string
+  presenceRow?: true // hidden when absent
   columns: number
   sections: CustomSection[]
 }

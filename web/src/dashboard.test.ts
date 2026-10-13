@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { copied, dashboard, deleting, shown, unseenSection, type DashboardSection } from './dashboard'
+import { copied, dashboard, deleting, presenceRowShown, shown, unseenSection, type DashboardSection } from './dashboard'
 import type { Aggregate, Area, AutomationStatus, Capability, CustomDashboard, Device, Fn, Target } from './types'
 
 const on: Capability = { key: 'state', label: 'State', type: 'binary', access: { observable: true, settable: true, queryable: true }, category: 'primary' }
@@ -434,8 +434,9 @@ test('deleting a Dashboard names the Kiosks showing it', () => {
 })
 
 test('a copy of the built-in Dashboard holds its Areas two per row, in order, without Others; of a custom one, what its viewer sees', () => {
-  expect(copied(undefined, [area('living'), area('kitchen'), area('office')])).toEqual({
+  expect(copied(undefined, [area('living'), area('kitchen'), area('office')], {})).toEqual({
     columns: 2,
+    presenceRow: true,
     sections: [
       { area: 'living', col: 0, row: 0, width: 1 },
       { area: 'kitchen', col: 1, row: 0, width: 1 },
@@ -461,5 +462,25 @@ test('a copy of the built-in Dashboard holds its Areas two per row, in order, wi
       },
     ],
   }
-  expect(copied(evening, [])).toEqual({ columns: 3, sections: evening.sections })
+  expect(copied(evening, [], {})).toEqual({ columns: 3, sections: evening.sections })
+})
+
+test('a copy keeps whether its Dashboard shows the Presence row', () => {
+  const evening: CustomDashboard = { id: 'evening', name: 'Evening', columns: 2, sections: [] }
+  expect(copied(undefined, [], { presenceRow: false }).presenceRow).toBeUndefined()
+  expect(copied({ ...evening, presenceRow: true }, [], { presenceRow: false }).presenceRow).toBe(true)
+  expect(copied(evening, [], {}).presenceRow).toBeUndefined()
+})
+
+test('the built-in Dashboard shows the Presence row unless turned off; a custom one only when turned on', () => {
+  const evening: CustomDashboard = { id: 'evening', shared: true, name: 'Evening', columns: 2, sections: [] }
+  expect(presenceRowShown(undefined, {})).toBe(true)
+  expect(presenceRowShown(undefined, { presenceRow: false })).toBe(false)
+  expect(presenceRowShown(evening, {})).toBe(false)
+  expect(presenceRowShown({ ...evening, presenceRow: true }, { presenceRow: false })).toBe(true)
+  // A Kiosk shows its assigned Dashboard's, the built-in one's when it has none.
+  expect(presenceRowShown(shown('#', [{ ...evening, presenceRow: true }], [], true), { presenceRow: false })).toBe(true)
+  expect(presenceRowShown(shown('#', [evening], [], true), {})).toBe(false)
+  expect(presenceRowShown(shown('#', [], [], true), { presenceRow: false })).toBe(false)
+  expect(presenceRowShown(shown('#', [], [], true), {})).toBe(true)
 })

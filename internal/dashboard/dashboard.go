@@ -1,5 +1,5 @@
 // Package dashboard keeps the custom Dashboards in dashboards.json (ADR 0040
-// to 0046): shared ones, an Admin's to edit and every Person's to see, and
+// to 0046), and the built-in Dashboard's setting (ADR 0055): shared ones, an Admin's to edit and every Person's to see, and
 // personal ones, their owner's alone; each Person's list of those they see;
 // and each Kiosk's assigned Dashboard. It alone checks what a Dashboard may
 // hold and who may save it, and decides what each identity is given of them
@@ -28,14 +28,16 @@ var Format store.Format
 const defaultColumns = 2
 
 // Dashboard is a custom Dashboard: shared or whose it is, fixed at creation,
-// its Name, and its Sections on a Layout of its columns.
+// its Name, whether it shows the Presence row (ADR 0055), and its Sections on
+// a Layout of its columns.
 type Dashboard struct {
-	ID       string    `json:"id"`
-	Shared   bool      `json:"shared,omitempty"`
-	Owner    string    `json:"owner,omitempty"` // the Person whose personal Dashboard it is
-	Name     string    `json:"name"`
-	Columns  int       `json:"columns"`
-	Sections []Section `json:"sections"`
+	ID          string    `json:"id"`
+	Shared      bool      `json:"shared,omitempty"`
+	Owner       string    `json:"owner,omitempty"` // the Person whose personal Dashboard it is
+	Name        string    `json:"name"`
+	PresenceRow bool      `json:"presenceRow,omitempty"`
+	Columns     int       `json:"columns"`
+	Sections    []Section `json:"sections"`
 }
 
 // EditableBy reports whether by may edit d (ADR 0041): an Admin a shared one,
@@ -86,6 +88,12 @@ type Tile struct {
 // never stores it, and it is in every list.
 const Builtin = "builtin"
 
+// BuiltinDashboard is all that is stored of the built-in Dashboard (ADR
+// 0055): whether it shows the Presence row, nil meaning it does.
+type BuiltinDashboard struct {
+	PresenceRow *bool `json:"presenceRow,omitempty"`
+}
+
 // Entry is a Dashboard in a Person's list (ADR 0044), by id, and whether
 // they hide it from their menu.
 type Entry struct {
@@ -98,6 +106,7 @@ type document struct {
 	Dashboards []Dashboard        `json:"dashboards"`
 	Lists      map[string][]Entry `json:"lists,omitempty"`  // each Person's, as they last saved it, by Person id
 	Kiosks     map[string]string  `json:"kiosks,omitempty"` // each Kiosk's shared Dashboard, by Kiosk id; none: the built-in one
+	Builtin    BuiltinDashboard   `json:"builtin,omitzero"` // the built-in Dashboard's setting
 }
 
 // Store holds the custom Dashboards, and follows the home to know what they
@@ -233,22 +242,24 @@ func (s *Store) knownNow() known {
 }
 
 // Given is what an identity is given of the Dashboards (ADR 0041, 0044,
-// 0046), each as it sees it.
+// 0046, 0055), each as it sees it.
 type Given struct {
 	Dashboards []Dashboard       `json:"dashboards,omitzero"`      // none for a Program, [] for a Person without any or a Kiosk showing the built-in one
 	List       []Entry           `json:"list,omitzero"`            // a Person's
 	Kiosks     map[string]string `json:"kioskDashboards,omitzero"` // an Admin's
+	Builtin    BuiltinDashboard  `json:"builtin"`                  // everyone's
 }
 
-// Given is what by is given, and a channel closed once it changes: for a
-// Person the shared Dashboards and their own, and their list (ADR 0044); for
-// a Kiosk the one it is assigned, none for the built-in one; for an Admin
-// Person also each Kiosk's assignment, by Kiosk id, those showing the
-// built-in one left out. A Program is given nothing, and never told.
+// Given is what by is given, and a channel closed once it changes: for
+// everyone the built-in Dashboard's setting; for a Person the shared
+// Dashboards and their own, and their list (ADR 0044); for a Kiosk the one it
+// is assigned, none for the built-in one; for an Admin Person also each
+// Kiosk's assignment, by Kiosk id, those showing the built-in one left out. A
+// Program is given nothing else.
 func (s *Store) Given(by access.Identity) (Given, <-chan struct{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	g := Given{Dashboards: []Dashboard{}}
+	g := Given{Dashboards: []Dashboard{}, Builtin: s.doc.Builtin}
 	switch by.Kind {
 	case access.PersonKind:
 		for _, d := range s.doc.Dashboards {
@@ -265,7 +276,7 @@ func (s *Store) Given(by access.Identity) (Given, <-chan struct{}) {
 			g.Dashboards = append(g.Dashboards, s.seenAt(by, s.doc.Dashboards[i]))
 		}
 	default:
-		return Given{}, nil
+		g.Dashboards = nil
 	}
 	w := whoIs(by)
 	ch := s.changed[w]
@@ -323,6 +334,22 @@ func (s *Store) Assign(by access.Identity, k, id string) error {
 	doc := s.doc
 	doc.Kiosks = kiosks
 	return s.save(doc, func(w who) bool { return w.admin || w.kind == access.KioskKind && w.id == k })
+}
+
+// SaveBuiltin saves the built-in Dashboard's setting b, for an Admin Person
+// (ADR 0055), and tells everyone. Shown, the default, is stored as nothing.
+func (s *Store) SaveBuiltin(by access.Identity, b BuiltinDashboard) error {
+	if !admin(by) {
+		return fmt.Errorf("%w: only an admin arranges the built-in dashboard", access.ErrRefused)
+	}
+	if b.PresenceRow != nil && *b.PresenceRow {
+		b.PresenceRow = nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	doc := s.doc
+	doc.Builtin = b
+	return s.save(doc, func(who) bool { return true })
 }
 
 // RemoveKiosk drops removed Kiosk k's assignment (ADR 0045); the Kiosks are
@@ -506,7 +533,7 @@ func (s *Store) write(ds []Dashboard, lists map[string][]Entry, changed ...Dashb
 	maps.DeleteFunc(kiosks, func(_, id string) bool {
 		return !slices.ContainsFunc(ds, func(d Dashboard) bool { return d.ID == id })
 	})
-	return s.save(document{ds, reconciledLists, kiosks}, func(w who) bool {
+	return s.save(document{ds, reconciledLists, kiosks, s.doc.Builtin}, func(w who) bool {
 		return slices.ContainsFunc(changed, func(d Dashboard) bool {
 			switch w.kind {
 			case access.PersonKind:
