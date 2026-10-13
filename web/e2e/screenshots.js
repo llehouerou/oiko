@@ -1,6 +1,7 @@
 // Writes docs/images/dashboard.png, the README's picture of the built-in Dashboard, from the
 // made-up home in home.json: a temporary Mosquitto holds its zigbee2mqtt messages, retained, for
-// a fresh Oiko's zigbee2mqtt Bridge; its Areas are created and its Devices placed through the API.
+// a fresh Oiko's zigbee2mqtt Bridge; its Areas and Persons are created, its Devices placed and each
+// Person's Presence set through the API.
 // `make screenshots` runs it, from the dev shell.
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -41,7 +42,7 @@ try {
   oiko = await start({ bridges: { zigbee2mqtt: { broker: `mqtt://127.0.0.1:${port}` } } })
   const page = await (await oiko.browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2, reducedMotion: 'reduce' })).newPage()
   await oiko.claim(page)
-  await page.evaluate(async (areas) => {
+  await page.evaluate(async ({ areas, persons }) => {
     const ok = async (r) => {
       if (!r.ok) throw new Error(`${r.url}: ${r.status} ${await r.text()}`)
     }
@@ -54,7 +55,14 @@ try {
       return JSON.parse(text.slice('data: '.length, text.indexOf('\n\n')))
     }
     for (const a of areas) await ok(await fetch('/api/areas', { method: 'POST', body: JSON.stringify({ name: a.name, icon: a.icon }) }))
+    // Alice, who claimed Oiko, is there already.
+    for (const p of persons.filter((p) => p.level))
+      await ok(await fetch('/api/persons', { method: 'POST', body: JSON.stringify({ name: p.name, level: p.level }) }))
     const snap = await snapshot()
+    for (const p of persons) {
+      const target = `presence:${snap.presences.find((x) => x.name === p.name).id}`
+      await ok(await fetch('/api/commands', { method: 'POST', body: JSON.stringify({ target, values: { home: p.home } }) }))
+    }
     for (const a of areas) {
       const area = snap.areas.find((x) => x.name === a.name).id
       for (const d of a.devices) {
@@ -63,7 +71,7 @@ try {
         await ok(await fetch('/api/area', { method: 'PUT', body: JSON.stringify({ target: `device:${device.id}`, area }) }))
       }
     }
-  }, home.areas)
+  }, home)
   await page.goto(oiko.base)
   // Every Device was placed before the page loads: one Tile drawn means all are.
   await page.getByText('Bedroom motion').waitFor()

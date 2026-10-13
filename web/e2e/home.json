@@ -62,6 +62,11 @@
       ]
     }
   },
+  "persons": [
+    { "name": "Alice", "home": true },
+    { "name": "Bob", "level": "member", "home": false },
+    { "name": "Chloe", "level": "member", "home": true }
+  ],
   "areas": [
     {
       "name": "Living room",
