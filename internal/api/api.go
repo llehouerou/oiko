@@ -188,14 +188,22 @@ func Handler(h *home.Home, automations *automation.Engine, hist *history.Store, 
 	handle(admin, "DELETE /api/flags/{id}", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, h.DeleteFlag(home.FlagID(r.PathValue("id"))))
 	})
-	// The Presence sources of Person {id}, saved whole (ADR 0054); there is no
-	// POST or DELETE: Oiko derives every Presence.
+	// The Presence sources of Person {id}, or the Home presence's bindings for
+	// {id} home, saved whole (ADR 0054); there is no POST or DELETE: Oiko
+	// derives every Presence.
 	handle(admin, "PUT /api/presences/{id}", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Sources []home.PresenceSource `json:"sources"`
+			home.HomeBindings
 		}
-		if decode(w, r, &req) {
-			reply(w, h.SetPresenceSources(home.PersonID(r.PathValue("id")), req.Sources))
+		req.ExitGrace = home.DefaultExitGrace
+		if !decode(w, r, &req) {
+			return
+		}
+		if id := home.PersonID(r.PathValue("id")); id == home.HomePresence {
+			reply(w, h.SetHomeBindings(req.HomeBindings))
+		} else {
+			reply(w, h.SetPresenceSources(id, req.Sources))
 		}
 	})
 	handle(admin, "POST /api/automations", defineAutomation(automations))

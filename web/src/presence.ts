@@ -1,20 +1,49 @@
-// A Person's Presence as the web client shows it (ADR 0055): a chip of the Presence row, by Name,
-// the stretches of its last 24 h, and its Presence sources' live state.
+// A Presence as the web client shows it (ADR 0055): a chip of the Presence row, the stretches of
+// its last 24 h, and its Presence sources' live state; for the Home presence, whether someone who
+// is none of the Persons is inside, and until when.
 
 import { held, type Point } from './history'
 import { rests, roles, turns } from './roles'
 import type { Capability, Presence, PresenceSource, Value } from './types'
 
-// ordered is presences by Name, as the row shows them.
-export const ordered = (ps: Presence[]) => [...ps].sort((a, b) => a.name.localeCompare(b.name))
+// The Home presence's id, as in its key presence:home.
+export const HOME = 'home'
+
+// persons is the Persons' Presences in presences, by Name, as the row shows them after the Home
+// presence.
+export const persons = (ps: Presence[]) => ps.filter((p) => p.id !== HOME).sort((a, b) => a.name.localeCompare(b.name))
 
 export type PresenceState = 'home' | 'away' | 'unknown'
+
+const stateOf = (home: Value | undefined): PresenceState => (home === undefined ? 'unknown' : home.data === true ? 'home' : 'away')
 
 // chip is what a Presence's chip shows of home and manual's Values: its face's initial and state,
 // whether it is set by hand, and for how long its Value has held.
 export function chip(p: Presence, home: Value | undefined, manual: Value | undefined, now: number) {
-  const state: PresenceState = home === undefined ? 'unknown' : home.data === true ? 'home' : 'away'
-  return { initial: p.name.charAt(0).toUpperCase(), state, manual: manual?.data === true, held: home?.since ? heldFor(home.since, now) : '' }
+  return { initial: p.name.charAt(0).toUpperCase(), state: stateOf(home), manual: manual?.data === true, held: home?.since ? heldFor(home.since, now) : '' }
+}
+
+// homeChip is what the Home presence's chip says of its Value, given how many Persons are home.
+export function homeChip(home: Value | undefined, personsHome: number, now: number) {
+  const state = stateOf(home)
+  const text = { unknown: 'Home unknown', away: 'Nobody home', home: someoneElse(home, personsHome) ? 'Someone home · not one of you' : 'Someone home' }[state]
+  return { state, text, held: home?.since ? heldFor(home.since, now) : '' }
+}
+
+// someoneElse is whether someone who is none of the Persons is inside, as far as the Home presence
+// tells: it is home while no Person is.
+export const someoneElse = (home: Value | undefined, personsHome: number) => home?.data === true && personsHome === 0
+
+// boxUntil is until when the Home presence's box holds someone, as its Entrance doors' and Signs of
+// life's Values tell: the exit grace after the last door closed, unless a Sign of life is true now;
+// undefined once past, or if nothing will empty it.
+// shortcut: a Sign of life that turned true and back since the door closed shows only in its
+// History, so the box may hold past the time told; read the History if that misleads.
+export function boxUntil(doors: (Value | undefined)[], signs: (Value | undefined)[], exitGrace: number, now: number) {
+  if (signs.some((v) => v?.data === true)) return undefined
+  const closed = Math.max(...doors.filter((v) => v?.data === false).map((v) => Date.parse(v!.since ?? v!.at)))
+  const until = closed + exitGrace * 1000
+  return until > now ? until : undefined
 }
 
 // heldFor is how long since since, roughly: 'now', minutes, hours up to two days, then days.

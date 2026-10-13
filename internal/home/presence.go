@@ -25,24 +25,28 @@ type PresenceSource struct {
 	DepartureDelay int    `json:"departureDelay"` // in seconds
 }
 
-// Presence is a Person's Presence, as the presences list shows it: its
-// Name is its Person's. Its Kind and Capabilities are presenceFunction's.
+// Presence is a Person's Presence or the Home presence, as the presences
+// list shows it: a Person's has its Name, presenceFunction's Kind and
+// Capabilities and its Presence sources; the Home presence has
+// homePresenceFunction's and its HomeBindings.
 type Presence struct {
-	ID           PersonID         `json:"id"`
-	Name         string           `json:"name"`
-	Kind         string           `json:"kind"`
-	Capabilities []Capability     `json:"capabilities"`
-	Sources      []PresenceSource `json:"sources"`
+	ID            PersonID         `json:"id"`
+	Name          string           `json:"name"`
+	Kind          string           `json:"kind"`
+	Capabilities  []Capability     `json:"capabilities"`
+	Sources       []PresenceSource `json:"sources,omitzero"` // a Person's: never nil
+	*HomeBindings                  // the Home presence's
 }
 
 // SavedPresence is a Presence as presences.json keeps it (ADR 0054): its
-// Presence sources, and its Value and manual's, absent until something tells. While
-// manual is true, Value is the one a Command forced.
+// Presence sources or HomeBindings, and its Value and manual's, absent until
+// something tells. While manual is true, Value is the one a Command forced.
 type SavedPresence struct {
-	ID      PersonID         `json:"id"`
-	Sources []PresenceSource `json:"sources,omitempty"`
-	Value   *Value           `json:"value,omitempty"`
-	Manual  *Value           `json:"manual,omitempty"`
+	ID            PersonID         `json:"id"`
+	Sources       []PresenceSource `json:"sources,omitempty"`
+	*HomeBindings                  // the Home presence's
+	Value         *Value           `json:"value,omitempty"`
+	Manual        *Value           `json:"manual,omitempty"`
 }
 
 // person is a Person's Presence as Home holds it.
@@ -80,14 +84,15 @@ func (h *Home) SetPersons(ps []Person) error {
 		}
 		changed = changed || renamed
 	}
+	removed := false
 	for id := range h.presences {
 		if !slices.ContainsFunc(ps, func(p Person) bool { return p.ID == id }) {
 			h.removePerson(id)
-			changed = true
+			removed = true
 		}
 	}
 	h.recalled = nil
-	if !changed {
+	if !changed && !removed {
 		return nil
 	}
 	err := h.presencesChanged()
@@ -95,6 +100,7 @@ func (h *Home) SetPersons(ps []Person) error {
 		h.announcePresence(id)
 		h.followRule(id, true) // its Presence sources' Values, a Flag's, are replayed state too
 	}
+	h.followHome(!removed) // recalled Values are replayed state
 	return err
 }
 
@@ -168,19 +174,25 @@ func (h *Home) SetPresenceSources(id PersonID, sources []PresenceSource) error {
 
 // checkSource refuses what cannot be a Presence source. Callers hold h.mu.
 func (h *Home) checkSource(s PresenceSource) error {
-	t := s.Target
-	switch {
-	case s.DepartureDelay < 0:
+	if s.DepartureDelay < 0 {
 		return fmt.Errorf("%w: a departure delay cannot be negative", ErrInvalid)
+	}
+	return h.checkBinding(s.Target)
+}
+
+// checkBinding refuses what cannot be bound to a Presence or the Home
+// presence (ADR 0054). Callers hold h.mu.
+func (h *Home) checkBinding(t Target) error {
+	switch {
 	case t.IsZero():
-		return fmt.Errorf("%w: a presence source names its target", ErrInvalid)
+		return fmt.Errorf("%w: a binding names its target", ErrInvalid)
 	case t.Presence() != "":
-		return fmt.Errorf("%w: a presence cannot be a presence source", ErrInvalid)
+		return fmt.Errorf("%w: a presence cannot be bound to a presence", ErrInvalid)
 	case t.Device() != "" && t.Function() == "":
-		return fmt.Errorf("%w: a presence source is a function, not a device", ErrInvalid)
+		return fmt.Errorf("%w: a binding is a function, not a device", ErrInvalid)
 	}
 	if _, known := h.lookup(t); !known {
-		return fmt.Errorf("%w: unknown presence source %s", ErrNotFound, t)
+		return fmt.Errorf("%w: unknown target %s", ErrNotFound, t)
 	}
 	if _, ok := h.sourceKey(t); !ok {
 		return fmt.Errorf("%w: %s has no binary state or main control", ErrInvalid, t)
@@ -188,8 +200,8 @@ func (h *Home) checkSource(s PresenceSource) error {
 	return nil
 }
 
-// dropSources unbinds the Presence sources drop selects from every Presence, once
-// their Target is deleted. Callers hold h.mu.
+// dropSources unbinds the Targets drop selects from every Presence and the
+// Home presence, once they are deleted. Callers hold h.mu.
 func (h *Home) dropSources(drop func(Target) bool) error {
 	var dropped []PersonID
 	for id, p := range h.presences {
@@ -198,13 +210,15 @@ func (h *Home) dropSources(drop func(Target) bool) error {
 			dropped = append(dropped, id)
 		}
 	}
-	if len(dropped) == 0 {
+	boxed := h.dropFromBox(drop)
+	if len(dropped) == 0 && !boxed {
 		return nil
 	}
 	err := h.presencesChanged()
 	for _, id := range dropped {
 		h.followRule(id, false)
 	}
+	h.followHome(false)
 	return err
 }
 
@@ -226,21 +240,34 @@ func (h *Home) followPresences() {
 	}
 }
 
-// reportToPresences brings in line the Presences whose Presence sources' Values were
-// just recorded. A change moved only by first Values is replayed state, as
-// theirs are (ADR 0054). Callers hold h.mu.
+// reportToPresences brings in line the Presences, and the Home presence's
+// box, whose Presence sources' Values were just recorded. A change moved only
+// by first Values is replayed state, as theirs are (ADR 0054). Callers hold
+// h.mu.
 func (h *Home) reportToPresences(rs []recorded) {
 	for id, p := range h.presences {
 		fed, initial := false, true
-		for _, r := range rs {
-			if slices.ContainsFunc(p.sources, func(s PresenceSource) bool { return h.feeds(s.Target, r.ref) }) {
-				fed, initial = true, initial && r.first
-			}
+		for _, s := range p.sources {
+			f, i := h.fed(s.Target, rs)
+			fed, initial = fed || f, initial && (!f || i)
 		}
 		if fed {
 			h.followRule(id, initial)
 		}
 	}
+	h.reportToBox(rs)
+}
+
+// fed is whether rs, Values just recorded, feed what t is read through, and
+// whether only by first Values. Callers hold h.mu.
+func (h *Home) fed(t Target, rs []recorded) (fed, initial bool) {
+	initial = true
+	for _, r := range rs {
+		if h.feeds(t, r.ref) {
+			fed, initial = true, initial && r.first
+		}
+	}
+	return fed, initial
 }
 
 // followRule sets Person id's Presence to what its rule computes now, unless
@@ -282,6 +309,7 @@ func (h *Home) followRule(id PersonID, initial bool) {
 	if len(rs) > 0 {
 		h.reportToAggregates(rs, now)
 		h.savePresences()
+		h.followHome(initial)
 	}
 }
 
@@ -316,6 +344,7 @@ func (x presenceTarget) transmit(req Request) {
 	}
 	h.reportToAggregates(rs, at)
 	h.savePresences()
+	h.followHome(false)
 	h.confirm(x.target())
 }
 
@@ -326,12 +355,12 @@ func (h *Home) presencesChanged() error {
 	return err
 }
 
-// savePresences saves every Presence with its Presence sources and Values. Callers
+// savePresences saves every Presence with its bindings and Values. Callers
 // hold h.mu.
 func (h *Home) savePresences() error {
 	list := []SavedPresence{}
 	for _, p := range h.presenceList() {
-		s := SavedPresence{ID: p.ID, Sources: p.Sources}
+		s := SavedPresence{ID: p.ID, Sources: p.Sources, HomeBindings: p.HomeBindings}
 		if v, ok := h.values[homeRef(p.ID)]; ok {
 			s.Value = &v
 		}
@@ -343,7 +372,7 @@ func (h *Home) savePresences() error {
 	return h.save(presencesFile, presencesFormat, list)
 }
 
-// presenceList is every Presence, by Name.
+// presenceList is the Home presence, then every Person's Presence by Name.
 func (h *Home) presenceList() []Presence {
 	list := make([]Presence, 0, len(h.presences))
 	for id, p := range h.presences {
@@ -353,5 +382,5 @@ func (h *Home) presenceList() []Presence {
 	slices.SortFunc(list, func(a, b Presence) int {
 		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.ID, b.ID))
 	})
-	return list
+	return append([]Presence{h.homePresence()}, list...)
 }

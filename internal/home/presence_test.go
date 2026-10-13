@@ -46,10 +46,10 @@ func presenceNames(ps []Presence) []string {
 func TestAPresenceForEachPerson(t *testing.T) {
 	h, updates, _ := presences(t)
 	s := snapshot(h)
-	if !slices.Equal(presenceNames(s.Presences), []string{"Alice", "Bob"}) {
-		t.Fatalf("presences = %+v, want Alice then Bob", s.Presences)
+	if !slices.Equal(presenceNames(s.Presences), []string{"Home", "Alice", "Bob"}) {
+		t.Fatalf("presences = %+v, want the Home presence, then Alice then Bob", s.Presences)
 	}
-	p := s.Presences[0]
+	p := s.Presences[1]
 	if p.ID != alice || p.Kind != "presence" || len(p.Capabilities) != 2 || p.Capabilities[0].Key != "home" || !p.Capabilities[0].Access.Settable ||
 		p.Capabilities[1].Key != "manual" || p.Capabilities[1].Access.Settable {
 		t.Errorf("Alice's presence = %+v", p)
@@ -66,14 +66,14 @@ func TestAPresenceForEachPerson(t *testing.T) {
 	}
 	us := drain(updates)
 	if ks := kinds(us); !slices.Equal(ks, []UpdateKind{PresencesChanged, AvailabilityChanged}) ||
-		!slices.Equal(presenceNames(us[0].Presences), []string{"Alice", "Bob", "Chloe"}) || us[1].Target != TargetPresence(chloe) {
+		!slices.Equal(presenceNames(us[0].Presences), []string{"Home", "Alice", "Bob", "Chloe"}) || us[1].Target != TargetPresence(chloe) {
 		t.Fatalf("creation updates = %+v", us)
 	}
 
 	if err := h.SetPersons([]Person{{alice, "Zoe"}, {bob, "Bob"}, {chloe, "Chloe"}}); err != nil {
 		t.Fatal(err)
 	}
-	if us := drain(updates); len(us) != 1 || us[0].Kind != PresencesChanged || !slices.Equal(presenceNames(us[0].Presences), []string{"Bob", "Chloe", "Zoe"}) {
+	if us := drain(updates); len(us) != 1 || us[0].Kind != PresencesChanged || !slices.Equal(presenceNames(us[0].Presences), []string{"Home", "Bob", "Chloe", "Zoe"}) {
 		t.Fatalf("rename updates = %+v", us)
 	}
 	h.SetPersons([]Person{{alice, "Zoe"}, {bob, "Bob"}, {chloe, "Chloe"}})
@@ -92,14 +92,14 @@ func TestRemovingAPersonDeletesTheirPresence(t *testing.T) {
 	}
 	us := drain(updates)
 	if ks := kinds(us); !slices.Equal(ks, []UpdateKind{TargetDeleted, PresencesChanged}) || us[0].Target != TargetPresence(bob) ||
-		!slices.Equal(presenceNames(us[1].Presences), []string{"Alice"}) {
+		!slices.Equal(presenceNames(us[1].Presences), []string{"Home", "Alice"}) {
 		t.Fatalf("removal updates = %+v", us)
 	}
 	if _, ok := value(h, TargetPresence(bob).Ref("home")); ok {
 		t.Error("the removed Person's Presence keeps its Value")
 	}
-	if saved := onDisk(t, dir).presences; len(saved) != 1 || saved[0].ID != alice {
-		t.Errorf("saved %+v, want Alice's only", saved)
+	if saved := onDisk(t, dir).presences; len(saved) != 2 || saved[1].ID != alice {
+		t.Errorf("saved %+v, want the Home presence's and Alice's only", saved)
 	}
 	if _, err := h.Command(TargetPresence(bob), Request{Values: map[string]any{"home": true}}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("a Command on the removed Presence: err = %v", err)
@@ -134,7 +134,7 @@ func TestAPresenceSetByHand(t *testing.T) {
 		if v, _ := value(h, manual); v.Data != true {
 			t.Errorf("manual = %v, want true", v.Data)
 		}
-		if saved := onDisk(t, dir).presences; saved[0].ID != alice || saved[0].Value == nil || saved[0].Value.Data != step.want || saved[0].Manual == nil || saved[0].Manual.Data != true {
+		if saved := onDisk(t, dir).presences; saved[1].ID != alice || saved[1].Value == nil || saved[1].Value.Data != step.want || saved[1].Manual == nil || saved[1].Manual.Data != true {
 			t.Errorf("saved %+v", saved)
 		}
 	}
@@ -171,10 +171,10 @@ func TestAPresenceSurvivesRestart(t *testing.T) {
 			t.Errorf("a recalled Value is announced as a change: %+v", u)
 		}
 	}
-	if s := snapshot(restarted); !slices.Equal(presenceNames(s.Presences), []string{"Alice"}) {
-		t.Errorf("presences = %+v, want Alice's only", s.Presences)
+	if s := snapshot(restarted); !slices.Equal(presenceNames(s.Presences), []string{"Home", "Alice"}) {
+		t.Errorf("presences = %+v, want the Home presence's and Alice's only", s.Presences)
 	}
-	if saved := onDisk(t, dir).presences; len(saved) != 1 || saved[0].ID != alice {
+	if saved := onDisk(t, dir).presences; len(saved) != 2 || saved[1].ID != alice {
 		t.Errorf("saved %+v, want the orphan dropped", saved)
 	}
 }

@@ -303,7 +303,7 @@ export const useAggregates = () => useSyncExternalStore(subscribeTo('aggregates'
 
 export const useFlags = () => useSyncExternalStore(subscribeTo('flags'), () => flags)
 
-// Every Person's Presence, by Name.
+// The Home presence, then every Person's Presence by Name.
 export const usePresences = () => useSyncExternalStore(subscribeTo('presences'), () => presences)
 
 export const useAreas = () => useSyncExternalStore(subscribeTo('areas'), () => areas)
@@ -319,7 +319,11 @@ export function useValue(ref: Ref) {
 }
 
 // How many of refs are on, followed as each changes.
-export function useOnCount(refs: Ref[]) {
+export const useOnCount = (refs: Ref[]) => useDerived(refs, (vs) => vs.filter((v) => v?.data === true).length)
+
+// What derive makes of refs' Values, followed as each changes. It returns a primitive, so that an
+// equal result is the same snapshot.
+export function useDerived<T extends string | number | boolean | undefined>(refs: Ref[], derive: (vs: (Value | undefined)[]) => T): T {
   const keys = refs.map(refKey).join('\n')
   const subscribe = useCallback(
     (l: Listener) => {
@@ -328,7 +332,7 @@ export function useOnCount(refs: Ref[]) {
     },
     [keys],
   )
-  return useSyncExternalStore(subscribe, () => (keys ? keys.split('\n').filter((k) => values.get(k)?.data === true).length : 0))
+  return useSyncExternalStore(subscribe, () => derive(keys ? keys.split('\n').map((k) => values.get(k)) : []))
 }
 
 export function useLastEvent(ref: Ref) {

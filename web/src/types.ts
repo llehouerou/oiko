@@ -94,13 +94,18 @@ export interface Flag {
 
 // A Person's Presence, derived by Oiko under their Name: kind 'presence', Capabilities 'home'
 // (settable: setting it is an override) and 'manual' (true while the override holds), home while
-// any of its Presence sources counts as home.
+// any of its Presence sources counts as home. Or the Home presence, id 'home' and Name 'Home':
+// 'home' only, a state, home while a Person is or someone was seen inside since an Entrance door
+// last closed, give or take its exit grace.
 export interface Presence {
-  id: string // the Person's
+  id: string // the Person's, or 'home'
   name: string
   kind: string
   capabilities: Capability[]
-  sources: PresenceSource[]
+  sources?: PresenceSource[] // a Person's
+  entranceDoors?: Target[] // the Home presence's, true meaning open
+  signsOfLife?: Target[] // the Home presence's, true meaning someone is there
+  exitGrace?: number // the Home presence's, in seconds
 }
 
 // A Function, Aggregate or Flag bound to a Presence, read through its binary state or main

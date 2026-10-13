@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chip, heldFor, ordered, readCapability, sourceState, sourceText, stretches } from './presence'
+import { boxUntil, chip, heldFor, homeChip, persons, readCapability, someoneElse, sourceState, sourceText, stretches } from './presence'
 import type { Capability, Presence, Value } from './types'
 
 const presence = (id: string, name: string): Presence => ({ id, name, kind: 'presence', capabilities: [], sources: [] })
@@ -7,10 +7,10 @@ const value = (data: boolean, since = '2026-01-01T10:00:00Z'): Value => ({ data,
 const now = Date.parse('2026-01-01T12:30:00Z')
 
 describe('the Presence row', () => {
-  it('shows a chip per Person, by Name', () => {
-    const ps = [presence('b', 'bob'), presence('c', 'Chloe'), presence('a', 'Alice')]
-    expect(ordered(ps).map((p) => p.name)).toEqual(['Alice', 'bob', 'Chloe'])
-    expect(ps.map((p) => p.name)).toEqual(['bob', 'Chloe', 'Alice']) // left as it was
+  it('shows a chip per Person, by Name, after the Home presence', () => {
+    const ps = [presence('home', 'Home'), presence('b', 'bob'), presence('c', 'Chloe'), presence('a', 'Alice')]
+    expect(persons(ps).map((p) => p.name)).toEqual(['Alice', 'bob', 'Chloe'])
+    expect(ps.map((p) => p.name)).toEqual(['Home', 'bob', 'Chloe', 'Alice']) // left as it was
   })
 
   it('tells each chip home, away or unknown, and set by hand', () => {
@@ -23,6 +23,31 @@ describe('the Presence row', () => {
     })
     expect(chip(presence('a', 'Alice'), value(true), value(false), now).manual).toBe(false)
     expect(chip(presence('a', 'Alice'), undefined, undefined, now)).toEqual({ initial: 'A', state: 'unknown', manual: false, held: '' })
+  })
+
+  it("tells the Home presence's chip someone home, not one of you, or nobody", () => {
+    expect(homeChip(value(true), 1, now)).toEqual({ state: 'home', text: 'Someone home', held: '2 h' })
+    expect(homeChip(value(true), 0, now).text).toBe('Someone home · not one of you')
+    expect(homeChip(value(false), 0, now).text).toBe('Nobody home')
+    expect(homeChip(undefined, 0, now)).toEqual({ state: 'unknown', text: 'Home unknown', held: '' })
+  })
+})
+
+describe("the Home presence's sheet", () => {
+  it('tells someone else inside while it is home and no Person is', () => {
+    expect(someoneElse(value(true), 0)).toBe(true)
+    expect(someoneElse(value(true), 2)).toBe(false)
+    expect(someoneElse(value(false), 0)).toBe(false)
+    expect(someoneElse(undefined, 0)).toBe(false)
+  })
+
+  it('tells until when the box holds: the exit grace after the last door closed, unless a Sign of life is on', () => {
+    const closed = (since: string) => value(false, since)
+    const doors = [closed('2026-01-01T12:20:00Z'), closed('2026-01-01T12:28:00Z'), value(true, '2026-01-01T12:29:00Z'), undefined]
+    expect(boxUntil(doors, [value(false), undefined], 300, now)).toBe(Date.parse('2026-01-01T12:33:00Z'))
+    expect(boxUntil(doors, [value(true)], 300, now)).toBeUndefined() // still there
+    expect(boxUntil([closed('2026-01-01T12:20:00Z')], [], 300, now)).toBeUndefined() // past
+    expect(boxUntil([value(true)], [], 300, now)).toBeUndefined() // nothing closed
   })
 })
 

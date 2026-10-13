@@ -19,6 +19,7 @@ import (
 //	aggregate:<id>
 //	flag:<id>
 //	presence:<person-id>
+//	presence:home           the Home presence
 //
 // Ids never contain "/", so a Function key may.
 type Target struct {
@@ -222,6 +223,9 @@ func (h *Home) lookupDirect(t Target) (direct, bool) {
 			return flagTarget{h, t.Flag()}, true
 		}
 	case presenceKind:
+		if t.Presence() == HomePresence {
+			return homePresenceTarget{h}, true
+		}
 		if _, ok := h.presences[t.Presence()]; ok {
 			return presenceTarget{h, t.Presence()}, true
 		}

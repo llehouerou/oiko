@@ -275,6 +275,7 @@ type Home struct {
 	flags        map[FlagID]Flag            // with no Kind or Capabilities: they are flagFunction's
 	presences    map[PersonID]*person       // each Person's Presence
 	recalled     map[PersonID]SavedPresence // from presences.json, until the Persons are given
+	box          box                        // the Home presence's
 	areas        []Area                     // in the order an Admin set
 	// derived, as last announced; absent means unknown
 	aggregateAvailability map[AggregateID]Availability
@@ -379,8 +380,13 @@ func fromSaved(dir string, s saved, history func(CommandRecord)) *Home {
 		h.flags[f.ID] = Flag{ID: f.ID, Name: f.Name, Area: f.Area}
 		h.values[flagRef(f.ID)] = f.Value
 	}
+	h.box.ExitGrace = DefaultExitGrace
 	for _, p := range s.presences {
-		h.recalled[p.ID] = p
+		if p.ID == HomePresence {
+			h.recallHome(p)
+		} else {
+			h.recalled[p.ID] = p
+		}
 	}
 	h.deriveAll()                 // once all are loaded: nested ones resolve through each other
 	h.syncAggregateValues()       // from the Flags' Values
@@ -841,8 +847,8 @@ func (h *Home) snapshot() Snapshot {
 	for id := range h.flags {
 		s.Availability[TargetFlag(id)] = Online
 	}
-	for id := range h.presences {
-		s.Availability[TargetPresence(id)] = Online
+	for _, p := range s.Presences {
+		s.Availability[TargetPresence(p.ID)] = Online
 	}
 	for ref, v := range h.values {
 		s.Values = append(s.Values, RefValue{Ref: ref, Value: v})

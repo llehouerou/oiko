@@ -1,20 +1,36 @@
-// The Presence row (ADR 0055): a chip per Person at the top of a Dashboard, each opening the
-// Person's sheet, where Home / Away sets their Presence by hand (ADR 0052) and an Admin binds its
-// Presence sources (ADR 0054).
+// The Presence row (ADR 0055): the Home presence's chip, then a chip per Person, at the top of a
+// Dashboard. Each opens its sheet: a Person's, where Home / Away sets their Presence by hand (ADR
+// 0052) and an Admin binds its Presence sources; the Home presence's, where an Admin binds its
+// Entrance doors and Signs of life (ADR 0051, 0054).
 
-import { useEffect, useState } from 'react'
-import { mdiClose, mdiHandBackRightOutline } from '@mdi/js'
-import { edit, sendCommand, useAvailability, useBridges, useCatalogue, useCommand, useDevices, useNow, usePresences, useValue } from './store'
+import { useEffect, useState, type ReactNode } from 'react'
+import { mdiClose, mdiHandBackRightOutline, mdiHomeOutline } from '@mdi/js'
+import {
+  edit,
+  sendCommand,
+  useAvailability,
+  useBridges,
+  useCatalogue,
+  useCommand,
+  useDerived,
+  useDevices,
+  useNow,
+  useOnCount,
+  usePresences,
+  useValue,
+} from './store'
 import { useAllows } from './access'
 import { DAY, HistoryView, key, useHistory } from './history'
-import { chip, ordered, readCapability, sourceState, sourceText, stretches, type PresenceState } from './presence'
+import { boxUntil, chip, HOME, homeChip, persons, readCapability, someoneElse, sourceState, sourceText, stretches, type PresenceState } from './presence'
 import { deviceTarget, owner, presenceTarget, targetKind, type Entry } from './targets'
 import { CommandNote } from './Capabilities'
 import { Panel } from './Panel'
 import { Svg } from './icons'
-import type { Presence, PresenceSource } from './types'
+import type { Presence, PresenceSource, Ref, Target } from './types'
 
 const said: Record<PresenceState, string> = { home: 'Home', away: 'Away', unknown: 'Unknown' }
+
+const homeOf = (p: Presence): Ref => ({ target: presenceTarget(p.id), capability: 'home' })
 
 // usePresence is what p's chip and sheet show, followed as its Values change.
 function usePresence(p: Presence) {
@@ -24,9 +40,17 @@ function usePresence(p: Presence) {
   return { target, home, ...chip(p, home, manual, useNow()) }
 }
 
+// useHome is what the Home presence's chip and sheet show, followed as its Value and the Persons'
+// change.
+function useHome(p: Presence, people: Presence[]) {
+  const home = useValue(homeOf(p))
+  const personsHome = useOnCount(people.map(homeOf))
+  return { home, personsHome, ...homeChip(home, personsHome, useNow()) }
+}
+
 // A face with the initial: filled while home, dimmed while away, dashed with no Value, with a hand
 // while set by hand.
-function Face({ initial, state, manual, size }: { initial: string; state: PresenceState; manual: boolean; size: 'small' | 'large' }) {
+function Face({ initial, state, manual, size }: { initial: ReactNode; state: PresenceState; manual: boolean; size: 'small' | 'large' }) {
   const small = size === 'small'
   const look = {
     home: 'bg-emerald-500/30 text-emerald-100 ring-1 ring-emerald-400',
@@ -63,25 +87,196 @@ function Chip({ presence, onOpen }: { presence: Presence; onOpen: () => void }) 
   )
 }
 
-// The row, by Name; nothing when Oiko has no Person yet.
+// The Home presence's chip: a house, someone home or not, and for how long.
+function HomeChip({ presence, people, onOpen }: { presence: Presence; people: Presence[]; onOpen: () => void }) {
+  const { state, text, held } = useHome(presence, people)
+  return (
+    <button onClick={onOpen} aria-label={text} className="flex items-center gap-2 rounded-full bg-neutral-900 py-1.5 pr-3 pl-1.5 text-sm hover:bg-neutral-800">
+      <Face initial={<Svg path={mdiHomeOutline} className="size-3.5" />} state={state} manual={false} size="small" />
+      <span className={state === 'home' ? '' : 'text-neutral-400'}>{text}</span>
+      {held && <span className="text-xs text-neutral-500">{held}</span>}
+    </button>
+  )
+}
+
+// The row: the Home presence, then the Persons by Name; nothing until Oiko has told them.
 export function PresenceRow() {
   const presences = usePresences()
   const [open, setOpen] = useState<string | null>(null)
+  const home = presences.find((p) => p.id === HOME)
+  const people = persons(presences)
   const opened = presences.find((p) => p.id === open)
   if (!presences.length) return null
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        {ordered(presences).map((p) => (
+        {home && <HomeChip presence={home} people={people} onOpen={() => setOpen(HOME)} />}
+        {people.map((p) => (
           <Chip key={p.id} presence={p} onOpen={() => setOpen(p.id)} />
         ))}
       </div>
-      {opened && <PresenceSheet key={opened.id} presence={opened} onClose={() => setOpen(null)} />}
+      {opened?.id === HOME && <HomeSheet presence={opened} people={people} onClose={() => setOpen(null)} />}
+      {opened && opened.id !== HOME && <PresenceSheet key={opened.id} presence={opened} onClose={() => setOpen(null)} />}
     </>
   )
 }
 
 const clock = (t: string | number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+// The Home presence's sheet: its Value and since when, the Persons home, someone else inside and
+// until when, and its Entrance doors and Signs of life live.
+function HomeSheet({ presence, people, onClose }: { presence: Presence; people: Presence[]; onClose: () => void }) {
+  const { home, personsHome, state, text, held } = useHome(presence, people)
+  const names = useDerived(people.map(homeOf), (vs) =>
+    people
+      .filter((_, i) => vs[i]?.data === true)
+      .map((p) => p.name)
+      .join(', '),
+  )
+  const targets = useCatalogue()
+  const refOf = (t: Target): Ref => {
+    const e = targets.get(t)
+    return { target: t, capability: (e && readCapability(e.kind, e.capabilities)?.key) ?? '' }
+  }
+  const now = useNow()
+  const doors = presence.entranceDoors ?? []
+  const signs = presence.signsOfLife ?? []
+  const until = useDerived([...doors, ...signs].map(refOf), (vs) => boxUntil(vs.slice(0, doors.length), vs.slice(doors.length), presence.exitGrace ?? 0, now))
+  return (
+    <Panel
+      title={
+        <div className="flex items-center gap-3">
+          <Face initial={<Svg path={mdiHomeOutline} className="size-6" />} state={state} manual={false} size="large" />
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-medium">{presence.name}</h2>
+            <p className="text-sm text-neutral-400">
+              {text}
+              {home?.since && ` since ${clock(home.since)} · ${held}`}
+            </p>
+          </div>
+        </div>
+      }
+      onClose={onClose}
+    >
+      <div className="space-y-1 text-sm">
+        <p>{names ? `Home: ${names}` : 'None of you is home.'}</p>
+        {someoneElse(home, personsHome) && (
+          <p className="text-emerald-200">Someone else is inside{until ? `, until ${clock(until)} unless seen again` : ''}.</p>
+        )}
+      </div>
+      <HomeBindings presence={presence} />
+    </Panel>
+  )
+}
+
+type Bindings = { entranceDoors: Target[]; signsOfLife: Target[]; exitGrace: number }
+
+// The Home presence's Entrance doors and Signs of life, each with its live state, and its exit
+// grace. An Admin edits them in place and saves them whole.
+function HomeBindings({ presence }: { presence: Presence }) {
+  const admin = useAllows('admin')
+  const targets = useCatalogue()
+  const [draft, setDraft] = useState<Bindings | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const saved: Bindings = { entranceDoors: presence.entranceDoors ?? [], signsOfLife: presence.signsOfLife ?? [], exitGrace: presence.exitGrace ?? 0 }
+  const shown = draft ?? saved
+  const close = () => {
+    setDraft(null)
+    setError(null)
+  }
+  const save = async () => {
+    const err = await edit('PUT', `presences/${presence.id}`, draft)
+    if (err) setError(err)
+    else close()
+  }
+  const list = (which: 'entranceDoors' | 'signsOfLife', title: string, one: string, none: string, editButton: boolean) => (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">{title}</h3>
+        {editButton && admin && !draft && (
+          <button onClick={() => setDraft(saved)} className="text-sm text-amber-400 hover:text-amber-300">
+            Edit
+          </button>
+        )}
+      </div>
+      {!shown[which].length && <p className="text-sm text-neutral-500">{none}</p>}
+      <ul className="space-y-2 text-sm">
+        {shown[which].map((t) => (
+          <BindingRow
+            key={t}
+            source={{ target: t }}
+            entry={targets.get(t)}
+            name={targets.name(t)}
+            onChange={draft ? () => setDraft({ ...draft, [which]: draft[which].filter((d) => d !== t) }) : undefined}
+            delay={false}
+          />
+        ))}
+      </ul>
+      {draft && <AddBinding label={`Add ${one}`} bound={draft[which]} onAdd={(t) => setDraft({ ...draft, [which]: [...draft[which], t] })} />}
+    </section>
+  )
+  return (
+    <>
+      {list('entranceDoors', 'Entrance doors', 'an Entrance door', 'None: only the Persons count.', true)}
+      {list('signsOfLife', 'Signs of life', 'a Sign of life', 'None.', false)}
+      <p className="flex items-center gap-2 text-sm text-neutral-400">
+        <span>Exit grace:</span>
+        {draft ? (
+          <input
+            type="number"
+            min={0}
+            value={draft.exitGrace / 60}
+            onChange={(e) => setDraft({ ...draft, exitGrace: Math.max(0, Math.round(Number(e.target.value) * 60)) })}
+            aria-label="Exit grace, in minutes"
+            className="w-14 rounded bg-neutral-800 px-1.5 py-0.5 text-right text-sm text-neutral-100"
+          />
+        ) : (
+          <span>{shown.exitGrace / 60}</span>
+        )}
+        <span>min after an Entrance door closes</span>
+      </p>
+      {draft && <SaveBar error={error} onSave={save} onCancel={close} />}
+    </>
+  )
+}
+
+// What may be bound, in a select adding it: a Function, an Aggregate or a Flag with a binary state
+// or main control, none of bound.
+function AddBinding({ label, bound, onAdd }: { label: string; bound: Target[]; onAdd: (t: Target) => void }) {
+  const targets = useCatalogue()
+  const offered = (group: string) =>
+    targets.list.filter((e) => targetKind(e.target) === group && readCapability(e.kind, e.capabilities) && !bound.includes(e.target))
+  return (
+    <select value="" onChange={(e) => onAdd(e.target.value)} aria-label={label} className="w-full rounded bg-neutral-800 px-2 py-1 text-sm">
+      <option value="">{label}…</option>
+      {(['function', 'aggregate', 'flag'] as const).map((group) => (
+        <optgroup key={group} label={{ function: 'Functions', aggregate: 'Aggregates', flag: 'Flags' }[group]}>
+          {offered(group).map((e) => (
+            <option key={e.target} value={e.target}>
+              {e.name}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  )
+}
+
+function SaveBar({ error, onSave, onCancel }: { error: string | null; onSave: () => void; onCancel: () => void }) {
+  return (
+    <div className="space-y-2 text-sm">
+      {error && <p className="text-red-400">{error}</p>}
+      <div className="flex gap-2">
+        <button onClick={onSave} className="rounded bg-amber-400 px-3 py-1 font-medium text-neutral-900 hover:bg-amber-300">
+          Save
+        </button>
+        <button onClick={onCancel} className="rounded bg-neutral-800 px-3 py-1 hover:bg-neutral-700">
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
 
 // A Person's sheet: the Value and since when, Home / Away, a note while set by hand, its Presence
 // sources live, and to a Member, who reads the past, the last 24 h with the stretches set by hand
@@ -126,7 +321,8 @@ function PresenceSheet({ presence, onClose }: { presence: Presence; onClose: () 
       {manual && (
         <p className="flex gap-2 rounded-lg bg-amber-950/40 p-3 text-sm text-amber-200">
           <Svg path={mdiHandBackRightOutline} className="size-5 shrink-0" />
-          Set by hand: {presence.name} stays {said[state].toLowerCase()} until {presence.sources.length ? 'the Presence sources agree or it is ' : ''}set again.
+          Set by hand: {presence.name} stays {said[state].toLowerCase()} until {presence.sources?.length ? 'the Presence sources agree or it is ' : ''}set
+          again.
         </p>
       )}
       <Sources presence={presence} />
@@ -142,7 +338,7 @@ function Sources({ presence }: { presence: Presence }) {
   const targets = useCatalogue()
   const [draft, setDraft] = useState<PresenceSource[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const list = draft ?? presence.sources
+  const list = draft ?? presence.sources ?? []
   if (!list.length && !admin) return null
   const close = () => {
     setDraft(null)
@@ -153,15 +349,12 @@ function Sources({ presence }: { presence: Presence }) {
     if (err) setError(err)
     else close()
   }
-  // What may be bound: a Function, an Aggregate or a Flag with a binary state or main control.
-  const offered = (group: string) =>
-    targets.list.filter((e) => targetKind(e.target) === group && readCapability(e.kind, e.capabilities) && !list.some((s) => s.target === e.target))
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">Presence sources</h3>
         {admin && !draft && (
-          <button onClick={() => setDraft(presence.sources)} className="text-sm text-amber-400 hover:text-amber-300">
+          <button onClick={() => setDraft(list)} className="text-sm text-amber-400 hover:text-amber-300">
             Edit
           </button>
         )}
@@ -169,7 +362,7 @@ function Sources({ presence }: { presence: Presence }) {
       {!list.length && <p className="text-sm text-neutral-500">None: set by hand only.</p>}
       <ul className="space-y-2 text-sm">
         {list.map((s) => (
-          <SourceRow
+          <BindingRow
             key={s.target}
             source={s}
             entry={targets.get(s.target)}
@@ -183,42 +376,34 @@ function Sources({ presence }: { presence: Presence }) {
         ))}
       </ul>
       {draft && (
-        <div className="space-y-2 text-sm">
-          <select
-            value=""
-            onChange={(e) => setDraft([...draft, { target: e.target.value, departureDelay: 0 }])}
-            aria-label="Add a Presence source"
-            className="w-full rounded bg-neutral-800 px-2 py-1"
-          >
-            <option value="">Add a Presence source…</option>
-            {(['function', 'aggregate', 'flag'] as const).map((group) => (
-              <optgroup key={group} label={{ function: 'Functions', aggregate: 'Aggregates', flag: 'Flags' }[group]}>
-                {offered(group).map((e) => (
-                  <option key={e.target} value={e.target}>
-                    {e.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          {error && <p className="text-red-400">{error}</p>}
-          <div className="flex gap-2">
-            <button onClick={save} className="rounded bg-amber-400 px-3 py-1 font-medium text-neutral-900 hover:bg-amber-300">
-              Save
-            </button>
-            <button onClick={close} className="rounded bg-neutral-800 px-3 py-1 hover:bg-neutral-700">
-              Cancel
-            </button>
-          </div>
-        </div>
+        <>
+          <AddBinding
+            label="Add a Presence source"
+            bound={draft.map((s) => s.target)}
+            onAdd={(target) => setDraft([...draft, { target, departureDelay: 0 }])}
+          />
+          <SaveBar error={error} onSave={save} onCancel={close} />
+        </>
       )}
     </section>
   )
 }
 
-// One Presence source and what it says now; while editing, its departure delay in minutes and a way
-// to unbind it (onChange with none).
-function SourceRow({ source, entry, name, onChange }: { source: PresenceSource; entry?: Entry; name: string; onChange?: (changed?: PresenceSource) => void }) {
+// One bound Target and what it says now; while editing, a way to unbind it (onChange with none)
+// and, if delay, its departure delay in minutes.
+function BindingRow({
+  source,
+  entry,
+  name,
+  onChange,
+  delay = true,
+}: {
+  source: PresenceSource
+  entry?: Entry
+  name: string
+  onChange?: (changed?: PresenceSource) => void
+  delay?: boolean
+}) {
   const cap = entry && readCapability(entry.kind, entry.capabilities)
   const value = useValue({ target: source.target, capability: cap?.key ?? '' })
   const availability = useAvailability(source.target)
@@ -236,17 +421,19 @@ function SourceRow({ source, entry, name, onChange }: { source: PresenceSource; 
       </div>
       {onChange && (
         <>
-          <label className="flex items-center gap-1 text-xs text-neutral-400">
-            <input
-              type="number"
-              min={0}
-              value={(source.departureDelay ?? 0) / 60}
-              onChange={(e) => onChange({ ...source, departureDelay: Math.max(0, Math.round(Number(e.target.value) * 60)) })}
-              aria-label={`Departure delay of ${name}, in minutes`}
-              className="w-14 rounded bg-neutral-800 px-1.5 py-0.5 text-right text-sm text-neutral-100"
-            />
-            min
-          </label>
+          {delay && (
+            <label className="flex items-center gap-1 text-xs text-neutral-400">
+              <input
+                type="number"
+                min={0}
+                value={(source.departureDelay ?? 0) / 60}
+                onChange={(e) => onChange({ ...source, departureDelay: Math.max(0, Math.round(Number(e.target.value) * 60)) })}
+                aria-label={`Departure delay of ${name}, in minutes`}
+                className="w-14 rounded bg-neutral-800 px-1.5 py-0.5 text-right text-sm text-neutral-100"
+              />
+              min
+            </label>
+          )}
           <button onClick={() => onChange()} aria-label={`Unbind ${name}`} className="rounded p-1 text-neutral-400 hover:bg-neutral-800 hover:text-white">
             <Svg path={mdiClose} className="size-4" />
           </button>

@@ -135,7 +135,9 @@ func TestAPresenceIsHomeWhileAnySourceCounts(t *testing.T) {
 		if v, _ := value(h, homeRef(alice)); !v.Since.Equal(left.Add(15 * time.Minute)) {
 			t.Errorf("away since %v, want 15 min after the phone left", v.Since)
 		}
-		if us := drain(updates); len(us) != 1 || us[0].Kind != ValueChanged || us[0].Initial || *us[0].Ref != homeRef(alice) {
+		// Alice's Presence, then the Home presence: Bob has no Value.
+		if us := drain(updates); len(us) != 2 || us[0].Kind != ValueChanged || us[0].Initial || *us[0].Ref != homeRef(alice) ||
+			us[1].Kind != ValueChanged || us[1].Initial || *us[1].Ref != homePresenceRef || us[1].Value.Data != false {
 			t.Errorf("the delay running out announced %+v", us)
 		}
 
@@ -208,7 +210,7 @@ func TestAnOverrideHoldsUntilTheRuleAgrees(t *testing.T) {
 		time.Sleep(24 * time.Hour)
 		synctest.Wait()
 		presenceIs(t, h, bob, true, true)
-		if saved := onDisk(t, dir).presences; saved[1].ID != bob || saved[1].Manual == nil || saved[1].Manual.Data != true {
+		if saved := onDisk(t, dir).presences; saved[2].ID != bob || saved[2].Manual == nil || saved[2].Manual.Data != true {
 			t.Errorf("saved %+v", saved)
 		}
 	})
@@ -254,7 +256,7 @@ func TestPresenceSourcesAreChecked(t *testing.T) {
 	if got := sourcesOf(h, alice); !slices.Equal(got, want) {
 		t.Errorf("sources = %v, want %v", got, want)
 	}
-	if us := drain(updates); len(us) == 0 || us[0].Kind != PresencesChanged || !slices.Equal(us[0].Presences[0].Sources, want) {
+	if us := drain(updates); len(us) == 0 || us[0].Kind != PresencesChanged || !slices.Equal(us[0].Presences[1].Sources, want) {
 		t.Errorf("binding announced %+v", us)
 	}
 	restarted := restart(t, dir)
@@ -283,7 +285,7 @@ func TestAPresenceSourceFollowsItsTarget(t *testing.T) {
 			t.Errorf("once %s: sources = %v, want %v", what, got, all)
 		}
 		us := drain(updates)
-		if i := slices.IndexFunc(us, func(u Update) bool { return u.Kind == PresencesChanged }); i < 0 || !slices.Equal(us[i].Presences[0].Sources, all) {
+		if i := slices.IndexFunc(us, func(u Update) bool { return u.Kind == PresencesChanged }); i < 0 || !slices.Equal(us[i].Presences[1].Sources, all) {
 			t.Errorf("once %s: announced %+v", what, us)
 		}
 	}

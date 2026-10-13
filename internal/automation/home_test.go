@@ -267,6 +267,89 @@ func replayedPresence(t *testing.T, onlineFirst bool) {
 	})
 }
 
+func TestTheHomePresenceFiresOnItsExitGraceNotOnReplayedValues(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const alice = home.PersonID("0190a1ce-0000-7000-8000-000000000001")
+		binary := func(key string) []bridge.Function {
+			return []bridge.Function{{Key: key, Kind: key, Capabilities: []home.Capability{
+				{Key: key, Type: home.Binary, Category: home.Primary, Access: home.Access{Observable: true}},
+			}}}
+		}
+		devices := append(slices.Clone(described),
+			bridge.Device{NativeAddress: "0xphone", Functions: binary("connected")},
+			bridge.Device{NativeAddress: "0xdoor", Functions: binary("contact")},
+			bridge.Device{NativeAddress: "0xhall", Functions: binary("occupancy")})
+		report := func(z *home.Port, address, key string, on bool) {
+			z.Report(address, []bridge.Reading{{Function: key, Capability: key, Data: on}}, time.Now())
+		}
+		// Before a restart: Alice home by her phone, so someone home.
+		dir := t.TempDir()
+		before, err := home.Open(dir, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		z := before.Attach("zigbee2mqtt", nopBridge{})
+		z.SetOnline(true)
+		z.SyncDevices(devices)
+		before.SetPersons([]home.Person{{ID: alice, Name: "Alice"}})
+		ids := map[string]home.DeviceID{}
+		snap, _, cancel := before.Subscribe()
+		cancel()
+		for _, d := range snap.Devices {
+			ids[d.NativeAddress] = d.ID
+		}
+		if err := before.SetPresenceSources(alice, []home.PresenceSource{{Target: home.TargetDevice(ids["0xphone"], "connected")}}); err != nil {
+			t.Fatal(err)
+		}
+		report(z, "0xphone", "connected", true)
+
+		// She left while Oiko was down.
+		h, err := home.Open(dir, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := &counted{Home: h, z: h.Attach("zigbee2mqtt", nopBridge{})}
+		h.SetPersons([]home.Person{{ID: alice, Name: "Alice"}})
+		e := New(c, []Document{doc("home empty",
+			[]string{
+				`on valueTrigger {"target": "presence:home", "capability": "home", "op": "eq", "value": false}`,
+				lampOn(ids["0xlamp"]),
+			}, "on.out act.in")}, nil, nil)
+		c.z.SetOnline(true)
+		c.z.SyncDevices(devices)
+		report(c.z, "0xphone", "connected", false)
+		report(c.z, "0xdoor", "contact", false)
+		c.z.Replayed()
+		settle(e)
+		if v := presenceHome(h, home.HomePresence); v != false {
+			t.Fatalf("the Home presence = %v after the replay, want away", v)
+		}
+		if n := c.n.Load(); n != 0 {
+			t.Fatalf("the replayed departure fired %d Commands", n)
+		}
+
+		// A guest stays, then leaves: the exit grace runs out after the start.
+		if err := h.SetHomeBindings(home.HomeBindings{
+			EntranceDoors: []home.Target{home.TargetDevice(ids["0xdoor"], "contact")},
+			SignsOfLife:   []home.Target{home.TargetDevice(ids["0xhall"], "occupancy")},
+			ExitGrace:     home.DefaultExitGrace,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		report(c.z, "0xhall", "occupancy", true)
+		report(c.z, "0xdoor", "contact", true)
+		report(c.z, "0xdoor", "contact", false)
+		report(c.z, "0xhall", "occupancy", false)
+		settle(e)
+		time.Sleep(home.DefaultExitGrace * time.Second)
+		synctest.Wait()
+		settle(e)
+		if n := c.n.Load(); n != 1 {
+			t.Errorf("the exit grace running out fired %d Commands, want 1", n)
+		}
+	})
+}
+
 func presenceHome(h *home.Home, id home.PersonID) any {
 	snap, _, cancel := h.Subscribe()
 	cancel()
