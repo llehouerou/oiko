@@ -52,6 +52,7 @@ export interface Device {
   name: string
   icon?: string // the dashboard's default when absent
   area?: string
+  bridge: string // its name
   nativeAddress: string
   model?: string
   vendor?: string
@@ -92,12 +93,21 @@ export interface Flag {
 }
 
 // A Person's Presence, derived by Oiko under their Name: kind 'presence', Capabilities 'home'
-// (settable: setting it is an override) and 'manual' (true while the override holds).
+// (settable: setting it is an override) and 'manual' (true while the override holds), home while
+// any of its Presence sources counts as home.
 export interface Presence {
   id: string // the Person's
   name: string
   kind: string
   capabilities: Capability[]
+  sources: PresenceSource[]
+}
+
+// A Function, Aggregate or Flag bound to a Presence, read through its binary state or main
+// control: true means home, and it keeps counting as home for departureDelay seconds once false.
+export interface PresenceSource {
+  target: Target
+  departureDelay?: number // 0 when absent
 }
 
 export interface Value {

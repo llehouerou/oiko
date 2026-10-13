@@ -40,6 +40,7 @@ test('the catalogue names every Target: a Function after its Device, with its ke
       {
         id: 'relay',
         name: 'Relay',
+        bridge: 'z2m',
         nativeAddress: '',
         functions: [
           { key: 'switch/l1', kind: 'switch', capabilities: [cap('state')] },
@@ -47,8 +48,8 @@ test('the catalogue names every Target: a Function after its Device, with its ke
         ],
         capabilities: battery,
       },
-      { id: 'bulb', name: 'Bulb', nativeAddress: '', functions: [{ key: 'light', kind: 'light', capabilities: [] }], capabilities: null },
-      { id: 'base', name: 'Arlo base', nativeAddress: '', functions: null, capabilities: null },
+      { id: 'bulb', name: 'Bulb', bridge: 'z2m', nativeAddress: '', functions: [{ key: 'light', kind: 'light', capabilities: [] }], capabilities: null },
+      { id: 'base', name: 'Arlo base', bridge: 'arlo', nativeAddress: '', functions: null, capabilities: null },
     ],
     [{ id: 'empty', name: 'Empty', members: [], binary: 'any', numeric: 'mean' }],
     [{ id: 'away', name: 'Away', kind: 'flag', capabilities: [cap('on')] }],

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/llehouerou/oiko/bridge"
@@ -166,6 +167,105 @@ func TestAPresenceSetByHandFiresItsValueTriggerUntilItsPersonGoes(t *testing.T) 
 	if s := statusIn(c.Home, e.Documents()[0].ID); s.Status != home.AutomationBroken {
 		t.Errorf("once Alice is removed: %+v, want broken", s)
 	}
+}
+
+func TestAPresenceFiresItsValueTriggerOnItsRuleNotOnReplayedValues(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const alice = home.PersonID("0190a1ce-0000-7000-8000-000000000001")
+		phone := bridge.Device{NativeAddress: "0xphone", Functions: []bridge.Function{{Key: "network", Kind: "network", Capabilities: []home.Capability{
+			{Key: "connected", Type: home.Binary, Category: home.Primary, Access: home.Access{Observable: true}},
+		}}}}
+		connected := func(z *home.Port, on bool) {
+			z.Report("0xphone", []bridge.Reading{{Function: "network", Capability: "connected", Data: on}}, time.Now())
+		}
+		// Before a restart: Alice home, by her phone.
+		dir := t.TempDir()
+		before, err := home.Open(dir, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		z := before.Attach("zigbee2mqtt", nopBridge{})
+		z.SetOnline(true)
+		z.SyncDevices(append(slices.Clone(described), phone))
+		before.SetPersons([]home.Person{{ID: alice, Name: "Alice"}})
+		var lamp, mobile home.DeviceID
+		snap, _, cancel := before.Subscribe()
+		cancel()
+		for _, d := range snap.Devices {
+			switch d.NativeAddress {
+			case "0xlamp":
+				lamp = d.ID
+			case "0xphone":
+				mobile = d.ID
+			}
+		}
+		if err := before.SetPresenceSources(alice, []home.PresenceSource{{Target: home.TargetDevice(mobile, "network"), DepartureDelay: 900}}); err != nil {
+			t.Fatal(err)
+		}
+		connected(z, true)
+
+		// She left while Oiko was down: her phone's first Value says so an hour ago.
+		h, err := home.Open(dir, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.Recall(func(home.Ref, any) (time.Time, bool) { return time.Now().Add(-time.Hour), true })
+		c := &counted{Home: h, z: h.Attach("zigbee2mqtt", nopBridge{})}
+		c.z.SetOnline(true)
+		h.SetPersons([]home.Person{{ID: alice, Name: "Alice"}})
+		e := New(c, []Document{doc("alice leaves",
+			[]string{
+				fmt.Sprintf(`on valueTrigger {"target": "presence:%s", "capability": "home", "op": "eq", "value": false}`, alice),
+				lampOn(lamp),
+			}, "on.out act.in")}, nil, nil)
+		c.z.SyncDevices(append(slices.Clone(described), phone))
+		if v := presenceHome(h, alice); v != true {
+			t.Fatalf("home = %v as Oiko starts, want home", v)
+		}
+		connected(c.z, false)
+		c.z.Replayed()
+		settle(e)
+		if v := presenceHome(h, alice); v != false {
+			t.Fatalf("home = %v after the replay, want away", v)
+		}
+		if n := c.n.Load(); n != 0 {
+			t.Fatalf("the replayed departure fired %d Commands", n)
+		}
+
+		flag, _ := h.CreateFlag("Alice home")
+		if err := h.SetPresenceSources(alice, []home.PresenceSource{{Target: home.TargetDevice(mobile, "network"), DepartureDelay: 900}, {Target: home.TargetFlag(flag)}}); err != nil {
+			t.Fatal(err)
+		}
+		setFlag := func(on bool) {
+			h.Command(home.TargetFlag(flag), home.Request{Values: map[string]any{"on": on}})
+			settle(e)
+		}
+		setFlag(true)
+		setFlag(false) // the rule's change, at once
+		if n := c.n.Load(); n != 1 {
+			t.Errorf("leaving by the Flag fired %d Commands, want 1", n)
+		}
+		connected(c.z, true)
+		connected(c.z, false)
+		settle(e)
+		time.Sleep(15 * time.Minute) // the delay runs out
+		synctest.Wait()
+		settle(e)
+		if n := c.n.Load(); n != 2 {
+			t.Errorf("the phone's delay running out fired %d Commands in all, want 2", n)
+		}
+	})
+}
+
+func presenceHome(h *home.Home, id home.PersonID) any {
+	snap, _, cancel := h.Subscribe()
+	cancel()
+	for _, rv := range snap.Values {
+		if rv.Ref == home.TargetPresence(id).Ref("home") {
+			return rv.Value.Data
+		}
+	}
+	return nil
 }
 
 func TestAutomationsTriggeringEachOtherBecomeRunaway(t *testing.T) {

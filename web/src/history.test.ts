@@ -306,6 +306,7 @@ test('a sheet offers to compare with other Functions that chart something, the s
   const d = (id: string, name: string, key: string, kind: string, caps = [cap('temperature', 'numeric')]): Device => ({
     id,
     name,
+    bridge: 'z2m',
     nativeAddress: id,
     functions: [{ key, kind, capabilities: caps }],
     capabilities: [cap('temperature', 'numeric')], // a Device itself is never offered

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { chip, heldFor, ordered, stretches } from './presence'
-import type { Presence, Value } from './types'
+import { chip, heldFor, ordered, readCapability, sourceState, sourceText, stretches } from './presence'
+import type { Capability, Presence, Value } from './types'
 
-const presence = (id: string, name: string): Presence => ({ id, name, kind: 'presence', capabilities: [] })
+const presence = (id: string, name: string): Presence => ({ id, name, kind: 'presence', capabilities: [], sources: [] })
 const value = (data: boolean, since = '2026-01-01T10:00:00Z'): Value => ({ data, at: since, since })
 const now = Date.parse('2026-01-01T12:30:00Z')
 
@@ -48,5 +48,47 @@ describe('stretches', () => {
       { left: 15, width: 25, on: true },
       { left: 40, width: 60, on: false },
     ])
+  })
+})
+
+const cap = (key: string, settable: boolean, type: Capability['type'] = 'binary'): Capability => ({
+  key,
+  label: key,
+  type,
+  access: { observable: true, settable, queryable: false },
+  category: 'primary',
+})
+
+describe('a Presence source', () => {
+  it('is read through its main control if an on/off, otherwise its binary state', () => {
+    expect(readCapability('network', [cap('connected', false)])?.key).toBe('connected')
+    expect(readCapability('flag', [cap('on', true)])?.key).toBe('on')
+    expect(readCapability('light', [cap('brightness', true, 'numeric'), cap('state', true)])?.key).toBe('state')
+    expect(readCapability('arming', [cap('mode', true, 'enum'), cap('contact', false)])?.key).toBe('contact')
+    expect(readCapability('temperature', [cap('temperature', false, 'numeric')])).toBeUndefined()
+  })
+
+  const phone = { target: 'device:p/network', departureDelay: 900 }
+  const connected = cap('connected', false)
+  const at = (data: boolean, since: string): Value => ({ data, at: '2026-01-01T12:29:00Z', since })
+
+  it('counts as home while on, and until its departure delay has passed since it went off', () => {
+    expect(sourceState(phone, connected, at(true, '2026-01-01T08:00:00Z'), false, now)).toEqual({ said: 'connected', counts: true })
+    const left = sourceState(phone, connected, at(false, '2026-01-01T12:20:00Z'), false, now)
+    expect(left).toEqual({ said: 'not connected', counts: true, until: Date.parse('2026-01-01T12:35:00Z') })
+    expect(sourceText(left, () => '12:35')).toBe('not connected · counts as home until 12:35')
+    const gone = sourceState(phone, connected, at(false, '2026-01-01T12:15:00Z'), false, now)
+    expect(gone).toEqual({ said: 'not connected', counts: false })
+    expect(sourceText(gone, () => '')).toBe('not connected')
+    expect(sourceState({ target: 'flag:f' }, cap('on', true), at(false, '2026-01-01T12:29:00Z'), false, now)).toEqual({ said: 'off', counts: false })
+    // No delay: off at once, even reported after now last ticked.
+    expect(sourceState({ target: 'flag:f' }, cap('on', true), at(false, '2026-01-01T12:30:05Z'), false, now)).toEqual({ said: 'off', counts: false })
+  })
+
+  it('is ignored offline, with no Value, or once it vanished', () => {
+    const offline = sourceState(phone, connected, at(true, '2026-01-01T08:00:00Z'), true, now)
+    expect(sourceText(offline, () => '')).toBe('offline · ignored')
+    expect(sourceState(phone, connected, undefined, false, now)).toEqual({ ignored: 'no value' })
+    expect(sourceState(phone, undefined, undefined, false, now)).toEqual({ ignored: 'unavailable' })
   })
 })

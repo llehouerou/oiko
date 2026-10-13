@@ -100,7 +100,16 @@ describe('a watching Step lists the targets it can watch', () => {
   const battery = cap('battery', { type: 'numeric', category: 'diagnostic' })
   const action = cap('action', { type: 'enum', stateless: true, options: ['single', 'double'] })
   const options = catalogue(
-    [{ id: 'remote', name: 'Remote', nativeAddress: '', functions: [{ key: 'button', kind: 'button', capabilities: [action, battery] }], capabilities: null }],
+    [
+      {
+        id: 'remote',
+        name: 'Remote',
+        bridge: 'z2m',
+        nativeAddress: '',
+        functions: [{ key: 'button', kind: 'button', capabilities: [action, battery] }],
+        capabilities: null,
+      },
+    ],
     [{ id: 'motion', name: 'Motion veranda', members: [], binary: 'any', numeric: 'mean', capabilities: [occupancy, battery] }],
     [],
   )

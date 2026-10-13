@@ -73,7 +73,7 @@ func (h *Home) RenameFlag(id FlagID, name string) error {
 }
 
 // DeleteFlag forgets a Flag, its Value and its History, and removes it from
-// every Aggregate containing it.
+// every Aggregate containing it and every Presence it is a source of.
 func (h *Home) DeleteFlag(id FlagID) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -87,7 +87,7 @@ func (h *Home) DeleteFlag(id FlagID) error {
 	if h.dropMembers(func(m Target) bool { return m == TargetFlag(id) }) {
 		err = errors.Join(err, h.aggregatesChanged())
 	}
-	return err
+	return errors.Join(err, h.dropSources(func(s Target) bool { return s == TargetFlag(id) }))
 }
 
 // flagTarget is Flag id. Its Commands need no Bridge: each is applied and
@@ -123,6 +123,7 @@ func (h *Home) setFlag(id FlagID, values map[string]any) {
 		rs = append(rs, recorded{ref, h.record(ref, data, at)})
 	}
 	h.reportToAggregates(rs, at)
+	h.reportToPresences(rs)
 	h.saveFlagList()
 }
 

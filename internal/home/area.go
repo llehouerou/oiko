@@ -254,6 +254,7 @@ func (h *Home) DeleteArea(id AreaID) error {
 	if h.dropMembers(func(m Target) bool { return slices.Contains(areaAggregates(id), m) }) {
 		err = errors.Join(err, h.aggregatesChanged())
 	}
+	err = errors.Join(err, h.dropSources(func(s Target) bool { return slices.Contains(areaAggregates(id), s) }))
 
 	devices := false
 	for did, d := range h.devices {

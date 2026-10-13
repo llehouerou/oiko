@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/llehouerou/oiko/internal/access"
+	"github.com/llehouerou/oiko/internal/home"
 )
 
 // presenceNames are the Names in a presences list, as JSON gives it.
@@ -28,12 +29,13 @@ func presenceNames(t *testing.T, m map[string]any) []string {
 
 // observers is Oiko's API with a Person and a Program at each level and a
 // Guest Kiosk, each of whom does requests with the function it answers by
-// who it is; Alice, the Admin, does hers as "an Admin's Session".
-func observers(t *testing.T) map[string]func(method, path, body string) *http.Response {
+// who it is; Alice, the Admin, does hers as "an Admin's Session". It answers
+// the home too.
+func observers(t *testing.T) (*home.Home, map[string]func(method, path, body string) *http.Response) {
 	t.Helper()
 	dir := t.TempDir()
 	cookies := withPersons(t, dir)
-	_, acc, hdl := handlerIn(t, dir, &url.URL{Scheme: "https", Host: "oiko.example"}, time.Now)
+	h, acc, hdl := handlerIn(t, dir, &url.URL{Scheme: "https", Host: "oiko.example"}, time.Now)
 	srv := httptest.NewServer(hdl)
 	t.Cleanup(srv.Close)
 	alice, _ := acc.Resolve(cookies[access.Admin].Value)
@@ -47,11 +49,11 @@ func observers(t *testing.T) map[string]func(method, path, body string) *http.Re
 	}
 	_, screen := withKiosk(t, acc, alice, "Hall tablet", access.Guest)
 	as["a Guest Kiosk"] = func(method, path, body string) *http.Response { return do(method, path, body, screen) }
-	return as
+	return h, as
 }
 
 func TestEveryoneSeesThePresences(t *testing.T) {
-	as := observers(t)
+	_, as := observers(t)
 	admin := as["a admin's Session"]
 	streams := map[string]<-chan map[string]any{}
 	for who, do := range as {
@@ -112,7 +114,7 @@ func TestTheFirstAdminHasAPresenceFromSetup(t *testing.T) {
 }
 
 func TestAPresenceIsCommandedLikeAnyTarget(t *testing.T) {
-	as := observers(t)
+	_, as := observers(t)
 	alice := "presence:p2" // as withPersons names her
 	for _, who := range []string{"a guest's Session", "a guest's Token", "a Guest Kiosk"} {
 		resp := as[who]("POST", "/api/commands", fmt.Sprintf(`{"target": %q, "values": {"home": "toggle"}}`, alice))
@@ -137,5 +139,70 @@ func TestAPresenceIsCommandedLikeAnyTarget(t *testing.T) {
 	}
 	if resp := as["a member's Session"]("GET", "/api/commands?target="+alice, ""); resp.StatusCode != http.StatusOK {
 		t.Errorf("the Command history to a Member: %d", resp.StatusCode)
+	}
+}
+
+// sourcesIn are Person id's Presence sources in a presences list, as JSON
+// gives it.
+func sourcesIn(m map[string]any, id string) []any {
+	for _, p := range m["presences"].([]any) {
+		if p := p.(map[string]any); p["id"] == id {
+			return p["sources"].([]any)
+		}
+	}
+	return nil
+}
+
+func TestAnAdminBindsPresenceSources(t *testing.T) {
+	h, as := observers(t)
+	admin := as["a admin's Session"]
+	f, err := h.CreateFlag("Alice home")
+	if err != nil {
+		t.Fatal(err)
+	}
+	flag := home.TargetFlag(f).Key()
+	guest := stream(t, as["a guest's Session"])
+	next(t, guest, "snapshot")
+
+	body := fmt.Sprintf(`{"sources": [{"target": %q, "departureDelay": 60}, {"target": %q}]}`, flag, flag)
+	for who, do := range as {
+		want := http.StatusForbidden
+		if who == "a admin's Session" || who == "a admin's Token" {
+			want = http.StatusNoContent
+		}
+		if resp := do("PUT", "/api/presences/p2", body); resp.StatusCode != want {
+			t.Errorf("%s binding Alice's sources: %d, want %d", who, resp.StatusCode, want)
+		}
+	}
+	if got := sourcesIn(next(t, guest, "presences"), "p2"); len(got) != 1 || got[0].(map[string]any)["target"] != flag || got[0].(map[string]any)["departureDelay"] != 60.0 {
+		t.Errorf("once bound: sources %v", got)
+	}
+
+	for body, want := range map[string]int{
+		`{"sources": [{"target": "flag:unknown"}]}`:                              http.StatusNotFound,
+		fmt.Sprintf(`{"sources": [{"target": %q, "departureDelay": -1}]}`, flag): http.StatusBadRequest,
+		`{"sources": [{"target": "presence:p1"}]}`:                               http.StatusBadRequest,
+		`{"sources": [{"target": "nonsense"}]}`:                                  http.StatusBadRequest,
+		`{"sources": [{"target": "flag:x", "departureDelay": 1.5}]}`:             http.StatusBadRequest,
+	} {
+		if resp := admin("PUT", "/api/presences/p2", body); resp.StatusCode != want {
+			t.Errorf("%s: %d, want %d", body, resp.StatusCode, want)
+		}
+	}
+	if resp := admin("PUT", "/api/presences/nobody", `{"sources": []}`); resp.StatusCode != http.StatusNotFound {
+		t.Errorf("no such Person: %d", resp.StatusCode)
+	}
+	for _, method := range []string{"POST", "DELETE"} {
+		if resp := admin(method, "/api/presences/p2", ""); resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("%s: %d, want none", method, resp.StatusCode)
+		}
+	}
+
+	if resp := admin("DELETE", "/api/flags/"+string(f), ""); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("deleting the Flag: %d", resp.StatusCode)
+	}
+	next(t, guest, "deleted") // past the second binding's list
+	if got := sourcesIn(next(t, guest, "presences"), "p2"); len(got) != 0 {
+		t.Errorf("once the Flag is deleted: sources %v", got)
 	}
 }

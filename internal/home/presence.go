@@ -2,6 +2,7 @@ package home
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"time"
 )
@@ -16,22 +17,39 @@ type Person struct {
 	Name string
 }
 
+// PresenceSource is a Function bound to a Person's Presence (ADR 0049): read
+// through its binary state or main control, true meaning home, it keeps
+// counting as home for DepartureDelay seconds once false.
+type PresenceSource struct {
+	Target         Target `json:"target"`
+	DepartureDelay int    `json:"departureDelay"` // in seconds
+}
+
 // Presence is a Person's Presence, as the presences list shows it: its
 // Name is its Person's. Its Kind and Capabilities are presenceFunction's.
 type Presence struct {
-	ID           PersonID     `json:"id"`
-	Name         string       `json:"name"`
-	Kind         string       `json:"kind"`
-	Capabilities []Capability `json:"capabilities"`
+	ID           PersonID         `json:"id"`
+	Name         string           `json:"name"`
+	Kind         string           `json:"kind"`
+	Capabilities []Capability     `json:"capabilities"`
+	Sources      []PresenceSource `json:"sources"`
 }
 
 // SavedPresence is a Presence as presences.json keeps it (ADR 0054): its
-// Value and manual's, absent until something tells. While manual is true,
-// Value is the one a Command forced.
+// Presence sources, and its Value and manual's, absent until something tells. While
+// manual is true, Value is the one a Command forced.
 type SavedPresence struct {
-	ID     PersonID `json:"id"`
-	Value  *Value   `json:"value,omitempty"`
-	Manual *Value   `json:"manual,omitempty"`
+	ID      PersonID         `json:"id"`
+	Sources []PresenceSource `json:"sources,omitempty"`
+	Value   *Value           `json:"value,omitempty"`
+	Manual  *Value           `json:"manual,omitempty"`
+}
+
+// person is a Person's Presence as Home holds it.
+type person struct {
+	name    string
+	sources []PresenceSource // never modified: replaced whole
+	timer   *time.Timer      // until the earliest departure delay runs out; nil while none runs
 }
 
 // presenceFunction is what every Person's Presence does. Callers never
@@ -75,24 +93,25 @@ func (h *Home) SetPersons(ps []Person) error {
 	err := h.presencesChanged()
 	for _, id := range fresh {
 		h.announcePresence(id)
+		h.followRule(id, true) // its Presence sources' Values, a Flag's, are replayed state too
 	}
 	return err
 }
 
 // setPerson creates or renames p's Presence, reporting whether it is new and
-// whether it changed. A new one takes the Values recalled for it, if any.
-// Callers hold h.mu.
+// whether it changed. A new one takes the Presence sources and Values recalled for it,
+// if any. Callers hold h.mu.
 func (h *Home) setPerson(p Person) (isNew, changed bool) {
-	name, known := h.presences[p.ID]
-	h.presences[p.ID] = p.Name
-	if known {
-		return false, name != p.Name
+	if known := h.presences[p.ID]; known != nil {
+		changed = known.name != p.Name
+		known.name = p.Name
+		return false, changed
 	}
-	if s, ok := h.recalled[p.ID]; ok {
-		for ref, v := range map[Ref]*Value{homeRef(p.ID): s.Value, manualRef(p.ID): s.Manual} {
-			if v != nil {
-				h.values[ref] = *v
-			}
+	s := h.recalled[p.ID]
+	h.presences[p.ID] = &person{name: p.Name, sources: s.Sources}
+	for ref, v := range map[Ref]*Value{homeRef(p.ID): s.Value, manualRef(p.ID): s.Manual} {
+		if v != nil {
+			h.values[ref] = *v
 		}
 	}
 	return true, true
@@ -111,10 +130,149 @@ func (h *Home) announcePresence(id PersonID) {
 
 // removePerson deletes Person id's Presence. Callers hold h.mu.
 func (h *Home) removePerson(id PersonID) {
+	if t := h.presences[id].timer; t != nil {
+		t.Stop()
+	}
 	delete(h.presences, id)
 	delete(h.values, homeRef(id))
 	delete(h.values, manualRef(id))
 	h.emit(Update{Kind: TargetDeleted, Target: TargetPresence(id)})
+}
+
+// SetPresenceSources binds Presence sources to Person id's Presence, in place of
+// those it had (ADR 0054). Each must be a Function, Aggregate or Flag with a
+// binary state or main control, other than a Presence, and its delay not
+// negative; one listed twice is kept once, as first listed. The Presence then
+// follows them: an override ends if they agree with it.
+func (h *Home) SetPresenceSources(id PersonID, sources []PresenceSource) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	p := h.presences[id]
+	if p == nil {
+		return ErrNotFound
+	}
+	kept := []PresenceSource{}
+	for _, s := range sources {
+		if err := h.checkSource(s); err != nil {
+			return err
+		}
+		if !slices.ContainsFunc(kept, func(k PresenceSource) bool { return k.Target == s.Target }) {
+			kept = append(kept, s)
+		}
+	}
+	p.sources = kept
+	err := h.presencesChanged()
+	h.followRule(id, false)
+	return err
+}
+
+// checkSource refuses what cannot be a Presence source. Callers hold h.mu.
+func (h *Home) checkSource(s PresenceSource) error {
+	t := s.Target
+	switch {
+	case s.DepartureDelay < 0:
+		return fmt.Errorf("%w: a departure delay cannot be negative", ErrInvalid)
+	case t.IsZero():
+		return fmt.Errorf("%w: a presence source names its target", ErrInvalid)
+	case t.Presence() != "":
+		return fmt.Errorf("%w: a presence cannot be a presence source", ErrInvalid)
+	case t.Device() != "" && t.Function() == "":
+		return fmt.Errorf("%w: a presence source is a function, not a device", ErrInvalid)
+	}
+	if _, known := h.lookup(t); !known {
+		return fmt.Errorf("%w: unknown presence source %s", ErrNotFound, t)
+	}
+	if _, ok := h.sourceKey(t); !ok {
+		return fmt.Errorf("%w: %s has no binary state or main control", ErrInvalid, t)
+	}
+	return nil
+}
+
+// dropSources unbinds the Presence sources drop selects from every Presence, once
+// their Target is deleted. Callers hold h.mu.
+func (h *Home) dropSources(drop func(Target) bool) error {
+	var dropped []PersonID
+	for id, p := range h.presences {
+		if ss := slices.DeleteFunc(slices.Clone(p.sources), func(s PresenceSource) bool { return drop(s.Target) }); len(ss) != len(p.sources) {
+			p.sources = ss
+			dropped = append(dropped, id)
+		}
+	}
+	if len(dropped) == 0 {
+		return nil
+	}
+	err := h.presencesChanged()
+	for _, id := range dropped {
+		h.followRule(id, false)
+	}
+	return err
+}
+
+// followPresences brings every Presence in line with its rule, after its
+// Presence sources' Availability or definition may have changed. Callers hold h.mu.
+func (h *Home) followPresences() {
+	for id := range h.presences {
+		h.followRule(id, false)
+	}
+}
+
+// reportToPresences brings in line the Presences whose Presence sources' Values were
+// just recorded. A change moved only by first Values is replayed state, as
+// theirs are (ADR 0054). Callers hold h.mu.
+func (h *Home) reportToPresences(rs []recorded) {
+	for id, p := range h.presences {
+		fed, initial := false, true
+		for _, r := range rs {
+			if slices.ContainsFunc(p.sources, func(s PresenceSource) bool { return h.feeds(s.Target, r.ref) }) {
+				fed, initial = true, initial && r.first
+			}
+		}
+		if fed {
+			h.followRule(id, initial)
+		}
+	}
+}
+
+// followRule sets Person id's Presence to what its rule computes now, unless
+// an override holds; it ends the override once the rule agrees with it. It
+// has the rule computed again when the earliest departure delay runs out.
+// initial marks a change as replayed state. Callers hold h.mu.
+func (h *Home) followRule(id PersonID, initial bool) {
+	p := h.presences[id]
+	now := time.Now()
+	home, ok, next := h.rule(p.sources, now)
+	if p.timer != nil {
+		p.timer.Stop()
+		p.timer = nil
+	}
+	if !next.IsZero() {
+		p.timer = time.AfterFunc(next.Sub(now), func() {
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			if h.presences[id] == p { // not removed since
+				h.followRule(id, false)
+			}
+		})
+	}
+	if !ok {
+		return
+	}
+	cur, had := h.values[homeRef(id)]
+	manual := h.values[manualRef(id)].Data == true
+	if manual && cur.Data != home {
+		return // the override holds
+	}
+	var rs []recorded
+	if !had || cur.Data != home {
+		rs = append(rs, recorded{homeRef(id), h.recordAs(homeRef(id), home, now, initial)})
+	}
+	if m, had := h.values[manualRef(id)]; !had || m.Data != false {
+		rs = append(rs, recorded{manualRef(id), h.recordAs(manualRef(id), false, now, initial)})
+	}
+	if len(rs) > 0 {
+		h.reportToAggregates(rs, now)
+		h.savePresences()
+	}
 }
 
 // presenceTarget is Person id's Presence. A Command on it is an override
@@ -135,13 +293,16 @@ func (presenceTarget) accept(values map[string]any) error {
 func (x presenceTarget) carry(req Request, key string) string { return x.h.issue(x, req, key) }
 func (presenceTarget) timeout() time.Duration                 { return 0 }
 
-// transmit forces home to the Value asked for. With no Presence source yet,
-// nothing ends the override: manual holds until the next Command.
+// transmit forces home to the Value asked for: an override, unless the rule
+// computes that Value already. With no Presence source heard, nothing ends it but
+// the next Command.
 func (x presenceTarget) transmit(req Request) {
 	h, at := x.h, time.Now()
+	forced := req.Values["home"]
+	ruled, ok, _ := h.rule(h.presences[x.id].sources, at)
 	rs := []recorded{
-		{homeRef(x.id), h.record(homeRef(x.id), req.Values["home"], at)},
-		{manualRef(x.id), h.record(manualRef(x.id), true, at)},
+		{homeRef(x.id), h.record(homeRef(x.id), forced, at)},
+		{manualRef(x.id), h.record(manualRef(x.id), !ok || ruled != forced, at)},
 	}
 	h.reportToAggregates(rs, at)
 	h.savePresences()
@@ -155,11 +316,12 @@ func (h *Home) presencesChanged() error {
 	return err
 }
 
-// savePresences saves every Presence with its Values. Callers hold h.mu.
+// savePresences saves every Presence with its Presence sources and Values. Callers
+// hold h.mu.
 func (h *Home) savePresences() error {
 	list := []SavedPresence{}
 	for _, p := range h.presenceList() {
-		s := SavedPresence{ID: p.ID}
+		s := SavedPresence{ID: p.ID, Sources: p.Sources}
 		if v, ok := h.values[homeRef(p.ID)]; ok {
 			s.Value = &v
 		}
@@ -174,8 +336,9 @@ func (h *Home) savePresences() error {
 // presenceList is every Presence, by Name.
 func (h *Home) presenceList() []Presence {
 	list := make([]Presence, 0, len(h.presences))
-	for id, name := range h.presences {
-		list = append(list, Presence{ID: id, Name: name, Kind: presenceFunction.Kind, Capabilities: presenceFunction.Capabilities})
+	for id, p := range h.presences {
+		list = append(list, Presence{ID: id, Name: p.name, Kind: presenceFunction.Kind, Capabilities: presenceFunction.Capabilities,
+			Sources: append([]PresenceSource{}, p.sources...)})
 	}
 	slices.SortFunc(list, func(a, b Presence) int {
 		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.ID, b.ID))

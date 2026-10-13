@@ -62,6 +62,7 @@ var homeEndpoints = []struct {
 	{"POST", "/api/flags", `{"name": "Away"}`, access.Admin},
 	{"PUT", "/api/flags/unknown", `{"name": "Away"}`, access.Admin},
 	{"DELETE", "/api/flags/unknown", "", access.Admin},
+	{"PUT", "/api/presences/unknown", `{"sources": []}`, access.Admin},
 	{"POST", "/api/automations", `{"name": "Night"}`, access.Admin},
 	{"PUT", "/api/automations/unknown", `{"name": "Night"}`, access.Admin},
 	{"DELETE", "/api/automations/unknown", "", access.Admin},

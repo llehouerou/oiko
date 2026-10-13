@@ -10,7 +10,15 @@ const reading = (key: string): Fn => ({
   kind: key,
   capabilities: [{ ...on, key, type: 'numeric', access: { observable: true, settable: false, queryable: false } }],
 })
-const device = (id: string, area: string | undefined, ...functions: Fn[]): Device => ({ id, name: id, area, nativeAddress: id, functions, capabilities: null })
+const device = (id: string, area: string | undefined, ...functions: Fn[]): Device => ({
+  id,
+  name: id,
+  area,
+  bridge: 'z2m',
+  nativeAddress: id,
+  functions,
+  capabilities: null,
+})
 
 // Six readings, two to a line: drawn three rows tall while nobody sets its height.
 const indoor = device('indoor', 'living', ...['temperature', 'humidity', 'co2', 'noise', 'pressure', 'rain'].map(reading))

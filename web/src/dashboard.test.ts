@@ -4,7 +4,15 @@ import type { Aggregate, Area, AutomationStatus, Capability, CustomDashboard, De
 
 const on: Capability = { key: 'state', label: 'State', type: 'binary', access: { observable: true, settable: true, queryable: true }, category: 'primary' }
 const fn = (key: string, area?: string): Fn => ({ key, kind: key, area, capabilities: [on] })
-const device = (id: string, area: string | undefined, ...functions: Fn[]): Device => ({ id, name: id, area, nativeAddress: id, functions, capabilities: null })
+const device = (id: string, area: string | undefined, ...functions: Fn[]): Device => ({
+  id,
+  name: id,
+  area,
+  bridge: 'z2m',
+  nativeAddress: id,
+  functions,
+  capabilities: null,
+})
 const derived = (area: string, kind: string, ...members: Target[]): Aggregate => ({
   id: `${area}-${kind}`,
   name: kind,

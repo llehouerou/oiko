@@ -2,6 +2,7 @@ package home
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"maps"
 	"reflect"
@@ -196,7 +197,7 @@ func (h *Home) DeleteAggregate(id AggregateID) error {
 	h.commands.abandon(TargetAggregate(id)) // its member Commands carry on unrelayed
 	h.emit(Update{Kind: TargetDeleted, Target: TargetAggregate(id)})
 	h.dropMembers(func(m Target) bool { return m == TargetAggregate(id) })
-	return h.aggregatesChanged()
+	return errors.Join(h.aggregatesChanged(), h.dropSources(func(s Target) bool { return s == TargetAggregate(id) }))
 }
 
 // handMade refuses Aggregate id unless it exists and is an Admin's own,
@@ -239,6 +240,7 @@ func (h *Home) aggregatesChanged() error {
 	h.emit(Update{Kind: AggregatesChanged, Aggregates: h.aggregateList()})
 	h.syncAggregateValues()
 	h.syncAggregateAvailability()
+	h.followPresences()
 	return err
 }
 
@@ -261,19 +263,23 @@ func (h *Home) deriveAll() bool {
 	return changed
 }
 
-// rederive follows a change of the Devices: members whose Device was deleted
-// are dropped, then derived Capabilities, Values and Availability are
-// recomputed and announced where they differ. Callers hold h.mu.
+// rederive follows a change of the Devices: members and Presence sources
+// whose Device was deleted are dropped, then derived Capabilities, Values and
+// Availability are recomputed and announced where they differ, and the
+// Presences follow. Callers hold h.mu.
 func (h *Home) rederive() error {
-	if h.dropMembers(func(m Target) bool { return m.Device() != "" && h.devices[m.Device()] == nil }) {
-		return h.aggregatesChanged()
+	gone := func(t Target) bool { return t.Device() != "" && h.devices[t.Device()] == nil }
+	err := h.dropSources(gone)
+	if h.dropMembers(gone) {
+		return errors.Join(err, h.aggregatesChanged())
 	}
 	if h.deriveAll() {
 		h.emit(Update{Kind: AggregatesChanged, Aggregates: h.aggregateList()})
 	}
 	h.syncAggregateValues()
 	h.syncAggregateAvailability()
-	return nil
+	h.followPresences()
+	return err
 }
 
 // derive sets a's kind and Capabilities from the Functions it resolves to:

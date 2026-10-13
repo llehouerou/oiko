@@ -15,6 +15,7 @@ const cap = (key: string, label: string, extra: Partial<Capability> = {}): Capab
 const fn = (id: string, name: string, kind: string, capabilities: Capability[]) => ({
   id,
   name,
+  bridge: 'z2m',
   nativeAddress: id,
   functions: [{ key: kind, kind, capabilities }],
   capabilities: null,
