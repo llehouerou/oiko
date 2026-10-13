@@ -412,13 +412,14 @@ test('a Timeline lane draws an on/off or a binary reading, a reading, Events, an
 })
 
 test('a Timeline groups lanes by kind', () => {
-  expect(['light', 'switch', 'contact', 'occupancy', 'temperature', 'button', 'flag'].map((k) => laneGroup(k).name)).toEqual([
+  expect(['light', 'switch', 'contact', 'occupancy', 'temperature', 'button', 'presence', 'flag'].map((k) => laneGroup(k).name)).toEqual([
     'Lights',
     'Plugs',
     'Doors',
     'Motion',
     'Climate',
     'Buttons',
+    'Presences',
     'Other',
   ])
 })

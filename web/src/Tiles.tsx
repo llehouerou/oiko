@@ -1,6 +1,6 @@
 // The Tiles of a Dashboard, drawn as dashboard.ts resolves them.
 
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useAvailability } from './store'
 import type { Fn } from './types'
 import { titleIfTruncated } from './truncated'
@@ -11,21 +11,34 @@ import { CameraTile } from './CameraTile'
 import { SensorTile } from './SensorTile'
 import { FunctionControls, HealthBadge } from './Capabilities'
 import { More, useLongPress } from './TileParts'
-// A Target's Tile, as dashboard.ts resolves it, drawn as its shape says: a bar, a sensor's, or its
-// Functions' controls. A lone Function shares the Tile's header; a Function's kind or key shows as
-// a heading only where it adds something. Dimmed while its Device is detached or it is offline.
-// Its name may be hidden: an Admin's ⋯, or a long press on its header, then opens its panel.
-export function Tile({
-  tile,
-  compact,
-  hideName = false,
-  onOpen,
-}: {
+import { PresenceSheet } from './PresenceRow'
+
+type TileProps = {
   tile: TargetTile
   compact?: boolean
   hideName?: boolean
   onOpen?: (back?: () => void) => void
-}) {
+}
+
+// A Target's Tile. A Presence's ⋯ opens its sheet, for anyone, as its chip does.
+export function Tile(props: TileProps) {
+  const [sheet, setSheet] = useState(false)
+  const { presence } = props.tile
+  if (!presence) return <TileOf {...props} />
+  return (
+    <>
+      <TileOf {...props} onOpen={() => setSheet(true)} more />
+      {sheet && <PresenceSheet presence={presence} onClose={() => setSheet(false)} />}
+    </>
+  )
+}
+
+// A Target's Tile, as dashboard.ts resolves it, drawn as its shape says: a bar, a sensor's, or its
+// Functions' controls. A lone Function shares the Tile's header; a Function's kind or key shows as
+// a heading only where it adds something. Dimmed while its Device is detached or it is offline.
+// Its name may be hidden: an Admin's ⋯, or a long press on its header, then opens its panel. With
+// more, a bar's ⋯ opens that too, in place of its other controls.
+function TileOf({ tile, compact, hideName = false, onOpen, more = false }: TileProps & { more?: boolean }) {
   const offline = useAvailability(tile.subject) === 'offline'
   const longPress = useLongPress(hideName && onOpen ? () => onOpen() : undefined) // a Tile of controls' header, its name hidden
   const { shape, name, fns } = tile
@@ -47,6 +60,7 @@ export function Tile({
         compact={compact}
         hideName={hideName}
         onSettings={onOpen}
+        onMore={more ? onOpen : undefined}
       />
     )
   const props = { name, note, badges, dimmed, hideName, onOpen: onOpen && (() => onOpen()) }

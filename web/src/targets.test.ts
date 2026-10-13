@@ -53,14 +53,22 @@ test('the catalogue names every Target: a Function after its Device, with its ke
     ],
     [{ id: 'empty', name: 'Empty', members: [], binary: 'any', numeric: 'mean' }],
     [{ id: 'away', name: 'Away', kind: 'flag', capabilities: [cap('on')] }],
+    [
+      { id: 'home', name: 'Home', kind: 'presence', capabilities: [cap('home')] },
+      { id: 'bob', name: 'Bob', kind: 'presence', capabilities: [cap('home'), cap('manual')] },
+      { id: 'alice', name: 'Alice', kind: 'presence', capabilities: [cap('home'), cap('manual')] },
+    ],
   )
-  // Functions, Aggregates, Flags, then Devices, by Name within each
+  // Functions, Aggregates, Flags, Presences, then Devices, by Name within each
   expect(c.list.map((e) => [e.target, e.name, e.kind])).toEqual([
     ['device:bulb/light', 'Bulb', 'light'],
     ['device:relay/switch/l1', 'Relay · switch/l1', 'switch'],
     ['device:relay/switch/l2', 'Relay · switch/l2', 'switch'],
     ['aggregate:empty', 'Empty', ''], // no members yet: no kind, no Capabilities
     ['flag:away', 'Away', 'flag'],
+    ['presence:alice', 'Alice', 'presence'],
+    ['presence:bob', 'Bob', 'presence'],
+    ['presence:home', 'Home', 'presence'],
     ['device:base', 'Arlo base', ''],
     ['device:bulb', 'Bulb', ''],
     ['device:relay', 'Relay', ''],

@@ -1,5 +1,5 @@
 import { roles } from './roles'
-import { aggregateTarget, catalogue, deviceTarget, flagTarget, fnOf, parseTarget } from './targets'
+import { aggregateTarget, catalogue, deviceTarget, flagTarget, fnOf, parseTarget, presenceTarget } from './targets'
 import { aggregateSummary, memberLeaves, tileCaps, tileShape, titled, type Shape } from './tiles'
 import { arrange, defaultColumns, type Place } from './layout'
 import type {
@@ -16,6 +16,7 @@ import type {
   ListEntry,
   OwnSection,
   PlacedTile,
+  Presence,
   Target,
   TileRef,
 } from './types'
@@ -35,7 +36,7 @@ export interface TileChoice {
   key: string
   tile: TileRef
   name: string
-  kind: 'Device' | 'Function' | 'Aggregate' | 'Flag' | 'Automation'
+  kind: 'Device' | 'Function' | 'Aggregate' | 'Flag' | 'Presence' | 'Automation'
   area?: string // its Area's id
   taken: boolean
   functions?: TileChoice[]
@@ -44,12 +45,13 @@ export interface TileChoice {
 // A Target's Tile, resolved once: everything about it that does not change while it is shown.
 // Its Availability, Values and Commands are read live.
 export interface TargetTile {
-  subject: Target // the Device itself, the Aggregate or the Flag: its Availability dims the Tile
+  subject: Target // the Device itself, the Aggregate, the Flag or the Presence: its Availability dims the Tile
   name: string
   icon?: string
   detached: boolean
   health: { target: Target; cap: Capability }[] // the Device's and its Functions', shown only when wrong
   members?: Target[] // an Aggregate of lights' lights
+  presence?: Presence // a Presence's: its ⋯ opens the Presence's sheet
   summary: string // the header line of a Tile of controls
   fns: { target: Target; fn: Fn }[] // the Functions it shows
   shape: Shape
@@ -93,11 +95,19 @@ function naturalRows(t: DashboardTile, width: number) {
 
 // The built-in Dashboard: Flags without an Area as pills under its header, then a Section per
 // Area in their order, then Others, if it holds anything. The Automations with a Manual trigger
-// open Others. custom draws a custom Dashboard from the same home.
-export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Flag[], areas: Area[], automations: AutomationStatus[]) {
+// open Others. No Presence nor Aggregate of Presences shows there: the Presence row does. custom
+// draws a custom Dashboard from the same home.
+export function dashboard(
+  devices: Device[],
+  aggregates: Aggregate[],
+  flags: Flag[],
+  areas: Area[],
+  automations: AutomationStatus[],
+  presences: Presence[] = [],
+) {
   const manual = automations.filter((a) => a.manualTriggers?.length)
-  const targets = catalogue(devices, aggregates, flags)
-  // Every Device, Aggregate and Flag here is in the catalogue: both come from the same lists.
+  const targets = catalogue(devices, aggregates, flags, presences)
+  // Every Device, Aggregate, Flag and Presence here is in the catalogue: both come from the same lists.
   const entry = (t: Target) => targets.get(t)!
   const resolved = (t: Omit<TargetTile, 'shape'>): TargetTile => ({ ...t, shape: tileShape(t.fns) })
   // A Device's Tile under name: it shows fns, some of its Functions (those in one Area, or one
@@ -133,6 +143,10 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
     const e = entry(flagTarget(f.id))
     return resolved({ subject: e.target, name: f.name, detached: false, health: [], summary: '', fns: [{ target: e.target, fn: fnOf(e) }] })
   }
+  const presenceTile = (p: Presence) => {
+    const e = entry(presenceTarget(p.id))
+    return resolved({ subject: e.target, name: p.name, detached: false, health: [], summary: '', fns: [{ target: e.target, fn: fnOf(e) }], presence: p })
+  }
   // The Area Aggregate of kind that Area id's header shows, if the Area holds any Function of that kind.
   const areaAggregate = (area: Area, kind: string) =>
     area.hiddenAggregates?.includes(kind) ? undefined : aggregates.find((a) => a.derived && a.area === area.id && a.kind === kind)
@@ -144,7 +158,7 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
       .filter((f) => id && f.area === id) // those without one are pills
       .map((f) => ({ key: flagTarget(f.id), label: f.name, kind: 'target' as const, ...flagTile(f) })),
     ...aggregates
-      .filter((a) => !a.derived && (a.area ?? '') === id)
+      .filter((a) => !a.derived && a.kind !== 'presence' && (a.area ?? '') === id)
       .map((a) => ({ key: aggregateTarget(a.id), label: a.name, kind: 'target' as const, ...aggregateTile(a) })),
     ...devices.flatMap((device) => {
       const fns = (device.functions ?? []).filter((fn) => (fn.area ?? device.area ?? '') === id && deviceTarget(device.id, fn.key) !== lone && hasTile(fn))
@@ -195,6 +209,7 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
     }
     if (p?.kind === 'aggregate') return aggregates.filter((a) => a.id === p.id).flatMap((a) => tile(a.name, aggregateTile(a)))
     if (p?.kind === 'flag') return flags.filter((f) => f.id === p.id).flatMap((f) => tile(f.name, flagTile(f)))
+    if (p?.kind === 'presence') return presences.filter((x) => x.id === p.id).flatMap((x) => tile(x.name, presenceTile(x)))
     return []
   }
   // What placement t, showing nothing, was, and why it is empty: a Function its Device has no more,
@@ -254,7 +269,7 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
     // Every Tile of the home whose name holds query, by Area in their order, then those without
     // one; taken are the keys of those the Section holds already. A Device has a Tile if any of its
     // Functions has one, and offers each alone under it if several do, searched by its name; an
-    // Aggregate, an Area's included, a Flag and an Automation with a Manual trigger always do.
+    // Aggregate, an Area's included, a Flag, a Presence and an Automation with a Manual trigger always do.
     choices: (query: string, taken: string[]) => {
       const q = query.trim().toLowerCase()
       const matches = (name: string) => name.toLowerCase().includes(q)
@@ -281,6 +296,7 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
         ...devices.flatMap(deviceChoice),
         ...aggregates.map((a) => choice({ target: aggregateTarget(a.id) }, a.name, 'Aggregate', a.area)),
         ...flags.map((f) => choice({ target: flagTarget(f.id) }, f.name, 'Flag', f.area)),
+        ...presences.map((p) => choice({ target: presenceTarget(p.id) }, p.name, 'Presence')),
         ...manual.map((a) => choice({ automation: a.id }, a.name, 'Automation')),
       ]
         .flatMap(found)

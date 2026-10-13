@@ -3,7 +3,8 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { edit, useAreas, useAvailability, useCatalogue, useCommand } from './store'
 import type { Aggregate, Area, Device, Flag, Fn, Target } from './types'
-import { aggregateTarget, deviceTarget, flagTarget, parseTarget, targetKind } from './targets'
+import { aggregateTarget, deviceTarget, flagTarget, parseTarget, presenceTarget, targetKind } from './targets'
+import { HOME } from './presence'
 import { confirm } from './confirm'
 import { titleIfTruncated } from './truncated'
 import { AreaIconPicker, IconPicker } from './icons'
@@ -235,7 +236,7 @@ export function FlagPanel({ flag, onClose }: { flag?: Flag; onClose: () => void 
 }
 
 // Creates an Aggregate, or edits and deletes an existing one. Members are offered
-// among the Functions, Flags and Aggregates of one kind at a time, Aggregates first.
+// among the Functions, Flags, Presences and Aggregates of one kind at a time, Aggregates first.
 export function AggregatePanel({
   aggregate,
   aggregates,
@@ -249,7 +250,7 @@ export function AggregatePanel({
 }) {
   const targets = useCatalogue()
   const fns = targets.list
-    .filter((e) => targetKind(e.target) === 'function' || targetKind(e.target) === 'flag')
+    .filter((e) => ['function', 'flag', 'presence'].includes(targetKind(e.target) ?? '') && e.target !== presenceTarget(HOME)) // the Home presence is no member
     .map((e) => ({ member: e.target, kind: e.kind, label: e.name }))
   const kinds = [...new Set(fns.map((f) => f.kind))].sort()
   const [kind, setKind] = useState(aggregate?.kind || kinds[0] || '')

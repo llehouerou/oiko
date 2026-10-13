@@ -95,6 +95,20 @@ test("a phone's network: its connection is a state, charted", () => {
   expect(of('network', cap('connected', 'binary'))).toEqual({ ...none, state: 'connected', charted: 'connected' })
 })
 
+test("a Presence's home is its main control, the Home presence's a state", () => {
+  expect(of('presence', cap('home', 'binary', settable), cap('manual', 'binary'))).toEqual({
+    ...none,
+    control: 'home',
+    diagnostics: ['manual'],
+    charted: 'home',
+  })
+  expect(of('presence', cap('home', 'binary'))).toEqual({ ...none, state: 'home', charted: 'home' })
+  // home is no main control elsewhere
+  expect(of('switch', cap('home', 'binary', settable))).toMatchObject({ control: undefined, settings: ['home'] })
+  expect(turns(cap('home', 'binary'))).toEqual(['home', 'Arrivals'])
+  expect(rests(cap('home', 'binary'))).toBe('away')
+})
+
 test('a weather station: readings in reading order, the first charted', () => {
   expect(of('rain', cap('rain', 'numeric'), cap('rain_1h', 'numeric'), cap('rain_24h', 'numeric'))).toMatchObject({
     readings: ['rain', 'rain_1h', 'rain_24h'],

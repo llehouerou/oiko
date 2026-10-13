@@ -2,6 +2,7 @@ package home
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -69,9 +70,9 @@ func manualRef(id PersonID) Ref { return TargetPresence(id).Ref("manual") }
 // SetPersons gives Home every Person, as Oiko starts and after each one is
 // created, renamed or removed: each has a Presence, under their Name. A new
 // one takes what presences.json kept of it, as Oiko starts, as replayed
-// state; one whose Person is gone is deleted with its History (ADR 0016), and
-// what was kept of it dropped. The first call announces the Presences even if
-// none changed.
+// state; one whose Person is gone is deleted with its History (ADR 0016),
+// what was kept of it dropped, and so is it from every Aggregate. The first
+// call announces the Presences even if none changed.
 func (h *Home) SetPersons(ps []Person) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -100,8 +101,8 @@ func (h *Home) SetPersons(ps []Person) error {
 		h.announcePresence(id)
 		h.followRule(id, true) // its Presence sources' Values, a Flag's, are replayed state too
 	}
-	h.followHome(!removed) // recalled Values are replayed state
-	return err
+	h.followHome(!removed)                // recalled Values are replayed state
+	return errors.Join(err, h.rederive()) // Aggregates of Presences follow, as replayed state too
 }
 
 // setPerson creates or renames p's Presence, reporting whether it is new and

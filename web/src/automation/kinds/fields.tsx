@@ -118,7 +118,7 @@ export function CatchUp({ p, set }: FormProps) {
   )
 }
 
-const groups = { function: 'Functions', aggregate: 'Aggregates', flag: 'Flags', device: 'Devices' }
+const groups = { function: 'Functions', aggregate: 'Aggregates', flag: 'Flags', presence: 'Presences', device: 'Devices' }
 
 // Picked by Name, stored by id. A deleted target stays, marked as such.
 // Watching Steps offer only a target with a Capability that fits the Step.

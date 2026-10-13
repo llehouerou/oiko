@@ -245,8 +245,8 @@ export function sheetSeries(target: Target, kind: string, caps: Capability[], de
   ]
 }
 
-// A Function as views of the History list it: a Device's, an Aggregate or a
-// Flag; never a Device itself, whose own Capabilities are its Functions' sheets'.
+// A Function as views of the History list it: a Device's, an Aggregate, a
+// Flag or a Presence; never a Device itself, whose own Capabilities are its Functions' sheets'.
 export const listed = (e: Entry) => targetKind(e.target) !== 'device'
 
 // compareCandidates are the Functions a sheet of target, of kind, may add
@@ -284,6 +284,7 @@ export function followHistory() {
       case 'devices':
       case 'aggregates':
       case 'flags':
+      case 'presences':
         if (JSON.stringify(tileRefs()) !== JSON.stringify(tiles.refs)) void loadTiles()
         return
     }
@@ -485,6 +486,7 @@ const groups = [
   { name: 'Motion', kinds: ['occupancy'], color: '#a78bfa' },
   { name: 'Climate', kinds: ['temperature', 'humidity', 'pressure', 'illuminance'], color: '#34d399' },
   { name: 'Buttons', kinds: ['button'], color: '#34d399' },
+  { name: 'Presences', kinds: ['presence'], color: '#10b981' },
   { name: 'Other', kinds: [], color: '#34d399' },
 ]
 export type LaneGroup = (typeof groups)[number]

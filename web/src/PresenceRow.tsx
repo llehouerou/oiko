@@ -1,10 +1,11 @@
-// The Presence row (ADR 0055): the Home presence's chip, then a chip per Person, at the top of a
-// Dashboard. Each opens its sheet: a Person's, where Home / Away sets their Presence by hand (ADR
-// 0052) and an Admin binds its Presence sources; the Home presence's, where an Admin binds its
-// Entrance doors and Signs of life (ADR 0051, 0054).
+// The Presence row (ADR 0055): the Home presence's chip, then a chip per Person, then one per
+// Aggregate of Presences, at the top of a Dashboard. A Person's and the Home presence's open their
+// sheet: a Person's, where Home / Away sets their Presence by hand (ADR 0052) and an Admin binds its
+// Presence sources; the Home presence's, where an Admin binds its Entrance doors and Signs of life
+// (ADR 0051, 0054). A Presence's Tile opens the same sheet.
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { mdiClose, mdiHandBackRightOutline, mdiHomeOutline } from '@mdi/js'
+import { mdiAccountGroupOutline, mdiClose, mdiHandBackRightOutline, mdiHomeOutline } from '@mdi/js'
 import {
   edit,
   sendCommand,
@@ -16,17 +17,33 @@ import {
   useDevices,
   useNow,
   useOnCount,
+  useAggregates,
   usePresences,
   useValue,
 } from './store'
 import { useAllows } from './access'
 import { DAY, HistoryView, key, useHistory } from './history'
-import { boxUntil, chip, HOME, homeChip, persons, readCapability, someoneElse, sourceState, sourceText, stretches, type PresenceState } from './presence'
+import {
+  boxUntil,
+  chip,
+  groupChip,
+  groups,
+  HOME,
+  homeChip,
+  persons,
+  readCapability,
+  someoneElse,
+  sourceState,
+  sourceText,
+  stretches,
+  type PresenceState,
+} from './presence'
 import { deviceTarget, owner, presenceTarget, targetKind, type Entry } from './targets'
+import { memberLeaves } from './tiles'
 import { CommandNote } from './Capabilities'
 import { Panel } from './Panel'
 import { Svg } from './icons'
-import type { Presence, PresenceSource, Ref, Target } from './types'
+import type { Aggregate, Presence, PresenceSource, Ref, Target } from './types'
 
 const said: Record<PresenceState, string> = { home: 'Home', away: 'Away', unknown: 'Unknown' }
 
@@ -99,9 +116,24 @@ function HomeChip({ presence, people, onOpen }: { presence: Presence; people: Pr
   )
 }
 
-// The row: the Home presence, then the Persons by Name; nothing until Oiko has told them.
+// An Aggregate of Presences' chip: its Name and how many of its members are home. It only shows.
+function GroupChip({ aggregate, aggregates }: { aggregate: Aggregate; aggregates: Aggregate[] }) {
+  const homes = memberLeaves(aggregate, aggregates).map((target) => ({ target, capability: 'home' }))
+  const text = useDerived(homes, (vs) => groupChip(aggregate, vs))
+  const someone = useOnCount(homes) > 0
+  return (
+    <span className="flex items-center gap-2 rounded-full bg-neutral-900 py-1.5 pr-3 pl-1.5 text-sm">
+      <Face initial={<Svg path={mdiAccountGroupOutline} className="size-3.5" />} state={someone ? 'home' : 'away'} manual={false} size="small" />
+      <span className={someone ? '' : 'text-neutral-400'}>{text}</span>
+    </span>
+  )
+}
+
+// The row: the Home presence, then the Persons by Name, then the Aggregates of Presences by Name;
+// nothing until Oiko has told them.
 export function PresenceRow() {
   const presences = usePresences()
+  const aggregates = useAggregates()
   const [open, setOpen] = useState<string | null>(null)
   const home = presences.find((p) => p.id === HOME)
   const people = persons(presences)
@@ -114,10 +146,22 @@ export function PresenceRow() {
         {people.map((p) => (
           <Chip key={p.id} presence={p} onOpen={() => setOpen(p.id)} />
         ))}
+        {groups(aggregates).map((a) => (
+          <GroupChip key={a.id} aggregate={a} aggregates={aggregates} />
+        ))}
       </div>
-      {opened?.id === HOME && <HomeSheet presence={opened} people={people} onClose={() => setOpen(null)} />}
-      {opened && opened.id !== HOME && <PresenceSheet key={opened.id} presence={opened} onClose={() => setOpen(null)} />}
+      {opened && <PresenceSheet presence={opened} onClose={() => setOpen(null)} />}
     </>
+  )
+}
+
+// PresenceSheet is a Presence's sheet: the Home presence's or a Person's.
+export function PresenceSheet({ presence, onClose }: { presence: Presence; onClose: () => void }) {
+  const people = persons(usePresences())
+  return presence.id === HOME ? (
+    <HomeSheet presence={presence} people={people} onClose={onClose} />
+  ) : (
+    <PersonSheet key={presence.id} presence={presence} onClose={onClose} />
   )
 }
 
@@ -241,11 +285,11 @@ function HomeBindings({ presence }: { presence: Presence }) {
 }
 
 // What may be bound, in a select adding it: a Function, an Aggregate or a Flag with a binary state
-// or main control, none of bound.
+// or main control, none of bound, and no Aggregate of Presences.
 function AddBinding({ label, bound, onAdd }: { label: string; bound: Target[]; onAdd: (t: Target) => void }) {
   const targets = useCatalogue()
   const offered = (group: string) =>
-    targets.list.filter((e) => targetKind(e.target) === group && readCapability(e.kind, e.capabilities) && !bound.includes(e.target))
+    targets.list.filter((e) => targetKind(e.target) === group && e.kind !== 'presence' && readCapability(e.kind, e.capabilities) && !bound.includes(e.target))
   return (
     <select value="" onChange={(e) => onAdd(e.target.value)} aria-label={label} className="w-full rounded bg-neutral-800 px-2 py-1 text-sm">
       <option value="">{label}…</option>
@@ -281,7 +325,7 @@ function SaveBar({ error, onSave, onCancel }: { error: string | null; onSave: ()
 // A Person's sheet: the Value and since when, Home / Away, a note while set by hand, its Presence
 // sources live, and to a Member, who reads the past, the last 24 h with the stretches set by hand
 // hatched.
-function PresenceSheet({ presence, onClose }: { presence: Presence; onClose: () => void }) {
+function PersonSheet({ presence, onClose }: { presence: Presence; onClose: () => void }) {
   const { target, home, initial, state, manual, held } = usePresence(presence)
   const command = useCommand(target)
   const member = useAllows('member')

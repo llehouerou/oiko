@@ -1,4 +1,4 @@
-import type { Aggregate, Capability, Device, Flag, Fn } from './types'
+import type { Aggregate, Capability, Device, Flag, Fn, Presence } from './types'
 
 // A Target's key, as internal/home writes it (ADR 0009): what a Command
 // addresses and what a Value belongs to. '' is none.
@@ -59,14 +59,14 @@ export interface Entry {
 }
 
 export interface Catalogue {
-  list: Entry[] // Functions, Aggregates, Flags, then Devices, by Name within each
+  list: Entry[] // Functions, Aggregates, Flags, Presences, then Devices, by Name within each
   get: (t: Target) => Entry | undefined
   name: (t: Target) => string // 'deleted target' once it is gone
 }
 
 // catalogue resolves every Target of the home, the one place a view learns
 // what a Target is called and what it can do.
-export function catalogue(devices: Device[], aggregates: Aggregate[], flags: Flag[]): Catalogue {
+export function catalogue(devices: Device[], aggregates: Aggregate[], flags: Flag[], presences: Presence[] = []): Catalogue {
   const byName = (a: Entry, b: Entry) => a.name.localeCompare(b.name)
   const list = [
     ...devices
@@ -84,11 +84,12 @@ export function catalogue(devices: Device[], aggregates: Aggregate[], flags: Fla
       .map((a) => ({ target: aggregateTarget(a.id), name: a.name, kind: a.kind ?? '', capabilities: a.capabilities ?? [], ownerCapabilities: [] }))
       .sort(byName),
     ...flags.map((f) => ({ target: flagTarget(f.id), name: f.name, kind: f.kind, capabilities: f.capabilities, ownerCapabilities: [] })).sort(byName),
+    ...presences.map((p) => ({ target: presenceTarget(p.id), name: p.name, kind: p.kind, capabilities: p.capabilities, ownerCapabilities: [] })).sort(byName),
     ...devices.map((d) => ({ target: deviceTarget(d.id), name: d.name, kind: '', capabilities: d.capabilities ?? [], ownerCapabilities: [] })).sort(byName),
   ]
   const index = new Map(list.map((e) => [e.target, e]))
   return { list, get: (t) => index.get(t), name: (t) => index.get(t)?.name ?? 'deleted target' }
 }
 
-// fnOf is an Aggregate's or a Flag's entry as the Function it stands for.
+// fnOf is an Aggregate's, a Flag's or a Presence's entry as the Function it stands for.
 export const fnOf = (e: Entry): Fn => ({ key: '', kind: e.kind, capabilities: e.capabilities })

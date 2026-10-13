@@ -7,6 +7,8 @@ import {
   mdiDoorClosed,
   mdiDoorOpen,
   mdiGauge,
+  mdiHome,
+  mdiHomeOutline,
   mdiMoleculeCo2,
   mdiMotionSensor,
   mdiMotionSensorOff,
@@ -88,6 +90,7 @@ const stateIcons: Record<string, [idle: string, active: string]> = {
   water_leak: [mdiWaterOutline, mdiWaterAlert],
   smoke: [mdiSmokeDetector, mdiSmokeDetectorAlert],
   connected: [mdiWifiOff, mdiWifi],
+  home: [mdiHomeOutline, mdiHome], // the Home presence's
 }
 
 // A state: whether it is active, its icon, and how long it has held, as Home tells it (an

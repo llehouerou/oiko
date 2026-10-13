@@ -313,6 +313,52 @@ test('a placement showing nothing leaves its cells empty, but in the editor: a c
   expect(home.custom(mine, true).map(unseenSection)).toEqual([false, true])
 })
 
+test("a Presence's Tile, in an own Section only: a Person's a bar toggling home, the Home presence's a state", () => {
+  const home: Capability = { ...on, key: 'home' }
+  const manual: Capability = { ...on, key: 'manual', access: { ...on.access, settable: false } }
+  const presences = [
+    { id: 'home', name: 'Home', kind: 'presence', capabilities: [{ ...home, access: manual.access }] },
+    { id: 'alice', name: 'Alice', kind: 'presence', capabilities: [home, manual] },
+  ]
+  const children: Aggregate = {
+    id: 'kids',
+    name: 'Children',
+    kind: 'presence',
+    members: ['presence:alice'],
+    binary: 'any',
+    numeric: 'mean',
+    capabilities: [home, manual],
+  }
+  const d = dashboard([], [children], [], [], [], presences)
+  // the built-in Dashboard has the Presence row instead
+  expect(d.sections).toEqual([])
+  const mine: CustomDashboard = {
+    id: 'mine',
+    name: 'Mine',
+    columns: 1,
+    sections: [
+      {
+        id: 'who',
+        columns: 3,
+        col: 0,
+        row: 0,
+        width: 1,
+        tiles: ['presence:alice', 'presence:home', 'aggregate:kids'].map((target, col) => ({ target, col, row: 0, width: 1 })),
+      },
+    ],
+  }
+  const [who] = d.custom(mine)
+  expect(
+    who!.tiles.map((t) =>
+      t.kind === 'target' ? `${t.key} ${t.name} ${t.shape.kind} ${t.shape.kind === 'bar' ? t.shape.toggle : ''}${t.presence ? ' sheet' : ''}` : t.key,
+    ),
+  ).toEqual(['presence:alice Alice bar home sheet', 'presence:home Home sensor  sheet', 'aggregate:kids Children bar home'])
+  // offered without an Area
+  expect(d.choices('', []).map((g) => [g.area, g.tiles.map((t) => `${t.name} ${t.kind}`)])).toEqual([
+    [undefined, ['Alice Presence', 'Children Aggregate', 'Home Presence']],
+  ])
+})
+
 test("the Tiles to pick for an own Section: the home's, grouped by Area, searched by name, those it holds greyed out", () => {
   const nothing: Fn = { key: 'config', kind: 'config', capabilities: [{ ...on, category: 'config' }] }
   const devices = [

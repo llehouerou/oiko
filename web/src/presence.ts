@@ -4,7 +4,7 @@
 
 import { held, type Point } from './history'
 import { rests, roles, turns } from './roles'
-import type { Capability, Presence, PresenceSource, Value } from './types'
+import type { Aggregate, Capability, Presence, PresenceSource, Value } from './types'
 
 // The Home presence's id, as in its key presence:home.
 export const HOME = 'home'
@@ -12,6 +12,13 @@ export const HOME = 'home'
 // persons is the Persons' Presences in presences, by Name, as the row shows them after the Home
 // presence.
 export const persons = (ps: Presence[]) => ps.filter((p) => p.id !== HOME).sort((a, b) => a.name.localeCompare(b.name))
+
+// groups is the Aggregates of Presences among as, by Name, as the row shows them after the Persons.
+export const groups = (as: Aggregate[]) => as.filter((a) => a.kind === 'presence').sort((a, b) => a.name.localeCompare(b.name))
+
+// groupChip is what an Aggregate of Presences' chip says, given its members' home Values: its Name
+// and how many are home.
+export const groupChip = (a: Aggregate, homes: (Value | undefined)[]) => `${a.name} ${homes.filter((v) => v?.data === true).length}/${homes.length}`
 
 export type PresenceState = 'home' | 'away' | 'unknown'
 

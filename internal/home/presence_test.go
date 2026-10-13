@@ -106,11 +106,84 @@ func TestRemovingAPersonDeletesTheirPresence(t *testing.T) {
 	}
 }
 
-func TestAPresenceIsNoAggregateMemberYet(t *testing.T) {
-	h, _, _ := presences(t)
-	if _, err := h.CreateAggregate("Everyone", []Target{TargetPresence(alice), TargetPresence(bob)}, Any, ""); !errors.Is(err, ErrInvalid) {
-		t.Errorf("an Aggregate of Presences: err = %v, want ErrInvalid", err)
+func TestAggregateOfPresences(t *testing.T) {
+	h, updates, dir := presences(t)
+	children := []Target{TargetPresence(alice), TargetPresence(bob), TargetPresence(alice)}
+	anyHome, err := h.CreateAggregate("Children", children, Any, "")
+	if err != nil {
+		t.Fatal(err)
 	}
+	allHome, _ := h.CreateAggregate("All children", children, All, "")
+	if a := snapshot(h).Aggregates[1]; a.ID != anyHome || a.Kind != "presence" || !slices.Equal(a.Members, []Target{TargetPresence(alice), TargetPresence(bob)}) {
+		t.Fatalf("aggregate %+v", a)
+	}
+	for name, ms := range map[string][]Target{
+		"the Home presence": {TargetPresence(alice), TargetPresence(HomePresence)},
+		"a Flag besides":    {TargetPresence(alice), TargetFlag(mustFlag(t, h, "Night"))},
+	} {
+		if _, err := h.CreateAggregate("Bad", ms, Any, ""); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s as a member: err = %v, want ErrInvalid", name, err)
+		}
+	}
+	if _, err := h.CreateAggregate("Bad", []Target{TargetPresence(chloe)}, Any, ""); !errors.Is(err, ErrNotFound) {
+		t.Errorf("an unknown Presence as a member: err = %v, want ErrNotFound", err)
+	}
+	drain(updates)
+
+	// Bob has no Value: he is ignored.
+	h.Command(TargetPresence(alice), Request{Values: map[string]any{"home": true}})
+	if got := about(drain(updates), allHome); !slices.Equal(got, []string{"value home=true", "value manual=true"}) {
+		t.Errorf("all, Alice home = %v", got)
+	}
+	h.Command(TargetPresence(bob), Request{Values: map[string]any{"home": false}})
+	us := drain(updates)
+	if got := about(us, allHome); !slices.Equal(got, []string{"value home=false", "refresh manual=true"}) {
+		t.Errorf("all, Bob away = %v", got)
+	}
+	if got := about(us, anyHome); !slices.Equal(got, []string{"refresh home=true", "refresh manual=true"}) {
+		t.Errorf("any, Bob away = %v", got)
+	}
+
+	// "All children home" reaches each of them.
+	cmd, err := h.Command(TargetAggregate(allHome), Request{Values: map[string]any{"home": true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	us = drain(updates)
+	if ss := aggregateCommands(us, allHome); !slices.Equal(ss, []CommandStatus{Pending, Confirmed}) || us[0].Command.ID != cmd {
+		t.Errorf("aggregate command statuses = %v", ss)
+	}
+	for _, p := range []PersonID{alice, bob} {
+		if v, _ := value(h, TargetPresence(p).Ref("home")); v.Data != true {
+			t.Errorf("%s home = %v after the Aggregate's Command", p, v.Data)
+		}
+	}
+
+	// A restart recalls the members' Values, so the Aggregates'; a Person gone
+	// is no member any more.
+	restarted := restart(t, dir)
+	if err := restarted.SetPersons([]Person{{alice, "Alice"}}); err != nil {
+		t.Fatal(err)
+	}
+	s := snapshot(restarted)
+	if a := s.Aggregates[1]; a.Kind != "presence" || !slices.Equal(a.Members, []Target{TargetPresence(alice)}) {
+		t.Errorf("after a restart without Bob: %+v", a)
+	}
+	if v, ok := value(restarted, TargetAggregate(anyHome).Ref("home")); !ok || v.Data != true {
+		t.Errorf("after a restart: home = %+v, %v; want true", v, ok)
+	}
+	if saved := onDisk(t, dir).aggregates; !slices.Equal(saved[0].Members, []Target{TargetPresence(alice)}) {
+		t.Errorf("saved %+v, want Bob dropped", saved)
+	}
+}
+
+func mustFlag(t *testing.T, h *Home, name string) FlagID {
+	t.Helper()
+	id, err := h.CreateFlag(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }
 
 func TestAPresenceSetByHand(t *testing.T) {

@@ -29,22 +29,26 @@ export const diagnosticKeys = ['current', 'voltage']
 
 // roles sorts the Capabilities of a Function of kind, or of a Device itself
 // (kind ''), by Role. Each lands in one Role at most: a light's composites
-// beside its colour (color_xy is color_hs in other coordinates) in none.
+// beside its colour (color_xy is color_hs in other coordinates) in none. A
+// Presence's home is its main control, the Home presence's a state, and
+// manual, how home was set, a diagnostic (ADR 0052).
 export function roles(kind: string, caps: Capability[]): Roles {
   const light = kind === 'light'
+  const presence = kind === 'presence'
   const r: Roles = { adjustments: [], readings: [], events: [], settings: [], health: [], diagnostics: [] }
-  const rank = (c: Capability) => (light ? (c.key === 'state' ? 0 : -1) : mainControls.indexOf(c.key))
+  const own = light ? 'state' : presence ? 'home' : undefined
+  const rank = (c: Capability) => (own ? (c.key === own ? 0 : -1) : mainControls.indexOf(c.key))
   r.control = caps.filter((c) => c.category === 'primary' && c.access.settable && !c.stateless && rank(c) >= 0).sort((a, b) => rank(a) - rank(b))[0]
   for (const c of caps) {
     if (c === r.control) continue
     if (healthKeys.includes(c.key)) r.health.push(c)
     else if (c.category === 'config') r.settings.push(c)
-    else if (c.category === 'diagnostic' || diagnosticKeys.includes(c.key)) r.diagnostics.push(c)
+    else if (c.category === 'diagnostic' || diagnosticKeys.includes(c.key) || (presence && c.key === 'manual')) r.diagnostics.push(c)
     else if (c.stateless) r.events.push(c)
     else if (c.access.settable) {
       if (light && lightAdjustments.includes(c.key)) r.adjustments.push(c)
       else if (!light || c.type !== 'composite') r.settings.push(c)
-    } else if (!r.state && c.type === 'binary' && stateKeys.includes(c.key)) r.state = c
+    } else if (!r.state && c.type === 'binary' && (stateKeys.includes(c.key) || (presence && c.key === 'home'))) r.state = c
     else r.readings.push(c)
   }
   r.readings.sort((a, b) => byReading(a.key, b.key))
@@ -70,12 +74,15 @@ export const turns = (c: Capability): [on: string, count: string] =>
     ? ['open', 'Openings']
     : c.key === 'connected'
       ? ['connected', 'Connections']
-      : motion(c)
-        ? ['occupied', 'Detections']
-        : ['on', 'Times on']
+      : c.key === 'home'
+        ? ['home', 'Arrivals']
+        : motion(c)
+          ? ['occupied', 'Detections']
+          : ['on', 'Times on']
 
 // What a state is while off.
-export const rests = (c: Capability) => (c.key === 'contact' ? 'closed' : c.key === 'connected' ? 'not connected' : 'clear')
+const rest: Record<string, string> = { contact: 'closed', connected: 'not connected', home: 'away' }
+export const rests = (c: Capability) => rest[c.key] ?? 'clear'
 
 // A button's Events are presses.
 export const presses = (c: Capability) => c.key === 'action'

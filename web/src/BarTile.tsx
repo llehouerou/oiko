@@ -1,7 +1,17 @@
-// The bar Tile of a light, a plug, a siren or a Flag.
+// The bar Tile of a light, a plug, a siren, a Flag or a Presence.
 
 import { useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
-import { mdiAlarmLight, mdiAlarmLightOutline, mdiCogOutline, mdiFlag, mdiFlagOutline, mdiPowerPlug, mdiPowerPlugOutline } from '@mdi/js'
+import {
+  mdiAccount,
+  mdiAccountOutline,
+  mdiAlarmLight,
+  mdiAlarmLightOutline,
+  mdiCogOutline,
+  mdiFlag,
+  mdiFlagOutline,
+  mdiPowerPlug,
+  mdiPowerPlugOutline,
+} from '@mdi/js'
 import { sendCommand, useCommand, useControl, useOnCount, useValue } from './store'
 import type { Fn, Target } from './types'
 import { titleIfTruncated } from './truncated'
@@ -19,6 +29,7 @@ const barIcons: Record<string, [off: string, on: string]> = {
   switch: [mdiPowerPlugOutline, mdiPowerPlug],
   alarm: [mdiAlarmLightOutline, mdiAlarmLight],
   flag: [mdiFlagOutline, mdiFlag],
+  presence: [mdiAccountOutline, mdiAccount],
 }
 
 // A light's, a plug's or a siren's tile is a single control, a bar: a tap toggles it, a sideways
@@ -39,6 +50,7 @@ export function BarTile({
   compact = false,
   hideName = false,
   onSettings,
+  onMore,
 }: {
   name: string
   icon?: string
@@ -52,6 +64,7 @@ export function BarTile({
   compact?: boolean // in an Area's header: the bar alone, its name only on its sheet; a square on a phone
   hideName?: boolean
   onSettings?: (back: () => void) => void // an Admin's: its Device's or Aggregate's panel
+  onMore?: () => void // what ⋯ and a long press open in place of its sheet: a Presence's own
 }) {
   const cap = fn.capabilities.find((c) => c.key === 'brightness' && c.access.settable && c.min != null && c.max != null)
   const on = useValue({ target, capability: key })?.data === true
@@ -60,7 +73,9 @@ export function BarTile({
   const command = useCommand(target)
   const { value: picked, set, picking, hold } = useControl<number>(target, 'brightness', { fade: true })
   const brightness = typeof picked === 'number' ? picked : undefined
-  const [sheet, setSheet] = useState(false)
+  const [sheet, setOpen] = useState(false)
+  const setSheet = (open: boolean) => (onMore && open ? onMore() : setOpen(open))
+  const [onWord, offWord] = fn.kind === 'presence' ? ['home', 'away'] : ['on', 'off']
   const gesture = useRef<{ x: number; y: number; from: number; width: number; moving: boolean; press: number } | null>(null)
   const tapped = useRef(false) // the gesture that just ended neither dimmed nor scrolled
   const lit = on || picking
@@ -113,7 +128,7 @@ export function BarTile({
     <>
       {[
         lit && group && `${litCount}/${members.length}`,
-        !lit ? 'off' : cap && brightness !== undefined ? display(brightness, cap) : 'on',
+        !lit ? offWord : cap && brightness !== undefined ? display(brightness, cap) : onWord,
         lit && powerCap && power !== undefined && display(power, powerCap),
         note,
       ]

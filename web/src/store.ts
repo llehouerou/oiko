@@ -47,8 +47,8 @@ const availability = new Map<string, Availability>()
 const commands = new Map<string, CommandState>()
 const runs = new Map<string, RunEnd[]>() // announced since the page loaded, by Automation, the latest first
 const noRuns: RunEnd[] = []
-let targets: Catalogue | null = null // built again once devices, aggregates or flags change
-const catalogueNow = () => (targets ??= catalogue(devices, aggregates, flags))
+let targets: Catalogue | null = null // built again once devices, aggregates, flags or presences change
+const catalogueNow = () => (targets ??= catalogue(devices, aggregates, flags, presences))
 
 const listeners = new Map<string, Set<Listener>>()
 const subscribers = new Map<string, (l: Listener) => () => void>()
@@ -115,6 +115,8 @@ function apply(msg: Snapshot | Update) {
       return notify('flags')
     case 'presences':
       presences = msg.presences ?? []
+      targets = null
+      notify('catalogue')
       return notify('presences')
     case 'areas':
       areas = msg.areas ?? []

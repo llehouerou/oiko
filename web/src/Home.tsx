@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { mdiCheck, mdiContentCopy, mdiViewDashboardEditOutline } from '@mdi/js'
-import { useAggregates, useAreas, useAutomationStatuses, useDashboardList, useDashboards, useDevices, useFlags } from './store'
+import { useAggregates, useAreas, useAutomationStatuses, useDashboardList, useDashboards, useDevices, useFlags, usePresences } from './store'
 import { useAllows, useMe } from './access'
 import { copied, dashboard, shown } from './dashboard'
 import { ActionSetting, AppBar, ChartsSetting, CreateButton } from './AppBar'
@@ -24,6 +24,7 @@ export function Home({ hash }: { hash: string }) {
   const devices = useDevices()
   const aggregates = useAggregates()
   const flags = useFlags()
+  const presences = usePresences() // their Tiles, on a custom Dashboard
   const areas = useAreas()
   const automations = useAutomationStatuses() // their Tiles: those with a Manual trigger show
   const dashboards = useDashboards()
@@ -57,7 +58,7 @@ export function Home({ hash }: { hash: string }) {
   const openAggregate = aggregates.find((a) => a.id === openId)
   const openFlag = flags.find((f) => f.id === openId)
   const openArea = areas.find((a) => a.id === openId)
-  const home = dashboard(devices, aggregates, flags, areas, automations)
+  const home = dashboard(devices, aggregates, flags, areas, automations, presences)
   const { pills, sections } = home
   const current = shown(hash, dashboards, list, kiosk) // undefined: the built-in Dashboard
   // Whether the viewer changes the current Dashboard: an Admin arranges the built-in one (the

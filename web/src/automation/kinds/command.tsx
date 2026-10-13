@@ -65,7 +65,12 @@ function CommandForm({ p, set, targets: catalogue }: FormProps) {
     <>
       {[...targets, undefined].map((t, i) => (
         <Row key={i}>
-          <TargetPicker value={t} targets={catalogue} onChange={(n) => set({ targets: t ? targets.map((x, j) => (j === i ? n : x)) : [...targets, n] })} />
+          <TargetPicker
+            value={t}
+            targets={catalogue}
+            offer={(e) => e.capabilities.some((c) => c.access.settable)} // what can be commanded: not the Home presence, nor a sensor
+            onChange={(n) => set({ targets: t ? targets.map((x, j) => (j === i ? n : x)) : [...targets, n] })}
+          />
           {t && (
             <button
               onClick={() => set({ targets: targets.filter((_, j) => j !== i) })}

@@ -32,8 +32,8 @@ const (
 )
 
 // Aggregate is a Function computed by Oiko from member Functions of the same
-// kind: Functions of Devices, Flags and nested Aggregates. Home treats an
-// *Aggregate as immutable once stored.
+// kind: Functions of Devices, Flags, Persons' Presences and nested
+// Aggregates. Home treats an *Aggregate as immutable once stored.
 type Aggregate struct {
 	ID   AggregateID `json:"id"`
 	Name string      `json:"name"`
@@ -103,8 +103,8 @@ func (h *Home) define(id AggregateID, name string, members []Target, binary Bina
 			if h.aggregates[id] == nil {
 				return fmt.Errorf("%w: unknown member aggregate %s", ErrNotFound, id)
 			}
-		} else if m.Presence() != "" {
-			return fmt.Errorf("%w: a presence cannot be a member yet", ErrInvalid) // Aggregates of Presences are to come (#127)
+		} else if m.Presence() == HomePresence {
+			return fmt.Errorf("%w: the home presence cannot be a member", ErrInvalid)
 		} else if _, ok := h.member(m); !ok {
 			return fmt.Errorf("%w: unknown member %s", ErrNotFound, m)
 		}
@@ -263,12 +263,15 @@ func (h *Home) deriveAll() bool {
 	return changed
 }
 
-// rederive follows a change of the Devices: members and Presence sources
-// whose Device was deleted are dropped, then derived Capabilities, Values and
-// Availability are recomputed and announced where they differ, and the
-// Presences follow. Callers hold h.mu.
+// rederive follows a change of the Devices or the Persons: members and
+// Presence sources whose Device or Person was deleted are dropped, then
+// derived Capabilities, Values and Availability are recomputed and announced
+// where they differ, and the Presences follow. Callers hold h.mu.
 func (h *Home) rederive() error {
-	gone := func(t Target) bool { return t.Device() != "" && h.devices[t.Device()] == nil }
+	gone := func(t Target) bool {
+		p := t.Presence()
+		return t.Device() != "" && h.devices[t.Device()] == nil || p != "" && p != HomePresence && h.presences[p] == nil
+	}
 	err := h.dropSources(gone)
 	if h.dropMembers(gone) {
 		return errors.Join(err, h.aggregatesChanged())
@@ -330,7 +333,7 @@ next:
 	}
 }
 
-// member resolves m, a Function of a Device or a Flag; false if it is
+// member resolves m, a Function of a Device, a Flag or a Presence; false if it is
 // neither, such as a Device itself or a nested Aggregate. Callers hold h.mu.
 func (h *Home) member(m Target) (direct, bool) {
 	if m.Device() != "" && m.Function() == "" {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { boxUntil, chip, heldFor, homeChip, persons, readCapability, someoneElse, sourceState, sourceText, stretches } from './presence'
-import type { Capability, Presence, Value } from './types'
+import { memberLeaves } from './tiles'
+import { boxUntil, chip, groupChip, groups, heldFor, homeChip, persons, readCapability, someoneElse, sourceState, sourceText, stretches } from './presence'
+import type { Aggregate, Capability, Presence, Value } from './types'
 
 const presence = (id: string, name: string): Presence => ({ id, name, kind: 'presence', capabilities: [], sources: [] })
 const value = (data: boolean, since = '2026-01-01T10:00:00Z'): Value => ({ data, at: since, since })
@@ -30,6 +31,20 @@ describe('the Presence row', () => {
     expect(homeChip(value(true), 0, now).text).toBe('Someone home · not one of you')
     expect(homeChip(value(false), 0, now).text).toBe('Nobody home')
     expect(homeChip(undefined, 0, now)).toEqual({ state: 'unknown', text: 'Home unknown', held: '' })
+  })
+
+  it('shows a chip per Aggregate of Presences, by Name, counting its members home', () => {
+    const group = (id: string, name: string, kind: string, ...members: string[]): Aggregate => ({ id, name, kind, members, binary: 'any', numeric: 'mean' })
+    const as = [
+      group('k', 'Children', 'presence', 'presence:a', 'presence:b'),
+      group('n', 'Lights', 'light', 'device:l/light'),
+      group('e', 'everyone', 'presence', 'aggregate:k', 'presence:c', 'presence:a'),
+    ]
+    expect(groups(as).map((g) => [g.name, memberLeaves(g, as)])).toEqual([
+      ['Children', ['presence:a', 'presence:b']],
+      ['everyone', ['presence:a', 'presence:b', 'presence:c']], // nested ones resolved, each once
+    ])
+    expect(groupChip(as[0]!, [value(true), undefined])).toBe('Children 1/2') // one with no Value is not home
   })
 })
 
