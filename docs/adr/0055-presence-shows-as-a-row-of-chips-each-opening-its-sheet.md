@@ -19,7 +19,7 @@ We chose this because who is home is read at a glance and acted on rarely. A sin
 
 ## Consequences
 
-- A Dashboard gains a setting of its own: whether it shows the Presence row. A custom Dashboard keeps it in its document (ADR 0045); the built-in one, which an Admin has only arranged so far, gets its first setting, which an Admin changes while arranging. Both are new optional fields, absent meaning the default: a minor release (ADR 0019).
+- A Dashboard gains a setting of its own: whether it shows the Presence row. A custom Dashboard keeps it in its document (ADR 0045); the built-in one, which an Admin has only arranged so far, gets its first setting, which an Admin changes while arranging. `dashboards.json` keeps it in a `builtin` entry, the only thing stored of the built-in Dashboard, which an Admin saves with `PUT /api/dashboards/builtin` and everyone receives in their `dashboards` message (ADR 0046). Both are new optional fields, absent meaning the default: a minor release (ADR 0019).
 - The Roles learn `home` as a Presence's main control and `connected` as a state key; `docs/write-a-bridge.md`'s Roles table lists `connected`, which any type of Bridge may now use.
 - A sheet's Home / Away is a Command like a Tile's toggle: anyone who may issue one sees it (ADR 0052, ADR 0053). Only an Admin sees Edit.
 - The sheet derives what it says (the Persons home, someone else inside, until when a source counts) from the presences list and the sources' Values, with nothing added to the API.
