@@ -20,11 +20,18 @@ export interface Capability {
   counter?: boolean // a numeric running total, rising except on reset
 }
 
+// What a Capability is for on its Function, as Oiko decides it (ADR 0056).
+export type Role = 'control' | 'adjustment' | 'state' | 'reading' | 'event' | 'setting' | 'health' | 'diagnostic'
+
+// The Role of each Capability of what carries them, by key; one with none is absent.
+export type RoleMap = Partial<Record<string, Role>>
+
 export interface Fn {
   key: string
   kind: string
   area?: string // its Device's when absent
   capabilities: Capability[]
+  roles?: RoleMap
 }
 
 // A room or zone of the home; Areas come in the order an Admin set.
@@ -59,6 +66,7 @@ export interface Device {
   detached?: boolean
   functions: Fn[] | null
   capabilities: Capability[] | null
+  roles?: RoleMap // of its own Capabilities
 }
 
 export type { Target } from './targets'
@@ -81,6 +89,7 @@ export interface Aggregate {
   numeric: 'mean' | 'min' | 'max' | 'sum'
   kind?: string
   capabilities?: Capability[]
+  roles?: RoleMap
 }
 
 // A binary Function held by Oiko itself: kind 'flag', one Capability 'on'.
@@ -90,6 +99,7 @@ export interface Flag {
   area?: string
   kind: string
   capabilities: Capability[]
+  roles?: RoleMap
 }
 
 // A Person's Presence, derived by Oiko under their Name: kind 'presence', Capabilities 'home'
@@ -102,6 +112,7 @@ export interface Presence {
   name: string
   kind: string
   capabilities: Capability[]
+  roles?: RoleMap
   sources?: PresenceSource[] // a Person's
   entranceDoors?: Target[] // the Home presence's, true meaning open
   signsOfLife?: Target[] // the Home presence's, true meaning someone is there

@@ -45,7 +45,7 @@ function show(v: unknown, c?: Capability) {
 export function setting(targets: Catalogue, t: Target, key: string, v: unknown) {
   const e = targets.get(t)
   const c = e?.capabilities.find((x) => x.key === key)
-  const control = e && roles(e.kind, e.capabilities).control
+  const control = e && roles(e).control
   return control?.key === key && control.type === 'binary' ? show(v, c) : `${c?.label ?? key} ${show(v, c)}`
 }
 

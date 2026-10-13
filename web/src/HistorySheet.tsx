@@ -102,14 +102,14 @@ function Sheet({ target, onClose }: { target: Target; onClose: () => void }) {
   const compared = others.flatMap((t) => targets.get(t) ?? [])
   const series = subject
     ? [
-        ...sheetSeries(target, subject.kind, subject.capabilities, subject.ownerCapabilities, all).map((s) => ({ ...s, name: subject.name })),
-        ...compared.flatMap((e) => sheetSeries(e.target, e.kind, e.capabilities, [], false).map((s) => ({ ...s, name: e.name }))),
+        ...sheetSeries(target, subject, subject.ownerCapabilities, all).map((s) => ({ ...s, name: subject.name })),
+        ...compared.flatMap((e) => sheetSeries(e.target, e, [], false).map((s) => ({ ...s, name: e.name }))),
       ]
     : []
   const refs = series.map((s) => s.ref)
   const candidates = subject ? compareCandidates(targets, target, subject.kind, others) : []
   const [mode, setMode] = useState<'curve' | 'period'>('curve')
-  const offered = subject ? measures(sheetSeries(target, subject.kind, subject.capabilities, [], false)) : []
+  const offered = subject ? measures(sheetSeries(target, subject, [], false)) : []
   const perPeriod = mode === 'period' && offered.length > 0
 
   // One call per range, resolution or series; a zoom's gestures settle first.

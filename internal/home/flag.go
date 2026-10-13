@@ -19,6 +19,7 @@ type Flag struct {
 	Area         AreaID       `json:"area,omitempty"` // "" for none
 	Kind         string       `json:"kind"`
 	Capabilities []Capability `json:"capabilities"`
+	Roles        Roles        `json:"roles"`
 }
 
 // SavedFlag is a Flag as persisted: its definition and its Value.
@@ -145,7 +146,7 @@ func (h *Home) saveFlagList() error {
 func (h *Home) flagList() []Flag {
 	list := make([]Flag, 0, len(h.flags))
 	for _, f := range h.flags {
-		f.Kind, f.Capabilities = flagFunction.Kind, flagFunction.Capabilities
+		f.Kind, f.Capabilities, f.Roles = flagFunction.Kind, flagFunction.Capabilities, roles(flagFunction.Kind, flagFunction.Capabilities)
 		list = append(list, f)
 	}
 	slices.SortFunc(list, func(a, b Flag) int {

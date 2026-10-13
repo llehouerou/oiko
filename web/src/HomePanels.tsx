@@ -364,8 +364,8 @@ export function AggregatePanel({
 // The Roles of a Device's own Capabilities and of each of its Functions'.
 function deviceRoles(device: Device): { target: Target; fn?: Fn; r: Roles }[] {
   return [
-    { target: deviceTarget(device.id), r: roles('', device.capabilities ?? []) },
-    ...(device.functions ?? []).map((fn) => ({ target: deviceTarget(device.id, fn.key), fn, r: roles(fn.kind, fn.capabilities) })),
+    { target: deviceTarget(device.id), r: roles({ capabilities: device.capabilities ?? [], roles: device.roles }) },
+    ...(device.functions ?? []).map((fn) => ({ target: deviceTarget(device.id, fn.key), fn, r: roles(fn) })),
   ]
 }
 

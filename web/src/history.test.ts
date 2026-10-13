@@ -25,7 +25,8 @@ import {
   type Point,
 } from './history'
 import { catalogue } from './targets'
-import type { Capability, CommandStatus, Device } from './types'
+import { announced, type Given } from './fixtures'
+import type { CommandStatus, Device } from './types'
 
 // What the store holds: the lamp's brightness, which the writer may not have committed yet.
 vi.mock('./store', () => ({
@@ -258,7 +259,7 @@ test('markers closer than a few pixels cluster', () => {
   expect(cluster([m(50), m(0), m(5), m(12), m(30), m(2000)], 0, 1000, 1000).map((ms) => ms.map((x) => x.t))).toEqual([[0, 5], [12], [30], [50]])
 })
 
-const cap = (key: string, type: Capability['type'], more: Partial<Capability> = {}): Capability => ({
+const cap = (key: string, type: Given['type'], more: Partial<Given> = {}): Given => ({
   key,
   label: key,
   type,
@@ -267,18 +268,20 @@ const cap = (key: string, type: Capability['type'], more: Partial<Capability> = 
   ...more,
 })
 const settable = { access: { observable: true, settable: true, queryable: true } }
+const control = { ...settable, role: 'control' as const }
+const setting = { ...settable, role: 'setting' as const }
 
 test('a sheet charts the everyday series, the rest behind a toggle', () => {
-  const plug = [
-    cap('state', 'binary', settable),
-    cap('power', 'numeric'),
-    cap('energy', 'numeric'),
-    cap('current', 'numeric'),
-    cap('voltage', 'numeric'),
-    cap('child_lock', 'binary', settable), // primary, yet not the on/off
-  ]
+  const plug = announced(
+    cap('state', 'binary', control),
+    cap('power', 'numeric', { role: 'reading' }),
+    cap('energy', 'numeric', { role: 'reading' }),
+    cap('current', 'numeric', { role: 'diagnostic' }),
+    cap('voltage', 'numeric', { role: 'diagnostic' }),
+    cap('child_lock', 'binary', setting), // primary, yet not the on/off
+  )
   const device = [cap('linkquality', 'numeric', { category: 'diagnostic' })]
-  const keys = (all: boolean) => sheetSeries('device:p/plug', 'switch', plug, device, all).map((s) => `${s.ref.target}|${s.ref.capability}`)
+  const keys = (all: boolean) => sheetSeries('device:p/plug', plug, device, all).map((s) => `${s.ref.target}|${s.ref.capability}`)
   expect(keys(false)).toEqual(['device:p/plug|state', 'device:p/plug|power', 'device:p/plug|energy'])
   expect(keys(true)).toEqual([
     'device:p/plug|state',
@@ -289,37 +292,37 @@ test('a sheet charts the everyday series, the rest behind a toggle', () => {
     'device:p/plug|child_lock',
     'device:p|linkquality',
   ])
-  const lightCaps = [
-    cap('state', 'binary', settable),
-    cap('brightness', 'numeric', settable),
-    cap('color_temp', 'numeric', settable),
-    cap('color_hs', 'composite', settable),
-    cap('effect', 'enum', settable),
-    cap('action', 'enum', { stateless: true }),
-  ]
-  const light = (all: boolean) => sheetSeries('flag:x', 'light', lightCaps, [], all).map((s) => s.cap.key)
+  const lightCaps = announced(
+    cap('state', 'binary', control),
+    cap('brightness', 'numeric', { ...settable, role: 'adjustment' }),
+    cap('color_temp', 'numeric', { ...settable, role: 'adjustment' }),
+    cap('color_hs', 'composite', { ...settable, role: 'adjustment' }),
+    cap('effect', 'enum', setting),
+    cap('action', 'enum', { stateless: true, role: 'event' }),
+  )
+  const light = (all: boolean) => sheetSeries('flag:x', lightCaps, [], all).map((s) => s.cap.key)
   expect(light(false)).toEqual(['state', 'brightness', 'color_temp', 'action']) // its Events, as ticks
   expect(light(true)).toEqual(['state', 'brightness', 'color_temp', 'action', 'effect'])
 })
 
 test('a sheet offers to compare with other Functions that chart something, the same kind first', () => {
-  const d = (id: string, name: string, key: string, kind: string, caps = [cap('temperature', 'numeric')]): Device => ({
+  const d = (id: string, name: string, key: string, kind: string, caps = [cap('temperature', 'numeric', { role: 'reading' })]): Device => ({
     id,
     name,
     bridge: 'z2m',
     nativeAddress: id,
-    functions: [{ key, kind, capabilities: caps }],
+    functions: [{ key, kind, ...announced(...caps) }],
     capabilities: [cap('temperature', 'numeric')], // a Device itself is never offered
   })
   const c = catalogue(
     [
       d('a', 'Living room', 't', 'temperature'),
-      d('b', 'Office', 'plug', 'switch', [cap('state', 'binary', settable)]),
+      d('b', 'Office', 'plug', 'switch', [cap('state', 'binary', control)]),
       d('c', 'Kitchen', 't', 'temperature'),
       d('d', 'Bedroom', 't', 'temperature'),
-      d('e', 'Alpha', 'x', 'other', [cap('timeout', 'numeric', settable)]), // a setting: nothing to chart by default
-      d('f', 'Workshop', 'l', 'light', [cap('state', 'binary', settable)]),
-      d('g', 'Zinc', 'c', 'contact', [cap('contact', 'binary')]),
+      d('e', 'Alpha', 'x', 'other', [cap('timeout', 'numeric', setting)]), // a setting: nothing to chart by default
+      d('f', 'Workshop', 'l', 'light', [cap('state', 'binary', control)]),
+      d('g', 'Zinc', 'c', 'contact', [cap('contact', 'binary', { role: 'state' })]),
     ],
     [],
     [],
@@ -329,7 +332,7 @@ test('a sheet offers to compare with other Functions that chart something, the s
 })
 
 test('a Function offers time on and counts of its on/off and states, presses, and min/mean/max of its readings', () => {
-  const of = (caps: Capability[]) =>
+  const of = (caps: Given[]) =>
     measures(caps.map((c) => ({ ref: { target: 't', capability: c.key }, cap: c }))).map((m) => [m.ref.capability, m.measure, m.label])
   expect(
     of([
@@ -380,35 +383,35 @@ test('a refreshed current period replaces its own, and a new one slides the wind
 })
 
 test('a Timeline lane draws an on/off or a binary reading, a reading, Events, and sums each up', () => {
-  const of = (caps: Capability[], kind = '') => {
-    const l = lane('t', kind, caps)
+  const of = (...caps: Given[]) => {
+    const l = lane('t', announced(...caps))
     return l && { band: l.band?.key, curve: l.curve?.key, events: l.events?.key, summary: l.summary.map((m) => `${m.cap.key} ${m.measure}`) }
   }
+  const reading = { role: 'reading' as const }
   const plug = [
-    cap('state', 'binary', settable),
-    cap('power', 'numeric'),
-    cap('energy', 'numeric', { counter: true }),
-    cap('current', 'numeric'),
-    cap('voltage', 'numeric'),
-    cap('child_lock', 'binary', settable),
+    cap('state', 'binary', control),
+    cap('power', 'numeric', reading),
+    cap('energy', 'numeric', { counter: true, ...reading }),
+    cap('current', 'numeric', { role: 'diagnostic' }),
+    cap('voltage', 'numeric', { role: 'diagnostic' }),
+    cap('child_lock', 'binary', setting),
   ]
-  expect(of(plug)).toEqual({ band: 'state', curve: 'power', events: undefined, summary: ['state time_on', 'energy energy', 'power stats'] })
-  expect(of([cap('state', 'binary', settable), cap('brightness', 'numeric', settable)], 'light')).toMatchObject({
+  expect(of(...plug)).toEqual({ band: 'state', curve: 'power', events: undefined, summary: ['state time_on', 'energy energy', 'power stats'] })
+  expect(of(cap('state', 'binary', control), cap('brightness', 'numeric', { ...settable, role: 'adjustment' }))).toMatchObject({
     band: 'state',
     curve: undefined,
     summary: ['state time_on'],
   })
-  expect(of([cap('on', 'binary', settable)])).toMatchObject({ band: 'on', summary: ['on time_on'] }) // a Flag
-  expect(of([cap('alarm', 'binary', settable)])).toMatchObject({ band: 'alarm', summary: ['alarm time_on'] }) // a siren
-  expect(of([cap('contact', 'binary')])).toMatchObject({ band: 'contact', summary: ['contact count'] }) // openings
-  expect(of([cap('temperature', 'numeric')])).toMatchObject({ curve: 'temperature', summary: ['temperature stats'] })
-  expect(of([cap('energy', 'numeric', { counter: true })])).toMatchObject({ curve: 'energy', summary: ['energy energy'] })
-  expect(of([cap('action', 'enum', { stateless: true })])).toMatchObject({ events: 'action', summary: ['action count'] })
+  expect(of(cap('on', 'binary', control))).toMatchObject({ band: 'on', summary: ['on time_on'] }) // a Flag
+  expect(of(cap('alarm', 'binary', control))).toMatchObject({ band: 'alarm', summary: ['alarm time_on'] }) // a siren
+  expect(of(cap('contact', 'binary', { role: 'state' }))).toMatchObject({ band: 'contact', summary: ['contact count'] }) // openings
+  expect(of(cap('temperature', 'numeric', reading))).toMatchObject({ curve: 'temperature', summary: ['temperature stats'] })
+  expect(of(cap('energy', 'numeric', { counter: true, ...reading }))).toMatchObject({ curve: 'energy', summary: ['energy energy'] })
+  expect(of(cap('action', 'enum', { stateless: true, role: 'event' }))).toMatchObject({ events: 'action', summary: ['action count'] })
   // Settings-only Functions draw nothing.
-  expect(of([cap('occupancy_timeout', 'numeric', settable)])).toBeUndefined()
-  expect(of([cap('led_indication', 'binary', settable)])).toBeUndefined()
-  expect(of([cap('melody', 'enum', settable)])).toBeUndefined()
-  expect(of([cap('state', 'binary', { ...settable, category: 'config' })])).toBeUndefined()
+  expect(of(cap('occupancy_timeout', 'numeric', setting))).toBeUndefined()
+  expect(of(cap('led_indication', 'binary', setting))).toBeUndefined()
+  expect(of(cap('melody', 'enum', setting))).toBeUndefined()
 })
 
 test('a Timeline groups lanes by kind', () => {

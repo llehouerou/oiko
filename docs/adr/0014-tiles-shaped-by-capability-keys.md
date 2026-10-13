@@ -10,6 +10,6 @@ A dashboard Tile shows at most one control: its main control, picked by Capabili
 
 ## Consequences
 
-- The rule lives in the web client: Automations still see every Capability, whatever the Tile shows.
+- Oiko decides the Roles and clients read them (ADR 0056); this first put the rule in the web client. Automations still see every Capability, whatever the Tile shows.
 - A device whose main control has an unlisted key shows no control on its Tile until the key is added to the list.
 - An Aggregate shows as a Device of its kind would.

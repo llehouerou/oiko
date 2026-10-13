@@ -1,14 +1,22 @@
 import { expect, test } from 'vitest'
 import { dashboard } from './dashboard'
 import { tileLayout, type SavedLayout } from './tileLayout'
-import type { Area, Capability, CustomDashboard, Device, Fn } from './types'
+import { announced, type Given } from './fixtures'
+import type { Area, CustomDashboard, Device, Fn } from './types'
 
-const on: Capability = { key: 'state', label: 'State', type: 'binary', access: { observable: true, settable: true, queryable: true }, category: 'primary' }
-const fn = (key: string): Fn => ({ key, kind: key, capabilities: [on] })
+const on: Given = {
+  key: 'state',
+  label: 'State',
+  type: 'binary',
+  access: { observable: true, settable: true, queryable: true },
+  category: 'primary',
+  role: 'control',
+}
+const fn = (key: string): Fn => ({ key, kind: key, ...announced(on) })
 const reading = (key: string): Fn => ({
   key,
   kind: key,
-  capabilities: [{ ...on, key, type: 'numeric', access: { observable: true, settable: false, queryable: false } }],
+  ...announced({ ...on, key, type: 'numeric', access: { observable: true, settable: false, queryable: false }, role: 'reading' }),
 })
 const device = (id: string, area: string | undefined, ...functions: Fn[]): Device => ({
   id,

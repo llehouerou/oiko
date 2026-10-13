@@ -177,5 +177,12 @@ func (h *Home) registryChanged() error {
 
 // persist saves the registry. Callers hold h.mu.
 func (h *Home) persist() error {
-	return h.save(devicesFile, devicesFormat, h.deviceList())
+	list := h.deviceList()
+	for i := range list {
+		list[i].Roles = nil
+		for j := range list[i].Functions {
+			list[i].Functions[j].Roles = nil
+		}
+	}
+	return h.save(devicesFile, devicesFormat, list)
 }

@@ -35,6 +35,7 @@ type Presence struct {
 	Name          string           `json:"name"`
 	Kind          string           `json:"kind"`
 	Capabilities  []Capability     `json:"capabilities"`
+	Roles         Roles            `json:"roles"`
 	Sources       []PresenceSource `json:"sources,omitzero"` // a Person's: never nil
 	*HomeBindings                  // the Home presence's
 }
@@ -352,7 +353,7 @@ func (h *Home) presenceList() []Presence {
 	list := make([]Presence, 0, len(h.presences))
 	for id, p := range h.presences {
 		list = append(list, Presence{ID: id, Name: p.name, Kind: presenceFunction.Kind, Capabilities: presenceFunction.Capabilities,
-			Sources: append([]PresenceSource{}, p.sources...)})
+			Roles: roles(presenceFunction.Kind, presenceFunction.Capabilities), Sources: append([]PresenceSource{}, p.sources...)})
 	}
 	slices.SortFunc(list, func(a, b Presence) int {
 		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.ID, b.ID))

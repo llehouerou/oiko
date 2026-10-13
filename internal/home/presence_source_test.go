@@ -2,10 +2,7 @@ package home
 
 import (
 	"errors"
-	"os"
-	"regexp"
 	"slices"
-	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -82,32 +79,6 @@ func sourcesOf(h *Home, id PersonID) []PresenceSource {
 		}
 	}
 	return nil
-}
-
-// A Presence source is read through the Roles the guide's table lists, as
-// web/src/roles.test.ts keeps the web client's.
-func TestPresenceSourcesReadTheGuidesRoles(t *testing.T) {
-	guide, err := os.ReadFile("../../docs/write-a-bridge.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	row := func(role string) []string {
-		var keys []string
-		for line := range strings.Lines(string(guide)) {
-			if cells := strings.Split(line, "|"); strings.HasPrefix(line, "| "+role+" |") && len(cells) > 2 {
-				for _, m := range regexp.MustCompile("`([^`]+)`").FindAllStringSubmatch(cells[2], -1) {
-					keys = append(keys, m[1])
-				}
-			}
-		}
-		return keys
-	}
-	if got := row("Main control"); !slices.Equal(got, mainControls) {
-		t.Errorf("the guide's main controls are %v, Home's %v", got, mainControls)
-	}
-	if got := row("State"); !slices.Equal(got, stateKeys) {
-		t.Errorf("the guide's states are %v, Home's %v", got, stateKeys)
-	}
 }
 
 func TestAPresenceIsHomeWhileAnySourceCounts(t *testing.T) {

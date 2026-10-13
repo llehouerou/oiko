@@ -7,7 +7,7 @@
 // third.
 
 import { useSyncExternalStore } from 'react'
-import { presses, roles, turns } from './roles'
+import { type Described, presses, roles, turns } from './roles'
 import { current, follow } from './store'
 import { api } from './access'
 import { owner, targetKind, type Catalogue, type Entry } from './targets'
@@ -232,9 +232,10 @@ export const useGaps = () => useSyncExternalStore(tiles.subscribe, () => tiles.s
 // adjustments, state, readings, Events); with all, its settings and diagnostics
 // too, and its Device's (battery, link quality…). Only what draws as a curve, a
 // band or ticks: numeric, binary and enum Values, and Events.
-export function sheetSeries(target: Target, kind: string, caps: Capability[], deviceCaps: Capability[], all: boolean) {
+export function sheetSeries(target: Target, fn: Described, deviceCaps: Capability[], all: boolean) {
   const drawn = (c: Capability) => c.stateless || c.type === 'numeric' || c.type === 'binary' || c.type === 'enum'
-  const r = roles(kind, caps)
+  const caps = fn.capabilities
+  const r = roles(fn)
   const everyday = new Set([r.control, ...r.adjustments, r.state, ...r.readings, ...r.events])
   const of = (t: Target) => (cap: Capability) => ({ ref: { target: t, capability: cap.key }, cap })
   // The everyday ones first, so the toggle leaves them as they were.
@@ -254,7 +255,7 @@ export const listed = (e: Entry) => targetKind(e.target) !== 'device'
 // kind and name.
 export function compareCandidates(c: Catalogue, target: Target, kind: string, picked: Target[]) {
   return c.list
-    .filter((e) => listed(e) && e.target !== target && !picked.includes(e.target) && sheetSeries(e.target, e.kind, e.capabilities, [], false).length > 0)
+    .filter((e) => listed(e) && e.target !== target && !picked.includes(e.target) && sheetSeries(e.target, e, [], false).length > 0)
     .sort((a, b) => Number(b.kind === kind) - Number(a.kind === kind) || a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))
 }
 
@@ -262,8 +263,9 @@ function tileRefs(): Ref[] {
   return current
     .catalogue()
     .list.filter(listed)
-    .flatMap(({ target, kind, capabilities }) => {
-      const c = roles(kind, capabilities).charted
+    .flatMap((e) => {
+      const target = e.target
+      const c = roles(e).charted
       return c ? [{ target, capability: c.key }] : []
     })
 }
@@ -465,8 +467,8 @@ export function measures(series: { ref: Ref; cap: Capability }[]): MeasureOption
 // its Events as ticks; and what it sums up over its span: openings or
 // detections, time on, energy, min–max, presses. A Function with only
 // settings (a timeout, an LED mode, a melody…) draws nothing.
-export function lane(target: Target, kind: string, caps: Capability[]) {
-  const r = roles(kind, caps)
+export function lane(target: Target, fn: Described) {
+  const r = roles(fn)
   const band = r.state ?? r.readings.find((c) => c.type === 'binary') ?? (r.control?.type === 'binary' ? r.control : undefined)
   const counter = r.readings.find((c) => c.counter)
   const curve = r.readings.find((c) => c.type === 'numeric' && !c.counter) ?? counter

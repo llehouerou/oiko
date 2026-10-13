@@ -180,7 +180,7 @@ function HomeSheet({ presence, people, onClose }: { presence: Presence; people: 
   const targets = useCatalogue()
   const refOf = (t: Target): Ref => {
     const e = targets.get(t)
-    return { target: t, capability: (e && readCapability(e.kind, e.capabilities)?.key) ?? '' }
+    return { target: t, capability: (e && readCapability(e)?.key) ?? '' }
   }
   const now = useNow()
   const doors = presence.entranceDoors ?? []
@@ -289,7 +289,7 @@ function HomeBindings({ presence }: { presence: Presence }) {
 function AddBinding({ label, bound, onAdd }: { label: string; bound: Target[]; onAdd: (t: Target) => void }) {
   const targets = useCatalogue()
   const offered = (group: string) =>
-    targets.list.filter((e) => targetKind(e.target) === group && e.kind !== 'presence' && readCapability(e.kind, e.capabilities) && !bound.includes(e.target))
+    targets.list.filter((e) => targetKind(e.target) === group && e.kind !== 'presence' && readCapability(e) && !bound.includes(e.target))
   return (
     <select value="" onChange={(e) => onAdd(e.target.value)} aria-label={label} className="w-full rounded bg-neutral-800 px-2 py-1 text-sm">
       <option value="">{label}…</option>
@@ -448,7 +448,7 @@ function BindingRow({
   onChange?: (changed?: PresenceSource) => void
   delay?: boolean
 }) {
-  const cap = entry && readCapability(entry.kind, entry.capabilities)
+  const cap = entry && readCapability(entry)
   const value = useValue({ target: source.target, capability: cap?.key ?? '' })
   const availability = useAvailability(source.target)
   const device = useDevices().find((d) => deviceTarget(d.id) === owner(source.target))

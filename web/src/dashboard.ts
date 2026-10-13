@@ -121,7 +121,7 @@ export function dashboard(
       detached: !!device.detached,
       health: [deviceTarget(device.id), ...(device.functions ?? []).map((fn) => deviceTarget(device.id, fn.key))].flatMap((target) => {
         const e = entry(target)
-        return roles(e.kind, e.capabilities).health.map((cap) => ({ target, cap }))
+        return roles(e).health.map((cap) => ({ target, cap }))
       }),
       summary: fns.length === 1 && titled(fns[0]!) ? fns[0]!.kind : '',
       fns: fns.map((fn) => ({ target: deviceTarget(device.id, fn.key), fn })),

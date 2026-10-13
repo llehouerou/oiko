@@ -19,7 +19,7 @@ export function memberLeaves(a: Aggregate, aggregates: Aggregate[], seen = new S
 // What a Tile shows of a Function (ADR 0014): its main control and what refines it,
 // its state, readings and Events; settings, health and diagnostics are behind ⋯.
 export function tileCaps(fn: Fn) {
-  const r = roles(fn.kind, fn.capabilities)
+  const r = roles(fn)
   return [r.control, ...r.adjustments, r.state, ...r.readings, ...r.events].filter((c) => c !== undefined)
 }
 
@@ -48,7 +48,7 @@ export type Shape =
   | { kind: 'controls' }
 
 export function tileShape(fns: { target: Target; fn: Fn }[]): Shape {
-  const all = fns.map(({ target, fn }) => ({ target, fn, r: roles(fn.kind, fn.capabilities) }))
+  const all = fns.map(({ target, fn }) => ({ target, fn, r: roles(fn) }))
   const parts = (pick: (r: Roles) => (Capability | undefined)[]) =>
     all.flatMap(({ target, fn, r }) => pick(r).flatMap((cap) => (cap ? [{ target, fn, cap }] : [])))
   const camera = all.find(({ fn }) => fn.kind === 'camera')
@@ -71,7 +71,7 @@ export const unwell = (data: unknown) => (typeof data === 'number' ? data <= 20 
 // A lone control labels itself, and so do readings; a toggle has no label of its own,
 // and several controls together need their Function named.
 export function titled(fn: Fn) {
-  const r = roles(fn.kind, fn.capabilities)
+  const r = roles(fn)
   const settable = [r.control, ...r.adjustments].filter((c) => c !== undefined)
   return settable.some((c) => c.type === 'binary') || (tileCaps(fn).length > 1 && settable.length > 0)
 }

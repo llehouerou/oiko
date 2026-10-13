@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'vitest'
 import flow5a from '../../../internal/automation/testdata/flow5a-veranda.json'
-import type { Capability, CommandRecord, CommandState, RunEnd, Trace } from '../types'
+import type { CommandRecord, CommandState, RunEnd, Trace } from '../types'
+import { announced, type Given } from '../fixtures'
 import { catalogue } from '../targets'
 import { evidence, mergeCommands, mergeRuns, onPath, pathOf, runSummary } from './runtime'
 
-const cap = (key: string, label: string, extra: Partial<Capability> = {}): Capability => ({
+const cap = (key: string, label: string, extra: Partial<Given> = {}): Given => ({
   key,
   label,
   type: 'binary',
@@ -12,25 +13,35 @@ const cap = (key: string, label: string, extra: Partial<Capability> = {}): Capab
   category: 'primary',
   ...extra,
 })
-const fn = (id: string, name: string, kind: string, capabilities: Capability[]) => ({
+const fn = (id: string, name: string, kind: string, capabilities: Given[]) => ({
   id,
   name,
   bridge: 'z2m',
   nativeAddress: id,
-  functions: [{ key: kind, kind, capabilities }],
+  functions: [{ key: kind, kind, ...announced(...capabilities) }],
   capabilities: null,
 })
 const options = catalogue(
   [
     fn('strip', 'Office strip', 'light', [
-      cap('effect', 'Effect', { type: 'enum' }),
-      cap('state', 'State'),
-      cap('effect_speed', 'Effect speed', { type: 'numeric' }),
-      cap('brightness', 'Brightness', { type: 'numeric', unit: '%' }),
+      cap('effect', 'Effect', { type: 'enum', role: 'setting' }),
+      cap('state', 'State', { role: 'control' }),
+      cap('effect_speed', 'Effect speed', { type: 'numeric', role: 'setting' }),
+      cap('brightness', 'Brightness', { type: 'numeric', unit: '%', role: 'adjustment' }),
     ]),
     fn('remote', 'Remote', 'button', []),
   ],
-  [{ id: 'motion', name: 'Motion veranda', members: [], binary: 'any', numeric: 'mean', kind: 'occupancy', capabilities: [cap('occupancy', 'Occupancy')] }],
+  [
+    {
+      id: 'motion',
+      name: 'Motion veranda',
+      members: [],
+      binary: 'any',
+      numeric: 'mean',
+      kind: 'occupancy',
+      ...announced(cap('occupancy', 'Occupancy', { role: 'state' })),
+    },
+  ],
   [],
 )
 const motionOn = { step: 'motion', kind: 'valueTrigger', target: 'aggregate:motion', capability: 'occupancy', value: true, time: '2026-09-28T19:59:58Z' }

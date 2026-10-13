@@ -3,7 +3,7 @@
 // is none of the Persons is inside, and until when.
 
 import { held, type Point } from './history'
-import { rests, roles, turns } from './roles'
+import { type Described, rests, roles, turns } from './roles'
 import type { Aggregate, Capability, Presence, PresenceSource, Value } from './types'
 
 // The Home presence's id, as in its key presence:home.
@@ -73,8 +73,8 @@ export const stretches = (ps: Point[], from: number, to: number) =>
 
 // readCapability is what a Presence source is read through, as Oiko reads it (ADR 0049): its main
 // control if an on/off, otherwise its binary state; undefined if it has neither.
-export function readCapability(kind: string, caps: Capability[]): Capability | undefined {
-  const r = roles(kind, caps)
+export function readCapability(o: Described): Capability | undefined {
+  const r = roles(o)
   return r.control?.type === 'binary' ? r.control : r.state
 }
 

@@ -810,7 +810,13 @@ func (h *Home) emit(u Update) {
 func (h *Home) deviceList() []Device {
 	list := make([]Device, 0, len(h.devices))
 	for _, d := range h.devices {
-		list = append(list, *d)
+		d := *d
+		d.Roles = roles("", d.Capabilities)
+		d.Functions = slices.Clone(d.Functions) // the stored Device's own
+		for i, f := range d.Functions {
+			d.Functions[i].Roles = roles(f.Kind, f.Capabilities)
+		}
+		list = append(list, d)
 	}
 	slices.SortFunc(list, func(a, b Device) int {
 		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.ID, b.ID))

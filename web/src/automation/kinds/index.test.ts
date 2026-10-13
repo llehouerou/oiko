@@ -67,6 +67,7 @@ describe('Step summary', () => {
           { key: 'color_temp', label: 'Color temp', type: 'numeric', unit: 'mired', min: 153, max: 500, access: settable, category: 'primary' },
           { key: 'effect', label: 'Effect', type: 'enum', options: ['blink'], access: settable, category: 'primary' },
         ],
+        roles: { state: 'control', brightness: 'adjustment', color_temp: 'adjustment', effect: 'setting' },
       },
     ],
     [],

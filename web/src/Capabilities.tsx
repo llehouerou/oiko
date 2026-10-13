@@ -128,7 +128,7 @@ export function StateText(props: CapProps) {
 export function FunctionControls({ target, fn, heading }: { target: Target; fn: Fn; heading?: (note: ReactNode) => ReactNode }) {
   const command = useCommand(target)
   const fade = fn.kind === 'light'
-  const r = roles(fn.kind, fn.capabilities)
+  const r = roles(fn)
   const controls = [r.control, ...r.adjustments].filter((c) => c !== undefined)
   const toggles = controls.filter((c) => c.type === 'binary')
   const sliders = controls.filter((c) => c.type === 'numeric' && c.min != null && c.max != null)

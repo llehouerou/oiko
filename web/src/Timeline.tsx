@@ -49,9 +49,9 @@ type Lane = NonNullable<ReturnType<typeof lane>> & { target: Target; name: strin
 function useLanes(): Lane[] {
   return useCatalogue()
     .list.filter(listed)
-    .flatMap(({ target, name, kind, capabilities }) => {
-      const l = lane(target, kind, capabilities)
-      return l ? [{ ...l, target, name, group: laneGroup(kind) }] : []
+    .flatMap((e) => {
+      const l = lane(e.target, e)
+      return l ? [{ ...l, target: e.target, name: e.name, group: laneGroup(e.kind) }] : []
     })
 }
 

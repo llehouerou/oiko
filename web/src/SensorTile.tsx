@@ -87,7 +87,7 @@ function ReadingsTile({ name, note, badges, icon, readings, dimmed, hideName, on
             <ReadingText {...r} className="block max-w-full truncate text-xl font-medium" />
             <p className="truncate text-xs text-neutral-400">{r.cap.label}</p>
             {/* a reading other than its Function's charted one has no 24 h loaded */}
-            {roles(r.fn.kind, r.fn.capabilities).charted === r.cap && (
+            {roles(r.fn).charted === r.cap && (
               <div className="px-1">
                 <MiniChart target={r.target} fn={r.fn} />
               </div>

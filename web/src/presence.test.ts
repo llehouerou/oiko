@@ -100,12 +100,15 @@ const cap = (key: string, settable: boolean, type: Capability['type'] = 'binary'
 })
 
 describe('a Presence source', () => {
-  it('is read through its main control if an on/off, otherwise its binary state', () => {
-    expect(readCapability('network', [cap('connected', false)])?.key).toBe('connected')
-    expect(readCapability('flag', [cap('on', true)])?.key).toBe('on')
-    expect(readCapability('light', [cap('brightness', true, 'numeric'), cap('state', true)])?.key).toBe('state')
-    expect(readCapability('arming', [cap('mode', true, 'enum'), cap('contact', false)])?.key).toBe('contact')
-    expect(readCapability('temperature', [cap('temperature', false, 'numeric')])).toBeUndefined()
+  it('is read through its main control if an on/off, otherwise its state, as Oiko gave them', () => {
+    expect(readCapability({ capabilities: [cap('connected', false)], roles: { connected: 'state' } })?.key).toBe('connected')
+    expect(
+      readCapability({ capabilities: [cap('brightness', true, 'numeric'), cap('state', true)], roles: { brightness: 'adjustment', state: 'control' } })?.key,
+    ).toBe('state')
+    expect(readCapability({ capabilities: [cap('mode', true, 'enum'), cap('contact', false)], roles: { mode: 'control', contact: 'state' } })?.key).toBe(
+      'contact',
+    )
+    expect(readCapability({ capabilities: [cap('temperature', false, 'numeric')], roles: { temperature: 'reading' } })).toBeUndefined()
   })
 
   const phone = { target: 'device:p/network', departureDelay: 900 }

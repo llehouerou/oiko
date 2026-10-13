@@ -98,37 +98,3 @@ func (h *Home) sourceKey(t Target) (string, bool) {
 	}
 	return readCapability(d.kind(), d.capabilities())
 }
-
-// The keys of a main control by precedence, and of a state, as the Roles
-// tell them (ADR 0014); web/src/roles.ts holds the same lists.
-var (
-	mainControls = []string{"state", "on", "alarm", "mode"}
-	stateKeys    = []string{"occupancy", "presence", "contact", "water_leak", "smoke", "connected"}
-)
-
-// readCapability is the Capability a Function of kind with caps is read
-// through as a Presence source (ADR 0049): its main control if binary,
-// otherwise its binary state. A light's main control is its state.
-func readCapability(kind string, caps []Capability) (string, bool) {
-	rank := func(c Capability) int {
-		if kind == "light" && c.Key != "state" {
-			return -1
-		}
-		return slices.Index(mainControls, c.Key)
-	}
-	control := -1
-	for i, c := range caps {
-		if c.Category == Primary && c.Access.Settable && !c.Stateless && rank(c) >= 0 && (control < 0 || rank(c) < rank(caps[control])) {
-			control = i
-		}
-	}
-	if control >= 0 && caps[control].Type == Binary {
-		return caps[control].Key, true
-	}
-	for _, c := range caps {
-		if c.Type == Binary && c.Category != Config && c.Category != Diagnostic && !c.Access.Settable && !c.Stateless && slices.Contains(stateKeys, c.Key) {
-			return c.Key, true
-		}
-	}
-	return "", false
-}

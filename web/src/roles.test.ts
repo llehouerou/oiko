@@ -1,7 +1,10 @@
 import { expect, test } from 'vitest'
 import guide from '../../docs/write-a-bridge.md?raw'
-import { byReading, co2Level, diagnosticKeys, healthKeys, lightAdjustments, mainControls, presses, readingOrder, rests, roles, stateKeys, turns } from './roles'
-import type { Capability } from './types'
+import { byReading, co2Level, presses, readingOrder, rests, roles, turns } from './roles'
+import type { Capability, Role } from './types'
+
+// Oiko decides the Roles (internal/home/roles.go, ADR 0056): these only check how the
+// web client sorts what it announced.
 
 const cap = (key: string, type: Capability['type'], more: Partial<Capability> = {}): Capability => ({
   key,
@@ -11,11 +14,10 @@ const cap = (key: string, type: Capability['type'], more: Partial<Capability> = 
   category: 'primary',
   ...more,
 })
-const settable = { access: { observable: true, settable: true, queryable: true } }
 
-// Each Role by its keys, the charted one alone.
-const of = (kind: string, ...caps: Capability[]) => {
-  const r = roles(kind, caps)
+// Each Role by its keys, the charted one alone, of caps given the Roles in rs.
+const of = (rs: Record<string, Role>, ...caps: Capability[]) => {
+  const r = roles({ capabilities: caps, roles: rs })
   const keys = (cs: Capability[]) => cs.map((c) => c.key)
   return {
     control: r.control?.key,
@@ -31,148 +33,65 @@ const of = (kind: string, ...caps: Capability[]) => {
 }
 const none = { adjustments: [], readings: [], events: [], settings: [], health: [], diagnostics: [] }
 
-test('a light: its state, its brightness and colour; extras are settings, color_xy nothing', () => {
+test('each Capability lands in the Role Oiko gave it; one given none in none', () => {
   expect(
     of(
-      'light',
-      cap('state', 'binary', settable),
-      cap('brightness', 'numeric', settable),
-      cap('color_temp', 'numeric', settable),
-      cap('color_hs', 'composite', settable),
-      cap('color_xy', 'composite', settable),
-      cap('effect', 'enum', settable),
-      cap('color_mode', 'enum', { category: 'diagnostic' }),
-    ),
-  ).toEqual({
-    ...none,
-    control: 'state',
-    adjustments: ['brightness', 'color_temp', 'color_hs'],
-    settings: ['effect'],
-    diagnostics: ['color_mode'],
-    charted: 'state',
-  })
-})
-
-test('a plug: its state, its power and energy; current and voltage are diagnostics, its child lock a setting', () => {
-  expect(
-    of(
-      'switch',
-      cap('state', 'binary', settable),
+      { state: 'control', brightness: 'adjustment', effect: 'setting', color_mode: 'diagnostic', battery: 'health', action: 'event', power: 'reading' },
+      cap('state', 'binary'),
+      cap('brightness', 'numeric'),
+      cap('color_xy', 'composite'),
+      cap('effect', 'enum'),
+      cap('color_mode', 'enum'),
+      cap('battery', 'numeric'),
+      cap('action', 'enum', { stateless: true }),
       cap('power', 'numeric'),
-      cap('current', 'numeric'),
-      cap('voltage', 'numeric'),
-      cap('energy', 'numeric', { counter: true }),
-      cap('child_lock', 'binary', settable),
-      cap('power_on_behavior', 'enum', { ...settable, category: 'config' }),
     ),
   ).toEqual({
     ...none,
     control: 'state',
-    readings: ['power', 'energy'],
-    settings: ['child_lock', 'power_on_behavior'],
-    diagnostics: ['current', 'voltage'],
+    adjustments: ['brightness'],
+    readings: ['power'],
+    events: ['action'],
+    settings: ['effect'],
+    health: ['battery'],
+    diagnostics: ['color_mode'],
     charted: 'power',
   })
+  expect(of({}, cap('state', 'binary'))).toEqual({ ...none, control: undefined, state: undefined, charted: undefined })
 })
 
-test('a contact and a motion sensor: a state, charted before any reading', () => {
-  expect(of('contact', cap('contact', 'binary'), cap('battery', 'numeric', { category: 'diagnostic' }), cap('tamper', 'binary'))).toEqual({
-    ...none,
-    state: 'contact',
-    health: ['battery', 'tamper'],
-    charted: 'contact',
-  })
-  expect(of('occupancy', cap('illuminance', 'numeric'), cap('occupancy', 'binary'), cap('occupancy_timeout', 'numeric', settable))).toEqual({
-    ...none,
-    state: 'occupancy',
-    readings: ['illuminance'],
-    settings: ['occupancy_timeout'],
-    charted: 'occupancy',
-  })
+test('charted: the state, else a numeric reading, a binary reading, an on/off, an Event', () => {
+  expect(of({ contact: 'state', temperature: 'reading' }, cap('temperature', 'numeric'), cap('contact', 'binary')).charted).toBe('contact')
+  expect(of({ state: 'control', power: 'reading' }, cap('state', 'binary'), cap('power', 'numeric')).charted).toBe('power')
+  expect(of({ on: 'control' }, cap('on', 'binary')).charted).toBe('on')
+  expect(of({ mode: 'control' }, cap('mode', 'enum')).charted).toBeUndefined()
+  expect(of({ action: 'event' }, cap('action', 'enum', { stateless: true })).charted).toBe('action')
 })
 
-test("a phone's network: its connection is a state, charted", () => {
-  expect(of('network', cap('connected', 'binary'))).toEqual({ ...none, state: 'connected', charted: 'connected' })
-})
-
-test("a Presence's home is its main control, the Home presence's a state", () => {
-  expect(of('presence', cap('home', 'binary', settable), cap('manual', 'binary'))).toEqual({
-    ...none,
-    control: 'home',
-    diagnostics: ['manual'],
-    charted: 'home',
-  })
-  expect(of('presence', cap('home', 'binary'))).toEqual({ ...none, state: 'home', charted: 'home' })
-  // home is no main control elsewhere
-  expect(of('switch', cap('home', 'binary', settable))).toMatchObject({ control: undefined, settings: ['home'] })
-  expect(turns(cap('home', 'binary'))).toEqual(['home', 'Arrivals'])
-  expect(rests(cap('home', 'binary'))).toBe('away')
-})
-
-test('a weather station: readings in reading order, the first charted', () => {
-  expect(of('rain', cap('rain', 'numeric'), cap('rain_1h', 'numeric'), cap('rain_24h', 'numeric'))).toMatchObject({
-    readings: ['rain', 'rain_1h', 'rain_24h'],
-    charted: 'rain',
-  })
-  expect(of('', cap('co2', 'numeric'), cap('humidity', 'numeric'), cap('temperature', 'numeric'))).toMatchObject({
-    readings: ['temperature', 'humidity', 'co2'],
-    charted: 'temperature',
-  })
-})
-
-test('a button: its Events, as presses', () => {
-  const action = cap('action', 'enum', { stateless: true })
-  expect(of('button', action, cap('battery', 'numeric', { category: 'diagnostic' }))).toEqual({
-    ...none,
-    events: ['action'],
-    health: ['battery'],
-    charted: 'action',
-  })
-  expect(presses(action)).toBe(true)
-})
-
-test("a Flag's on and a siren's alarm are on/offs; Arlo's arming mode a main control, but no on/off", () => {
-  expect(of('flag', cap('on', 'binary', settable))).toEqual({ ...none, control: 'on', charted: 'on' })
-  expect(of('alarm', cap('alarm', 'binary', settable), cap('melody', 'enum', settable))).toEqual({
-    ...none,
-    control: 'alarm',
-    settings: ['melody'],
-    charted: 'alarm',
-  })
-  expect(of('arming', cap('mode', 'enum', settable))).toEqual({ ...none, control: 'mode', charted: undefined })
-})
-
-test("one main control at most, by precedence; one in the Bridge's config is a setting", () => {
-  expect(of('switch', cap('on', 'binary', settable), cap('state', 'binary', settable))).toMatchObject({ control: 'state', settings: ['on'] })
-  expect(of('switch', cap('state', 'binary', { ...settable, category: 'config' }))).toMatchObject({ control: undefined, settings: ['state'] })
-})
-
-test("a Device's own Capabilities: health, diagnostics and settings", () => {
+test('readings come in reading order, unknown ones last, the first charted', () => {
   expect(
-    of(
-      '',
-      cap('battery', 'numeric', { category: 'diagnostic' }),
-      cap('linkquality', 'numeric', { category: 'diagnostic' }),
-      cap('power_on_behavior', 'enum', { ...settable, category: 'config' }),
-    ),
-  ).toEqual({ ...none, health: ['battery'], diagnostics: ['linkquality'], settings: ['power_on_behavior'], charted: undefined })
+    of({ co2: 'reading', humidity: 'reading', temperature: 'reading' }, cap('co2', 'numeric'), cap('humidity', 'numeric'), cap('temperature', 'numeric')),
+  ).toMatchObject({ readings: ['temperature', 'humidity', 'co2'], charted: 'temperature' })
+  expect(['rain', 'co2', 'humidity', 'temperature'].sort(byReading)).toEqual(['temperature', 'humidity', 'co2', 'rain'])
 })
 
-test('a binary Value turns open, occupied, connected or on', () => {
+test('a binary Value turns open, occupied, connected, home or on', () => {
   expect(turns(cap('contact', 'binary'))).toEqual(['open', 'Openings'])
   expect(turns(cap('presence', 'binary'))).toEqual(['occupied', 'Detections'])
   expect(turns(cap('connected', 'binary'))).toEqual(['connected', 'Connections'])
+  expect(turns(cap('home', 'binary'))).toEqual(['home', 'Arrivals'])
   expect(turns(cap('state', 'binary'))).toEqual(['on', 'Times on'])
 })
 
-test("a binary Value at rest is 'closed', 'not connected' or 'clear'", () => {
+test("a binary Value at rest is 'closed', 'not connected', 'away' or 'clear'", () => {
   expect(rests(cap('contact', 'binary'))).toBe('closed')
   expect(rests(cap('connected', 'binary'))).toBe('not connected')
+  expect(rests(cap('home', 'binary'))).toBe('away')
   expect(rests(cap('occupancy', 'binary'))).toBe('clear')
 })
 
-test('readings come in a fixed order, unknown ones last', () => {
-  expect(['rain', 'co2', 'humidity', 'temperature'].sort(byReading)).toEqual(['temperature', 'humidity', 'co2', 'rain'])
+test("a button's Events are presses", () => {
+  expect(presses(cap('action', 'enum', { stateless: true }))).toBe(true)
 })
 
 test('CO₂ asks for airing above 1000 ppm, at once above 1500', () => {
@@ -182,19 +101,9 @@ test('CO₂ asks for airing above 1000 ppm, at once above 1500', () => {
   expect(co2Level('temperature', 1600)).toBeUndefined()
 })
 
-// Authors of a type of Bridge read these keys in the guide's Roles table.
-test("the guide's Roles table lists the keys of each Role, in order", () => {
-  const row = (role: string) => {
-    const line = guide.split('\n').find((l) => l.startsWith(`| ${role} |`)) ?? ''
-    return [...(line.split('|')[2] ?? '').matchAll(/`([^`]+)`/g)].map((m) => m[1])
-  }
-  const table = ['Main control', 'Adjustment', 'State', 'Health', 'Diagnostic', 'Reading']
-  expect(Object.fromEntries(table.map((role) => [role, row(role)]))).toEqual({
-    'Main control': mainControls,
-    Adjustment: lightAdjustments,
-    State: stateKeys,
-    Health: healthKeys,
-    Diagnostic: diagnosticKeys,
-    Reading: readingOrder,
-  })
+// Authors of a type of Bridge read the reading order in the guide's Roles table; Oiko's
+// roles_test.go checks the other rows.
+test("the guide's Roles table lists the readings in reading order", () => {
+  const line = guide.split('\n').find((l) => l.startsWith('| Reading |')) ?? ''
+  expect([...(line.split('|')[2] ?? '').matchAll(/`([^`]+)`/g)].map((m) => m[1])).toEqual(readingOrder)
 })

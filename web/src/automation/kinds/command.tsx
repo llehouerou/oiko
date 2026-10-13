@@ -25,7 +25,7 @@ function commandSummary(p: Params, targets: Catalogue) {
   const picked: Target[] = p.targets ?? []
   const chosen = picked.flatMap((t) => targets.get(t) ?? [])
   const caps = chosen.flatMap((e) => e.capabilities)
-  const rs = chosen.map((e) => roles(e.kind, e.capabilities))
+  const rs = chosen.map(roles)
   const onOff = (key: string) => rs.some((r) => r.control?.key === key && r.control.type === 'binary')
   const bare = (key: string) => onOff(key) || rs.some((r) => r.adjustments.some((c) => c.key === key))
   const first = (key: string) => (onOff(key) ? 0 : 1) // on/off leads

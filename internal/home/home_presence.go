@@ -213,6 +213,7 @@ func (h *Home) followHome(initial bool) {
 func (h *Home) homePresence() Presence {
 	b := h.box.HomeBindings
 	return Presence{ID: HomePresence, Name: "Home", Kind: homePresenceFunction.Kind, Capabilities: homePresenceFunction.Capabilities,
+		Roles:        roles(homePresenceFunction.Kind, homePresenceFunction.Capabilities),
 		HomeBindings: &HomeBindings{EntranceDoors: append([]Target{}, b.EntranceDoors...), SignsOfLife: append([]Target{}, b.SignsOfLife...), ExitGrace: b.ExitGrace}}
 }
 

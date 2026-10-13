@@ -1,9 +1,17 @@
 import { expect, test } from 'vitest'
 import { copied, dashboard, deleting, presenceRowShown, shown, unseenSection, type DashboardSection } from './dashboard'
-import type { Aggregate, Area, AutomationStatus, Capability, CustomDashboard, Device, Fn, Target } from './types'
+import { announced, type Given } from './fixtures'
+import type { Aggregate, Area, AutomationStatus, CustomDashboard, Device, Fn, Target } from './types'
 
-const on: Capability = { key: 'state', label: 'State', type: 'binary', access: { observable: true, settable: true, queryable: true }, category: 'primary' }
-const fn = (key: string, area?: string): Fn => ({ key, kind: key, area, capabilities: [on] })
+const on: Given = {
+  key: 'state',
+  label: 'State',
+  type: 'binary',
+  access: { observable: true, settable: true, queryable: true },
+  category: 'primary',
+  role: 'control',
+}
+const fn = (key: string, area?: string): Fn => ({ key, kind: key, area, ...announced(on) })
 const device = (id: string, area: string | undefined, ...functions: Fn[]): Device => ({
   id,
   name: id,
@@ -22,7 +30,7 @@ const derived = (area: string, kind: string, ...members: Target[]): Aggregate =>
   members,
   binary: 'any',
   numeric: 'mean',
-  capabilities: [on],
+  ...announced(on),
 })
 const area = (id: string, more: Partial<Area> = {}): Area => ({ id, name: id, ...more })
 
@@ -63,7 +71,7 @@ test('an Area hiding its lights Aggregate has no bar, its lone light a tile', ()
 })
 
 test("a Device's tile in each Area gathers its Functions there; one with nothing to show has none", () => {
-  const nothing: Fn = { key: 'config', kind: 'config', capabilities: [{ ...on, category: 'config' }] }
+  const nothing: Fn = { key: 'config', kind: 'config', ...announced({ ...on, category: 'config', role: 'setting' }) }
   const relay = device('relay', 'living', fn('l1'), fn('l2', 'kitchen'), nothing)
   const { sections } = dashboard([relay], [], [], [area('living'), area('kitchen')], [])
   const fns = sections.map((s) => s.tiles.flatMap((t) => (t.kind === 'target' ? t.fns.map((f) => f.fn.key) : [])))
@@ -83,19 +91,25 @@ const only = (sections: DashboardSection[]) => {
   if (t?.kind !== 'target') throw new Error('no Target tile')
   return t
 }
-const reading = (key: string): Capability => ({ ...on, key, type: 'numeric', access: { observable: true, settable: false, queryable: false } })
+const reading = (key: string, role: Given['role'] = 'reading'): Given => ({
+  ...on,
+  key,
+  type: 'numeric',
+  access: { observable: true, settable: false, queryable: false },
+  role,
+})
 
 test("a Device's Tile is dimmed while detached, its health from all its Functions, its lone Function's kind on its header", () => {
-  const battery = reading('battery')
-  const relay: Device = { ...device('relay', 'living', fn('switch')), detached: true, capabilities: [battery] }
+  const battery = reading('battery', 'health')
+  const relay: Device = { ...device('relay', 'living', fn('switch')), detached: true, ...announced(battery) }
   expect(only(dashboard([relay], [], [], [area('living')], []).sections)).toMatchObject({
     subject: 'device:relay',
     detached: true,
     health: [{ target: 'device:relay', cap: battery }],
     shape: { kind: 'bar', target: 'device:relay/switch', toggle: 'state' },
   })
-  const mode: Capability = { ...on, key: 'mode', type: 'enum', options: ['heat', 'off'] }
-  const thermostat = device('t', 'living', { key: 'thermostat', kind: 'thermostat', capabilities: [mode, reading('temperature')] })
+  const mode: Given = { ...on, key: 'mode', type: 'enum', options: ['heat', 'off'] }
+  const thermostat = device('t', 'living', { key: 'thermostat', kind: 'thermostat', ...announced(mode, reading('temperature')) })
   expect(only(dashboard([thermostat], [], [], [area('living')], []).sections)).toMatchObject({ summary: 'thermostat', shape: { kind: 'controls' } })
 })
 
@@ -108,7 +122,7 @@ test("an Aggregate of lights' Tile is a bar over its lights, with its rule on it
     members: ['device:a/light', 'device:b/light'],
     binary: 'any',
     numeric: 'mean',
-    capabilities: [on],
+    ...announced(on),
   }
   expect(only(dashboard([], [lights], [], [area('living')], []).sections)).toMatchObject({
     subject: 'aggregate:g',
@@ -119,7 +133,7 @@ test("an Aggregate of lights' Tile is a bar over its lights, with its rule on it
 })
 
 test("a Flag's Tile is a bar that toggles it", () => {
-  const guest = { id: 'guest', name: 'Guest', kind: 'flag', area: 'living', capabilities: [{ ...on, key: 'on' }] }
+  const guest = { id: 'guest', name: 'Guest', kind: 'flag', area: 'living', ...announced({ ...on, key: 'on' }) }
   expect(only(dashboard([], [], [guest], [area('living')], []).sections)).toMatchObject({
     subject: 'flag:guest',
     health: [],
@@ -129,8 +143,8 @@ test("a Flag's Tile is a bar that toggles it", () => {
 
 test('Flags without an Area are pills; Others opens with the manual Automations and shows only if it holds anything', () => {
   const flags = [
-    { id: 'away', name: 'Away', kind: 'flag', capabilities: [on] },
-    { id: 'guest', name: 'Guest', kind: 'flag', area: 'living', capabilities: [on] },
+    { id: 'away', name: 'Away', kind: 'flag', ...announced(on) },
+    { id: 'guest', name: 'Guest', kind: 'flag', area: 'living', ...announced(on) },
   ]
   const group: Aggregate = { id: 'g', name: 'G', members: [], binary: 'any', numeric: 'mean' }
   const night: AutomationStatus = { id: 'night', name: 'Night', status: 'enabled' } // no Manual trigger: no Tile
@@ -159,7 +173,7 @@ test('a tile of readings takes a row per line of its cells, unless its height is
   const reading = (key: string): Fn => ({
     key,
     kind: key,
-    capabilities: [{ ...on, key, type: 'numeric', access: { observable: true, settable: false, queryable: false } }],
+    ...announced({ ...on, key, type: 'numeric', access: { observable: true, settable: false, queryable: false }, role: 'reading' }),
   })
   const indoor = device('indoor', 'living', ...['temperature', 'humidity', 'co2', 'noise', 'pressure'].map(reading))
   const devices = [indoor, device('a', 'living', fn('switch')), device('b', 'living', fn('switch')), device('c', 'living', fn('switch'))]
@@ -177,7 +191,7 @@ test('a tile of readings takes a row per line of its cells, unless its height is
 test("a custom Dashboard's Area Sections are the built-in Dashboard's, its own Sections hold what is placed in them", () => {
   const devices = [device('relay', 'living', fn('l1'), fn('l2', 'kitchen')), device('lamp', 'kitchen', fn('light'))]
   const aggregates = [derived('kitchen', 'light', 'device:lamp/light')]
-  const flags = [{ id: 'away', name: 'Away', kind: 'flag', capabilities: [{ ...on, key: 'on' }] }]
+  const flags = [{ id: 'away', name: 'Away', kind: 'flag', ...announced({ ...on, key: 'on' }) }]
   const bedtime: AutomationStatus = { id: 'bedtime', name: 'Bedtime', status: 'enabled', manualTriggers: [{ step: 'go', name: 'Go' }] }
   const night: AutomationStatus = { id: 'night', name: 'Night', status: 'enabled' } // no Manual trigger: no Tile
   const home = dashboard(devices, aggregates, flags, [area('living'), area('kitchen')], [bedtime, night])
@@ -246,8 +260,8 @@ test('an own Section a Guest sees nothing of, its Tiles left out by Oiko, leaves
 })
 
 test("a Function's Tile shows it alone, named after its Device and its key, with the whole Device's health", () => {
-  const battery = reading('battery')
-  const plug: Device = { ...device('plug', 'kitchen', fn('switch/l1'), fn('switch/l2'), fn('switch/l3')), name: 'Kitchen plug', capabilities: [battery] }
+  const battery = reading('battery', 'health')
+  const plug: Device = { ...device('plug', 'kitchen', fn('switch/l1'), fn('switch/l2'), fn('switch/l3')), name: 'Kitchen plug', ...announced(battery) }
   const home = dashboard([plug], [], [], [area('kitchen')], [])
   const tiles = (...targets: string[]) => ({
     id: 'mine',
@@ -314,11 +328,11 @@ test('a placement showing nothing leaves its cells empty, but in the editor: a c
 })
 
 test("a Presence's Tile, in an own Section only: a Person's a bar toggling home, the Home presence's a state", () => {
-  const home: Capability = { ...on, key: 'home' }
-  const manual: Capability = { ...on, key: 'manual', access: { ...on.access, settable: false } }
+  const home: Given = { ...on, key: 'home' }
+  const manual: Given = { ...on, key: 'manual', access: { ...on.access, settable: false }, role: 'diagnostic' }
   const presences = [
-    { id: 'home', name: 'Home', kind: 'presence', capabilities: [{ ...home, access: manual.access }] },
-    { id: 'alice', name: 'Alice', kind: 'presence', capabilities: [home, manual] },
+    { id: 'home', name: 'Home', kind: 'presence', ...announced({ ...home, access: manual.access, role: 'state' }) },
+    { id: 'alice', name: 'Alice', kind: 'presence', ...announced(home, manual) },
   ]
   const children: Aggregate = {
     id: 'kids',
@@ -327,7 +341,7 @@ test("a Presence's Tile, in an own Section only: a Person's a bar toggling home,
     members: ['presence:alice'],
     binary: 'any',
     numeric: 'mean',
-    capabilities: [home, manual],
+    ...announced(home, manual),
   }
   const d = dashboard([], [children], [], [], [], presences)
   // the built-in Dashboard has the Presence row instead
@@ -360,7 +374,7 @@ test("a Presence's Tile, in an own Section only: a Person's a bar toggling home,
 })
 
 test("the Tiles to pick for an own Section: the home's, grouped by Area, searched by name, those it holds greyed out", () => {
-  const nothing: Fn = { key: 'config', kind: 'config', capabilities: [{ ...on, category: 'config' }] }
+  const nothing: Fn = { key: 'config', kind: 'config', ...announced({ ...on, category: 'config', role: 'setting' }) }
   const devices = [
     device('lamp', 'living', fn('light')),
     device('fan', 'kitchen', fn('switch')),
@@ -372,7 +386,7 @@ test("the Tiles to pick for an own Section: the home's, grouped by Area, searche
     { ...derived('living', 'light', 'device:lamp/light'), name: 'Living room lights' },
     { id: 'down', name: 'Downstairs', members: [], binary: 'any', numeric: 'mean' },
   ]
-  const flags = [{ id: 'guest', name: 'Guest', kind: 'flag', area: 'kitchen', capabilities: [{ ...on, key: 'on' }] }]
+  const flags = [{ id: 'guest', name: 'Guest', kind: 'flag', area: 'kitchen', ...announced({ ...on, key: 'on' }) }]
   const bedtime: AutomationStatus = { id: 'bedtime', name: 'Bedtime', status: 'enabled', manualTriggers: [{ step: 'go', name: 'Go' }] }
   const night: AutomationStatus = { id: 'night', name: 'Night', status: 'enabled' } // no Manual trigger: no Tile
   const areas = [area('living', { name: 'Living room' }), area('office', { name: 'Office' }), area('kitchen', { name: 'Kitchen' })]

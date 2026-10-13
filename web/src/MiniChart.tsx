@@ -26,7 +26,7 @@ export const ChartsShown = createContext(true)
 export function MiniChart({ target, fn }: { target: Target; fn: Fn }) {
   const shown = useContext(ChartsShown)
   const past = useAllows('member')
-  const cap = roles(fn.kind, fn.capabilities).charted
+  const cap = roles(fn).charted
   const [open, setOpen] = useState(false)
   if (!cap || !shown || !past) return null
   return (

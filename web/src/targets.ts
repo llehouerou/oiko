@@ -1,4 +1,4 @@
-import type { Aggregate, Capability, Device, Flag, Fn, Presence } from './types'
+import type { Aggregate, Capability, Device, Flag, Fn, Presence, RoleMap } from './types'
 
 // A Target's key, as internal/home writes it (ADR 0009): what a Command
 // addresses and what a Value belongs to. '' is none.
@@ -55,6 +55,7 @@ export interface Entry {
   name: string
   kind: string
   capabilities: Capability[]
+  roles?: RoleMap
   ownerCapabilities: Capability[]
 }
 
@@ -76,20 +77,34 @@ export function catalogue(devices: Device[], aggregates: Aggregate[], flags: Fla
           name: (d.functions?.length ?? 0) > 1 ? `${d.name} · ${fn.key}` : d.name,
           kind: fn.kind,
           capabilities: fn.capabilities,
+          roles: fn.roles,
           ownerCapabilities: d.capabilities ?? [],
         })),
       )
       .sort(byName),
     ...aggregates
-      .map((a) => ({ target: aggregateTarget(a.id), name: a.name, kind: a.kind ?? '', capabilities: a.capabilities ?? [], ownerCapabilities: [] }))
+      .map((a) => ({
+        target: aggregateTarget(a.id),
+        name: a.name,
+        kind: a.kind ?? '',
+        capabilities: a.capabilities ?? [],
+        roles: a.roles,
+        ownerCapabilities: [],
+      }))
       .sort(byName),
-    ...flags.map((f) => ({ target: flagTarget(f.id), name: f.name, kind: f.kind, capabilities: f.capabilities, ownerCapabilities: [] })).sort(byName),
-    ...presences.map((p) => ({ target: presenceTarget(p.id), name: p.name, kind: p.kind, capabilities: p.capabilities, ownerCapabilities: [] })).sort(byName),
-    ...devices.map((d) => ({ target: deviceTarget(d.id), name: d.name, kind: '', capabilities: d.capabilities ?? [], ownerCapabilities: [] })).sort(byName),
+    ...flags
+      .map((f) => ({ target: flagTarget(f.id), name: f.name, kind: f.kind, capabilities: f.capabilities, roles: f.roles, ownerCapabilities: [] }))
+      .sort(byName),
+    ...presences
+      .map((p) => ({ target: presenceTarget(p.id), name: p.name, kind: p.kind, capabilities: p.capabilities, roles: p.roles, ownerCapabilities: [] }))
+      .sort(byName),
+    ...devices
+      .map((d) => ({ target: deviceTarget(d.id), name: d.name, kind: '', capabilities: d.capabilities ?? [], roles: d.roles, ownerCapabilities: [] }))
+      .sort(byName),
   ]
   const index = new Map(list.map((e) => [e.target, e]))
   return { list, get: (t) => index.get(t), name: (t) => index.get(t)?.name ?? 'deleted target' }
 }
 
 // fnOf is an Aggregate's, a Flag's or a Presence's entry as the Function it stands for.
-export const fnOf = (e: Entry): Fn => ({ key: '', kind: e.kind, capabilities: e.capabilities })
+export const fnOf = (e: Entry): Fn => ({ key: '', kind: e.kind, capabilities: e.capabilities, roles: e.roles })

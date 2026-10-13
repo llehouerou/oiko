@@ -50,6 +50,7 @@ type Function struct {
 	Kind         string       `json:"kind"`
 	Area         AreaID       `json:"area,omitempty"` // "" for its Device's
 	Capabilities []Capability `json:"capabilities"`
+	Roles        Roles        `json:"roles,omitempty"` // announced, never saved
 }
 
 // Device is a physical device known through a Bridge. Home treats a *Device
@@ -65,7 +66,8 @@ type Device struct {
 	Vendor        string       `json:"vendor,omitempty"`
 	Detached      bool         `json:"detached,omitempty"`
 	Functions     []Function   `json:"functions"`
-	Capabilities  []Capability `json:"capabilities"` // device-level
+	Capabilities  []Capability `json:"capabilities"`    // device-level
+	Roles         Roles        `json:"roles,omitempty"` // of its Capabilities: announced, never saved
 }
 
 func (d *Device) function(key string) *Function {

@@ -92,7 +92,7 @@ Typed property of a Function (on, brightness, temperature…), or of the Device 
 _Avoid_: Attribute, Feature, Characteristic, Expose
 
 **Role**:
-What a Capability is for on its Function, told by its key, type, access and category, never by the hardware model: the main control (at most one per Function, its on/off when binary), an adjustment refining it (a light's brightness and colour), a state (occupied, open, leaking…), a reading, an Event, a setting, health (battery, tamper: shown only when wrong) or a diagnostic (link quality, a plug's current and voltage beside its power). Every view of a Function, from its Tile to its History, reads the same Roles.
+What a Capability is for on its Function, told by its key, type, access and category, never by the hardware model: the main control (at most one per Function, its on/off when binary), an adjustment refining it (a light's brightness and colour), a state (occupied, open, leaking…), a reading, an Event, a setting, health (battery, tamper: shown only when wrong) or a diagnostic (link quality, a plug's current and voltage beside its power). Oiko decides each Capability's Role and announces it with what holds the Capability; every view of a Function, from its Tile to its History, reads the same Roles.
 _Avoid_: purpose, meaning, usage
 
 **Value**:

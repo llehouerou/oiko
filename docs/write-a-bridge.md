@@ -340,10 +340,11 @@ has run in it.
 
 ## Describing Devices so Oiko shows them well
 
-The web client shapes a Function's Tile from its kind and its Capabilities' keys, types, access and
-category, never from the hardware model
-([ADR 0014](adr/0014-tiles-shaped-by-capability-keys.md)). Each Capability has a Role on its
-Function, told by its key:
+Oiko gives each Capability a Role on its Function from the Function's kind and the Capability's
+key, type, access and category, never from the hardware model
+([ADR 0014](adr/0014-tiles-shaped-by-capability-keys.md),
+[ADR 0056](adr/0056-oiko-decides-each-capabilitys-role-clients-read-it.md)), and every client
+shapes the Function's Tile from them. The Role goes mostly by key:
 
 | Role | Keys | When |
 |---|---|---|
@@ -503,7 +504,7 @@ The guide gives the why and the when; the godoc gives the contract, and stays th
 | Cameras and Recordings | when to implement them, pitfalls | [`Cameras`][Cameras], [`Recordings`][Recordings] |
 | Keeping data | why and when | [`bridge/store`][store] |
 | Testing | the walk-through test | [`bridge/bridgetest`][bridgetest] |
-| The keys that shape Tiles | [the Roles table](#describing-devices-so-oiko-shows-them-well) | none: the web client's |
+| The keys that shape Tiles | [the Roles table](#describing-devices-so-oiko-shows-them-well) | none: Oiko's own |
 | `oiko-build`'s flags | the commands you run | [`cmd/oiko-build`][oiko-build] |
 
 [catalogue]: https://llehouerou.github.io/oiko-catalogue/

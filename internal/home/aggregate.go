@@ -49,6 +49,7 @@ type Aggregate struct {
 	// they all share.
 	Kind         string       `json:"kind,omitempty"`
 	Capabilities []Capability `json:"capabilities,omitempty"`
+	Roles        Roles        `json:"roles,omitempty"`
 }
 
 // CreateAggregate defines a new Aggregate and returns its ID. Empty rules
@@ -234,7 +235,7 @@ func (h *Home) aggregatesChanged() error {
 	h.deriveAll()
 	list := slices.DeleteFunc(h.aggregateList(), func(a Aggregate) bool { return a.Derived })
 	for i := range list {
-		list[i].Kind, list[i].Capabilities = "", nil
+		list[i].Kind, list[i].Capabilities, list[i].Roles = "", nil, nil
 	}
 	err := h.save(aggregatesFile, aggregatesFormat, list)
 	h.emit(Update{Kind: AggregatesChanged, Aggregates: h.aggregateList()})
@@ -566,7 +567,9 @@ func (h *Home) reportToAggregates(rs []recorded, at time.Time) {
 func (h *Home) aggregateList() []Aggregate {
 	list := make([]Aggregate, 0, len(h.aggregates))
 	for _, a := range h.aggregates {
-		list = append(list, *a)
+		a := *a
+		a.Roles = roles(a.Kind, a.Capabilities)
+		list = append(list, a)
 	}
 	slices.SortFunc(list, func(a, b Aggregate) int {
 		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.ID, b.ID))
