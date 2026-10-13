@@ -551,6 +551,10 @@ func TestWhatIsDeletedLeavesEveryDashboard(t *testing.T) {
 	}
 	group := home.TargetAggregate(groupID)
 	officeLights := "aggregate:" + l.otherArea + ".light"
+	if err := l.h.SetPersons([]home.Person{{ID: "alice", Name: "Alice"}}); err != nil {
+		t.Fatal(err)
+	}
+	presence := home.TargetPresence("alice")
 
 	// Alice's own Dashboard and a shared one hold the same, the shared one
 	// shown by a Kiosk.
@@ -565,7 +569,8 @@ func TestWhatIsDeletedLeavesEveryDashboard(t *testing.T) {
 			{"target": "` + officeLights + `", "col": 1, "row": 1, "width": 1},
 			{"automation": "night", "col": 2, "row": 1, "width": 1}]},
 		{"id": "flag", "columns": 1, "col": 0, "row": 1, "width": 1, "tiles": [
-			{"target": "` + l.flag.Key() + `", "col": 0, "row": 0, "width": 1}]}]}`
+			{"target": "` + l.flag.Key() + `", "col": 0, "row": 0, "width": 1},
+			{"target": "` + presence.Key() + `", "col": 0, "row": 1, "width": 1}]}]}`
 	alices, err := s.Create(alice, parse(t, doc))
 	if err != nil {
 		t.Fatal(err)
@@ -615,7 +620,7 @@ func TestWhatIsDeletedLeavesEveryDashboard(t *testing.T) {
 		}
 	}
 	// left is what the Dashboards hold, each deletion taking more of it.
-	left := []string{"area:" + l.otherArea, "all:", l.lamp.Key(), l.lamp.Key() + "/light", l.lamp.Key() + "/gone", fresh.Key(), group.Key(), officeLights, "night", "flag:", l.flag.Key()}
+	left := []string{"area:" + l.otherArea, "all:", l.lamp.Key(), l.lamp.Key() + "/light", l.lamp.Key() + "/gone", fresh.Key(), group.Key(), officeLights, "night", "flag:", l.flag.Key(), presence.Key()}
 	if got := held(mine(s, alices)); !slices.Equal(got, left) {
 		t.Fatalf("before any deletion:\n got %v\nwant %v", got, left)
 	}
@@ -638,6 +643,7 @@ func TestWhatIsDeletedLeavesEveryDashboard(t *testing.T) {
 	after("an Aggregate deleted", func() error { return l.h.DeleteAggregate(groupID) }, without(group.Key())...)
 	// An own Section left without Tiles stays.
 	after("a Flag deleted", func() error { return l.h.DeleteFlag(l.flag.Flag()) }, without(l.flag.Key())...)
+	after("a Person removed", func() error { return l.h.SetPersons(nil) }, without(presence.Key())...)
 	after("an Area deleted", func() error { return l.h.DeleteArea(home.AreaID(l.otherArea)) }, without("area:"+l.otherArea, officeLights)...)
 	after("an Automation deleted", func() error { l.h.SetAutomationStatus(nil); return nil }, without("night")...)
 }

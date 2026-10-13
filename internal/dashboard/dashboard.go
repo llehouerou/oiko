@@ -139,6 +139,7 @@ type known struct {
 	devices     []home.Device
 	aggregates  []home.Aggregate
 	flags       []home.Flag
+	presences   []home.Presence
 	areas       []home.Area
 	automations []home.AutomationStatus
 }
@@ -165,7 +166,7 @@ func Open(dir string, h *home.Home, persons, kiosks []string) (*Store, error) {
 	s.kmu.Lock()
 	defer s.kmu.Unlock()
 	snap, _ := h.Follow(s.deliver)
-	s.known = known{snap.Devices, snap.Aggregates, snap.Flags, snap.Areas, snap.Automations}
+	s.known = known{snap.Devices, snap.Aggregates, snap.Flags, snap.Presences, snap.Areas, snap.Automations}
 	s.pressable = pressable(snap.Automations)
 	return s, nil
 }
@@ -184,6 +185,8 @@ func (s *Store) deliver(u home.Update) {
 		s.known.aggregates = u.Aggregates
 	case home.FlagsChanged:
 		s.known.flags = u.Flags
+	case home.PresencesChanged:
+		s.known.presences = u.Presences
 	case home.AreasChanged:
 		s.known.areas = u.Areas
 	case home.AutomationsChanged:
@@ -652,6 +655,8 @@ func (k known) target(t home.Target) bool {
 		return slices.ContainsFunc(k.devices, func(d home.Device) bool { return d.ID == t.Device() })
 	case t.Flag() != "":
 		return slices.ContainsFunc(k.flags, func(f home.Flag) bool { return f.ID == t.Flag() })
+	case t.Presence() != "":
+		return slices.ContainsFunc(k.presences, func(p home.Presence) bool { return p.ID == t.Presence() })
 	case t.Aggregate() != "":
 		if area, ok := home.AreaAggregate(t.Aggregate()); ok {
 			return k.area(area)
