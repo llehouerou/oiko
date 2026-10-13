@@ -365,5 +365,5 @@ func (h *Home) area(id AreaID) int {
 func (h *Home) areasChanged() error {
 	err := h.save(areasFile, areasFormat, h.areas)
 	h.emit(Update{Kind: AreasChanged, Areas: slices.Clone(h.areas)})
-	return errors.Join(err, h.rederive())
+	return errors.Join(err, h.rederive(false))
 }

@@ -72,7 +72,7 @@ Whether a Person is home or away: a binary Function Oiko derives for every Perso
 _Avoid_: location, whereabouts, tracker, home status, occupancy (reserved for a sensor's)
 
 **Presence source**:
-Binary Function an Admin binds to a Person's Presence: any but a Presence or the Home presence, true meaning home. Counts as home while true, and for its departure delay after turning false; ignored with no Value or while offline. Always called a Presence source, never a source alone.
+Binary Function an Admin binds to a Person's Presence: any but a Presence, the Home presence or an Aggregate of Presences, true meaning home. Counts as home while true, and for its departure delay after turning false; ignored with no Value or while offline. Always called a Presence source, never a source alone.
 _Avoid_: tracker, sensor, input, witness
 
 **Home presence**:

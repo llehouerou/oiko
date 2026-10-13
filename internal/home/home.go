@@ -546,8 +546,7 @@ func (p *Port) SetOnline(online bool) {
 			h.emit(Update{Kind: AvailabilityChanged, Target: TargetDevice(id, ""), Availability: h.effectiveAvailability(id)})
 		}
 	}
-	h.syncAggregateAvailability()
-	h.followPresences()
+	h.followAll(false)
 }
 
 // SyncDevices reconciles the registry with the full list of Devices described
@@ -602,8 +601,7 @@ func (p *Port) SetAvailability(address string, a Availability) {
 	h.availability[id] = a
 	if after := h.effectiveAvailability(id); after != before {
 		h.emit(Update{Kind: AvailabilityChanged, Target: TargetDevice(id, ""), Availability: after})
-		h.syncAggregateAvailability()
-		h.followPresences()
+		h.followAll(false)
 	}
 }
 
@@ -630,11 +628,10 @@ func (p *Port) Report(address string, readings []bridge.Reading, at time.Time) {
 			h.lastEvents[ref] = v
 			h.emit(Update{Kind: EventOccurred, Ref: &ref, Value: &v})
 		default:
-			rs[len(rs)-1].first = h.record(ref, r.Data, at)
+			rs[len(rs)-1].initial = h.record(ref, r.Data, at)
 		}
 	}
-	h.reportToAggregates(rs, at)
-	h.reportToPresences(rs)
+	h.followValues(rs, at)
 	for _, r := range readings {
 		h.confirm(TargetDevice(id, r.Function))
 	}
@@ -664,16 +661,16 @@ func (h *Home) Command(t Target, req Request) (string, error) {
 }
 
 // record sets the Value of ref, announcing a change or a refresh, and reports
-// whether it is ref's first. A refresh keeps its Since; a first Value takes
-// the one recalled, if it had the same Data before Oiko started. Callers hold
-// h.mu.
+// whether it is ref's first, announced as replayed state. A refresh keeps its
+// Since; a first Value takes the one recalled, if it had the same Data before
+// Oiko started. Callers hold h.mu.
 func (h *Home) record(ref Ref, data any, at time.Time) (first bool) {
 	return h.recordAs(ref, data, at, false)
 }
 
-// recordAs is record, announcing the Value as replayed state if initial.
-// Callers hold h.mu.
-func (h *Home) recordAs(ref Ref, data any, at time.Time, initial bool) (first bool) {
+// recordAs is record, announcing the Value as replayed state if initial, and
+// reports whether it announced it so. Callers hold h.mu.
+func (h *Home) recordAs(ref Ref, data any, at time.Time, initial bool) (replayed bool) {
 	v := Value{Data: data, At: at, Since: at}
 	kind := ValueChanged
 	old, had := h.values[ref]
@@ -687,7 +684,7 @@ func (h *Home) recordAs(ref Ref, data any, at time.Time, initial bool) (first bo
 	}
 	h.values[ref] = v
 	h.emit(Update{Kind: kind, Ref: &ref, Value: &v, Initial: initial || !had})
-	return !had
+	return initial || !had
 }
 
 // Recall has Home ask recall, for each Ref's first Value since it started,

@@ -137,7 +137,7 @@ func (h *Home) Replace(id, with DeviceID) error {
 	for _, k := range moved {
 		h.emit(Update{Kind: k.kind, Ref: &k.ref, Value: &k.v, Moved: true})
 	}
-	return errors.Join(err, h.rederive()) // Aggregates follow their members
+	return errors.Join(err, h.rederive(false)) // Aggregates follow their members
 }
 
 // forget removes every trace of a Device. Callers hold h.mu.
@@ -172,7 +172,7 @@ func ValidName(name string) (string, error) {
 func (h *Home) registryChanged() error {
 	err := h.persist()
 	h.emit(Update{Kind: DevicesChanged, Devices: h.deviceList()})
-	return errors.Join(err, h.rederive())
+	return errors.Join(err, h.rederive(false))
 }
 
 // persist saves the registry. Callers hold h.mu.

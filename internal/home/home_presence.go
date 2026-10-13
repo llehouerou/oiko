@@ -76,7 +76,7 @@ func (h *Home) SetHomeBindings(b HomeBindings) error {
 	}
 	h.bindBox(HomeBindings{EntranceDoors: unique(b.EntranceDoors), SignsOfLife: unique(b.SignsOfLife), ExitGrace: b.ExitGrace})
 	err := h.presencesChanged()
-	h.followHome(false)
+	h.followAll(false)
 	return err
 }
 

@@ -101,8 +101,7 @@ func (h *Home) SetPersons(ps []Person) error {
 		h.announcePresence(id)
 		h.followRule(id, true) // its Presence sources' Values, a Flag's, are replayed state too
 	}
-	h.followHome(!removed)                // recalled Values are replayed state
-	return errors.Join(err, h.rederive()) // Aggregates of Presences follow, as replayed state too
+	return errors.Join(err, h.rederive(!removed)) // recalled Values are replayed state, for what follows them too
 }
 
 // setPerson creates or renames p's Presence, reporting whether it is new and
@@ -148,7 +147,8 @@ func (h *Home) removePerson(id PersonID) {
 
 // SetPresenceSources binds Presence sources to Person id's Presence, in place of
 // those it had (ADR 0054). Each must be a Function, Aggregate or Flag with a
-// binary state or main control, other than a Presence, and its delay not
+// binary state or main control, other than a Presence or an Aggregate of
+// them, and its delay not
 // negative; one listed twice is kept once, as first listed. The Presence then
 // follows them: an override ends if they agree with it.
 func (h *Home) SetPresenceSources(id PersonID, sources []PresenceSource) error {
@@ -169,7 +169,7 @@ func (h *Home) SetPresenceSources(id PersonID, sources []PresenceSource) error {
 	}
 	p.sources = kept
 	err := h.presencesChanged()
-	h.followRule(id, false)
+	h.followAll(false)
 	return err
 }
 
@@ -187,8 +187,8 @@ func (h *Home) checkBinding(t Target) error {
 	switch {
 	case t.IsZero():
 		return fmt.Errorf("%w: a binding names its target", ErrInvalid)
-	case t.Presence() != "":
-		return fmt.Errorf("%w: a presence cannot be bound to a presence", ErrInvalid)
+	case t.Presence() != "" || h.aggregates[t.Aggregate()] != nil && h.aggregates[t.Aggregate()].Kind == presenceFunction.Kind:
+		return fmt.Errorf("%w: a presence, or an aggregate of them, cannot be bound to a presence", ErrInvalid) // none feeds what follows a Presence (propagate.go)
 	case t.Device() != "" && t.Function() == "":
 		return fmt.Errorf("%w: a binding is a function, not a device", ErrInvalid)
 	}
@@ -204,47 +204,24 @@ func (h *Home) checkBinding(t Target) error {
 // dropSources unbinds the Targets drop selects from every Presence and the
 // Home presence, once they are deleted. Callers hold h.mu.
 func (h *Home) dropSources(drop func(Target) bool) error {
-	var dropped []PersonID
-	for id, p := range h.presences {
+	dropped := false
+	for _, p := range h.presences {
 		if ss := slices.DeleteFunc(slices.Clone(p.sources), func(s PresenceSource) bool { return drop(s.Target) }); len(ss) != len(p.sources) {
 			p.sources = ss
-			dropped = append(dropped, id)
+			dropped = true
 		}
 	}
-	boxed := h.dropFromBox(drop)
-	if len(dropped) == 0 && !boxed {
+	if boxed := h.dropFromBox(drop); !dropped && !boxed {
 		return nil
 	}
 	err := h.presencesChanged()
-	for _, id := range dropped {
-		h.followRule(id, false)
-	}
-	h.followHome(false)
+	h.followAll(false)
 	return err
 }
 
-// followPresences brings every Presence in line with its rule, after its
-// Presence sources' Availability or definition may have changed. Until the
-// home is known, that is its Bridges replaying: a Bridge may report its
-// retained state before it says it is online. Callers hold h.mu.
-func (h *Home) followPresences() {
-	h.checkKnown()
-	select {
-	case <-h.known:
-		for id := range h.presences {
-			h.followRule(id, false)
-		}
-	default:
-		for id := range h.presences {
-			h.followRule(id, true)
-		}
-	}
-}
-
-// reportToPresences brings in line the Presences, and the Home presence's
-// box, whose Presence sources' Values were just recorded. A change moved only
-// by first Values is replayed state, as theirs are (ADR 0054). Callers hold
-// h.mu.
+// reportToPresences brings in line the Presences whose Presence sources'
+// Values were just recorded. A change moved only by replayed Values is
+// replayed state, as theirs are (ADR 0054). Callers hold h.mu.
 func (h *Home) reportToPresences(rs []recorded) {
 	for id, p := range h.presences {
 		fed, initial := false, true
@@ -256,16 +233,15 @@ func (h *Home) reportToPresences(rs []recorded) {
 			h.followRule(id, initial)
 		}
 	}
-	h.reportToBox(rs)
 }
 
 // fed is whether rs, Values just recorded, feed what t is read through, and
-// whether only by first Values. Callers hold h.mu.
+// whether only by replayed Values. Callers hold h.mu.
 func (h *Home) fed(t Target, rs []recorded) (fed, initial bool) {
 	initial = true
 	for _, r := range rs {
 		if h.feeds(t, r.ref) {
-			fed, initial = true, initial && r.first
+			fed, initial = true, initial && r.initial
 		}
 	}
 	return fed, initial
@@ -308,9 +284,8 @@ func (h *Home) followRule(id PersonID, initial bool) {
 		rs = append(rs, recorded{manualRef(id), h.recordAs(manualRef(id), false, now, initial)})
 	}
 	if len(rs) > 0 {
-		h.reportToAggregates(rs, now)
+		h.followValues(rs, now)
 		h.savePresences()
-		h.followHome(initial)
 	}
 }
 
@@ -343,9 +318,8 @@ func (x presenceTarget) transmit(req Request) {
 		{homeRef(x.id), h.record(homeRef(x.id), forced, at)},
 		{manualRef(x.id), h.record(manualRef(x.id), !ok || ruled != forced, at)},
 	}
-	h.reportToAggregates(rs, at)
+	h.followValues(rs, at)
 	h.savePresences()
-	h.followHome(false)
 	h.confirm(x.target())
 }
 

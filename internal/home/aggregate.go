@@ -229,7 +229,7 @@ func (h *Home) dropMembers(drop func(Target) bool) bool {
 }
 
 // aggregatesChanged re-derives the Aggregates, saves and announces them, and
-// brings their Values and Availability in line. Callers hold h.mu.
+// everything derived follows. Callers hold h.mu.
 func (h *Home) aggregatesChanged() error {
 	h.deriveAll()
 	list := slices.DeleteFunc(h.aggregateList(), func(a Aggregate) bool { return a.Derived })
@@ -238,9 +238,7 @@ func (h *Home) aggregatesChanged() error {
 	}
 	err := h.save(aggregatesFile, aggregatesFormat, list)
 	h.emit(Update{Kind: AggregatesChanged, Aggregates: h.aggregateList()})
-	h.syncAggregateValues()
-	h.syncAggregateAvailability()
-	h.followPresences()
+	h.followAll(false)
 	return err
 }
 
@@ -265,9 +263,9 @@ func (h *Home) deriveAll() bool {
 
 // rederive follows a change of the Devices or the Persons: members and
 // Presence sources whose Device or Person was deleted are dropped, then
-// derived Capabilities, Values and Availability are recomputed and announced
-// where they differ, and the Presences follow. Callers hold h.mu.
-func (h *Home) rederive() error {
+// derived Capabilities are recomputed and announced where they differ, and
+// everything derived follows, as replayed state if initial. Callers hold h.mu.
+func (h *Home) rederive(initial bool) error {
 	gone := func(t Target) bool {
 		p := t.Presence()
 		return t.Device() != "" && h.devices[t.Device()] == nil || p != "" && p != HomePresence && h.presences[p] == nil
@@ -279,9 +277,7 @@ func (h *Home) rederive() error {
 	if h.deriveAll() {
 		h.emit(Update{Kind: AggregatesChanged, Aggregates: h.aggregateList()})
 	}
-	h.syncAggregateValues()
-	h.syncAggregateAvailability()
-	h.followPresences()
+	h.followAll(initial)
 	return err
 }
 
@@ -515,15 +511,9 @@ func (h *Home) syncAggregateValues() {
 	}
 }
 
-// recorded is a member Value just recorded, and whether it is its first.
-type recorded struct {
-	ref   Ref
-	first bool
-}
-
 // reportToAggregates updates the Aggregate Values that the member Values just
 // recorded feed, with the report's time; a member's state feeds the settable
-// numeric ones too (aggregateValue). A change moved only by members' first
+// numeric ones too (aggregateValue). A change moved only by members' replayed
 // Values is Initial, as theirs are. Callers hold h.mu.
 func (h *Home) reportToAggregates(rs []recorded, at time.Time) {
 	type touch struct {
@@ -548,9 +538,9 @@ func (h *Home) reportToAggregates(rs []recorded, at time.Time) {
 			for _, key := range keys {
 				ref := TargetAggregate(a.ID).Ref(key)
 				if i := slices.IndexFunc(touched, func(t touch) bool { return t.ref == ref }); i >= 0 {
-					touched[i].initial = touched[i].initial && r.first
+					touched[i].initial = touched[i].initial && r.initial
 				} else {
-					touched = append(touched, touch{ref, r.first})
+					touched = append(touched, touch{ref, r.initial})
 				}
 			}
 		}

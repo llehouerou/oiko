@@ -122,8 +122,7 @@ func (h *Home) setFlag(id FlagID, values map[string]any) {
 		ref := TargetFlag(id).Ref(k)
 		rs = append(rs, recorded{ref, h.record(ref, data, at)})
 	}
-	h.reportToAggregates(rs, at)
-	h.reportToPresences(rs)
+	h.followValues(rs, at)
 	h.saveFlagList()
 }
 

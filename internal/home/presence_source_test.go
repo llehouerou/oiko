@@ -173,6 +173,48 @@ func TestUnheardSourcesAreIgnoredAndTheLastValueKept(t *testing.T) {
 	})
 }
 
+// An Aggregate as a Presence source has its Value before the Presence reads it.
+func TestAnAggregateSourceDrivesItsPresence(t *testing.T) {
+	h, _, _, _, hall, _, _ := sourced(t)
+	cluster, err := h.CreateAggregate("Hall", []Target{hall}, Any, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bind(t, h, alice, PresenceSource{TargetAggregate(cluster), 0})
+	seen(h, "0xhall", true)
+	presenceIs(t, h, alice, true, false)
+	seen(h, "0xhall", false)
+	presenceIs(t, h, alice, false, false)
+}
+
+// A Presence's change moved by a Bridge replaying is replayed state, for its
+// Aggregates and the Home presence too (ADR 0054).
+func TestAReplayedPresenceChangeIsReplayedForWhatFollowsIt(t *testing.T) {
+	h, _, dir, mobile, _, _, _ := sourced(t)
+	bind(t, h, alice, PresenceSource{mobile, 0})
+	children, err := h.CreateAggregate("Children", []Target{TargetPresence(alice)}, Any, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	connected(h, "0xphone", true)
+	presenceIs(t, h, alice, true, false)
+
+	restarted := restart(t, dir) // the Bridge not online yet
+	if err := restarted.SetPersons([]Person{{alice, "Alice"}, {bob, "Bob"}}); err != nil {
+		t.Fatal(err)
+	}
+	_, updates, cancel := restarted.Subscribe()
+	defer cancel()
+	connected(restarted, "0xphone", false) // replayed: Alice left while Oiko was stopped
+	port(restarted).SetOnline(true)        // before the Bridge says it has replayed
+	presenceIs(t, restarted, alice, false, false)
+	for _, u := range drain(updates) {
+		if u.Kind == ValueChanged && (u.Ref.Target == TargetAggregate(children) || u.Ref.Target.Presence() != "") && !u.Initial {
+			t.Errorf("%s announced as a change", *u.Ref)
+		}
+	}
+}
+
 func TestAnOverrideHoldsUntilTheRuleAgrees(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h, _, dir, _, _, _, flag := sourced(t)
@@ -222,6 +264,10 @@ func TestPresenceSourcesAreChecked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	children, err := h.CreateAggregate("Children", []Target{TargetPresence(bob)}, Any, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	bind(t, h, alice, PresenceSource{mobile, 900})
 	drain(updates)
 
@@ -230,16 +276,17 @@ func TestPresenceSourcesAreChecked(t *testing.T) {
 		source PresenceSource
 		want   error
 	}{
-		"no such Person":   {chloe, PresenceSource{mobile, 0}, ErrNotFound},
-		"unknown device":   {alice, PresenceSource{TargetDevice("nope", "network"), 0}, ErrNotFound},
-		"unknown function": {alice, PresenceSource{TargetDevice(mobile.Device(), "light"), 0}, ErrNotFound},
-		"unknown flag":     {alice, PresenceSource{TargetFlag("nope"), 0}, ErrNotFound},
-		"a Device itself":  {alice, PresenceSource{TargetDevice(mobile.Device(), ""), 0}, ErrInvalid},
-		"a Presence":       {alice, PresenceSource{TargetPresence(bob), 0}, ErrInvalid},
-		"no target":        {alice, PresenceSource{}, ErrInvalid},
-		"a reading":        {alice, PresenceSource{TargetDevice(idOf(t, h, "0xtherm"), "temperature"), 0}, ErrInvalid},
-		"an Event":         {alice, PresenceSource{TargetDevice(idOf(t, h, "0xremote"), "button"), 0}, ErrInvalid},
-		"a negative delay": {alice, PresenceSource{hall, -1}, ErrInvalid},
+		"no such Person":            {chloe, PresenceSource{mobile, 0}, ErrNotFound},
+		"unknown device":            {alice, PresenceSource{TargetDevice("nope", "network"), 0}, ErrNotFound},
+		"unknown function":          {alice, PresenceSource{TargetDevice(mobile.Device(), "light"), 0}, ErrNotFound},
+		"unknown flag":              {alice, PresenceSource{TargetFlag("nope"), 0}, ErrNotFound},
+		"a Device itself":           {alice, PresenceSource{TargetDevice(mobile.Device(), ""), 0}, ErrInvalid},
+		"a Presence":                {alice, PresenceSource{TargetPresence(bob), 0}, ErrInvalid},
+		"an Aggregate of Presences": {alice, PresenceSource{TargetAggregate(children), 0}, ErrInvalid},
+		"no target":                 {alice, PresenceSource{}, ErrInvalid},
+		"a reading":                 {alice, PresenceSource{TargetDevice(idOf(t, h, "0xtherm"), "temperature"), 0}, ErrInvalid},
+		"an Event":                  {alice, PresenceSource{TargetDevice(idOf(t, h, "0xremote"), "button"), 0}, ErrInvalid},
+		"a negative delay":          {alice, PresenceSource{hall, -1}, ErrInvalid},
 	} {
 		if err := h.SetPresenceSources(c.id, []PresenceSource{{flag, 0}, c.source}); !errors.Is(err, c.want) {
 			t.Errorf("%s: err = %v, want %v", name, err, c.want)
