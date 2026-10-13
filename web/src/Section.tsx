@@ -35,7 +35,7 @@ export interface Arranging {
 
 // A Section of a Dashboard, drawn from what dashboard.ts derived of it: an Area's, one of a custom
 // Dashboard's own, or Others, that of the tiles without an Area. An Area's header is a banner: its
-// Icon if it has one, then its name large, its status (climate, presence, doors) on a line under
+// Icon if it has one, then its name large, its status (climate, occupancy, doors) on a line under
 // it, its light bar on the right, which a folded section keeps. The bar has no chart: its ⋯ sheet
 // has its History. An own Section's header has its Icon and Name, and nothing without a Name. A
 // Section's tiles sit where its Layout places them, gaps included, while its columns fit or
@@ -68,7 +68,7 @@ export function Section({
   const status = (
     <>
       <Climate aggregates={section.climate} />
-      {section.presence && <AreaState aggregate={section.presence} />}
+      {section.occupancy && <AreaState aggregate={section.occupancy} />}
       {section.doors && <AreaState aggregate={section.doors} />}
     </>
   )
@@ -209,7 +209,7 @@ export const tileNodes = (
       ),
   }))
 
-// An Area's presence or doors in its header: the state of its Aggregate of occupancy or of contacts.
+// An Area's occupancy or doors in its header: the state of its Aggregate of occupancy or of contacts.
 function AreaState({ aggregate }: { aggregate: Aggregate }) {
   const cap = aggregate.capabilities?.find((c) => c.type === 'binary')
   return cap ? <StateText target={aggregateTarget(aggregate.id)} cap={cap} /> : null

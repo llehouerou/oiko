@@ -18,6 +18,8 @@ import {
   mdiWaterOutline,
   mdiWaterPercent,
   mdiWeatherRainy,
+  mdiWifi,
+  mdiWifiOff,
 } from '@mdi/js'
 import { sendCommand, useCommand, useControl, useLastEvent, useNow, useValue } from './store'
 import type { Capability, CommandState, Fn, Ref, Target } from './types'
@@ -25,7 +27,7 @@ import { ColorPicker, display, format, RangeSlider, Switch, type HS } from './co
 import { Svg } from './icons'
 import { MiniChart } from './MiniChart'
 import { HistorySheet } from './HistorySheet'
-import { co2Level, motion, roles, turns } from './roles'
+import { co2Level, motion, rests, roles, turns } from './roles'
 import { unwell } from './tiles'
 import { age } from './TileParts'
 
@@ -85,6 +87,7 @@ const stateIcons: Record<string, [idle: string, active: string]> = {
   contact: [mdiDoorClosed, mdiDoorOpen],
   water_leak: [mdiWaterOutline, mdiWaterAlert],
   smoke: [mdiSmokeDetector, mdiSmokeDetectorAlert],
+  connected: [mdiWifiOff, mdiWifi],
 }
 
 // A state: whether it is active, its icon, and how long it has held, as Home tells it (an
@@ -95,10 +98,11 @@ export function useHeld({ target, cap }: CapProps) {
   const active = value?.data === true
   const [idle, lit] = stateIcons[cap.key] ?? [mdiMotionSensorOff, mdiMotionSensor]
   const text = active && motion(cap) ? 'now' : value?.since ? age(value.since, now) : '?'
-  return { active, icon: active ? lit : idle, text, title: `${cap.label} · ${value ? format(value.data) : 'unknown'}` }
+  const word = active ? turns(cap)[0] : rests(cap)
+  return { active, icon: active ? lit : idle, text, word, title: `${cap.label} · ${value ? format(value.data) : 'unknown'}` }
 }
 
-// A state as an Area's header tells its presence or doors: its icon, what it is, how long it has
+// A state as an Area's header tells its occupancy or doors: its icon, what it is, how long it has
 // held, lit while active. A tap opens its History.
 export function StateText(props: CapProps) {
   const held = useHeld(props)
@@ -107,7 +111,7 @@ export function StateText(props: CapProps) {
     <>
       <button onClick={() => setOpen(true)} title={held.title} className="flex items-center gap-1 whitespace-nowrap hover:underline">
         <Svg path={held.icon} className={`size-4 ${held.active ? 'text-emerald-300' : 'text-neutral-500'}`} />
-        <span className={held.active ? 'text-emerald-300' : ''}>{held.active ? turns(props.cap)[0] : props.cap.key === 'contact' ? 'closed' : 'clear'}</span>
+        <span className={held.active ? 'text-emerald-300' : ''}>{held.word}</span>
         <span className="text-neutral-500">{held.text}</span>
       </button>
       {open && createPortal(<HistorySheet target={props.target} onClose={() => setOpen(false)} />, document.body)}

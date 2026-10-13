@@ -101,7 +101,9 @@ function ReadingsTile({ name, note, badges, icon, readings, dimmed, hideName, on
 
 function StateTile({ state, ...props }: SensorProps & { state: Part; readings: Part[] }) {
   const held = useHeld(state)
-  return <SensorBar {...props} state={state} active={held.active} icon={held.icon} lead={held.text} />
+  // A phone's name says nothing of its connection, as a door's icon does of it being open.
+  const lead = state.cap.key === 'connected' ? `${held.word.charAt(0).toUpperCase()}${held.word.slice(1)} · ${held.text}` : held.text
+  return <SensorBar {...props} state={state} active={held.active} icon={held.icon} lead={lead} />
 }
 
 // Shaped as a light's Tile: a bar with a big icon, the name and a status line, its chart below. With

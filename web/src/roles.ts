@@ -22,7 +22,7 @@ export interface Roles {
 export const mainControls = ['state', 'on', 'alarm', 'mode']
 export const lightAdjustments = ['brightness', 'color_temp', 'color_hs']
 // The Bridge turns a contact's "closed" into off: on is open.
-export const stateKeys = ['occupancy', 'presence', 'contact', 'water_leak', 'smoke']
+export const stateKeys = ['occupancy', 'presence', 'contact', 'water_leak', 'smoke', 'connected']
 export const healthKeys = ['battery', 'battpercentage', 'battery_low', 'tamper']
 // A plug's current and voltage follow its power.
 export const diagnosticKeys = ['current', 'voltage']
@@ -66,7 +66,16 @@ export const motion = (c: Capability) => c.key === 'occupancy' || c.key === 'pre
 
 // What a binary Value is while on, and what its turns on count as.
 export const turns = (c: Capability): [on: string, count: string] =>
-  c.key === 'contact' ? ['open', 'Openings'] : motion(c) ? ['occupied', 'Detections'] : ['on', 'Times on']
+  c.key === 'contact'
+    ? ['open', 'Openings']
+    : c.key === 'connected'
+      ? ['connected', 'Connections']
+      : motion(c)
+        ? ['occupied', 'Detections']
+        : ['on', 'Times on']
+
+// What a state is while off.
+export const rests = (c: Capability) => (c.key === 'contact' ? 'closed' : c.key === 'connected' ? 'not connected' : 'clear')
 
 // A button's Events are presses.
 export const presses = (c: Capability) => c.key === 'action'

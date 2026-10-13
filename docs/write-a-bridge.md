@@ -349,7 +349,7 @@ Function, told by its key:
 |---|---|---|
 | Main control | `state`, `on`, `alarm`, `mode` | Primary, Settable, not Stateless: the first of these keys, a light's `state` only. An on/off bar when Binary. At most one per Function |
 | Adjustment | `brightness`, `color_temp`, `color_hs` | a `light`'s, Settable: they refine its state, beside it |
-| State | `occupancy`, `presence`, `contact`, `water_leak`, `smoke` | Binary, not Settable; on while active (occupied, open, leaking), so a contact reports open as on |
+| State | `occupancy`, `presence`, `contact`, `water_leak`, `smoke`, `connected` | Binary, not Settable; on while active (occupied, open, leaking, connected), so a contact reports open as on |
 | Health | `battery`, `battpercentage`, `battery_low`, `tamper` | any: shown only when something is wrong |
 | Diagnostic | `current`, `voltage` | and any Capability of Category Diagnostic: shown apart (a plug's current and voltage, beside its power) |
 | Reading | `temperature`, `humidity`, `co2`, `noise`, `pressure`, `illuminance` | the rest that can only be observed, these first, in this order |

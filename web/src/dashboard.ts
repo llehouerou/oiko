@@ -65,7 +65,7 @@ export type DashboardTile = { key: string; label: string; place?: Place; customN
 
 // A Section of a Dashboard: an Area's, one of a custom Dashboard's own, or Others (neither). Key
 // names it on its Dashboard. An Area's header shows its status, from its Area Aggregates (climate,
-// doors, presence), and its light bar: its lone light's Tile, or its Aggregate of lights'. An
+// doors, occupancy), and its light bar: its lone light's Tile, or its Aggregate of lights'. An
 // Area's tiles come in its Layout's reading order, an own Section's in its own. On a custom
 // Dashboard, a Section has its place on the Dashboard's Layout.
 export interface DashboardSection {
@@ -75,7 +75,7 @@ export interface DashboardSection {
   columns?: number // of an Area's Layout, or an own Section's
   climate: Aggregate[]
   doors?: Aggregate
-  presence?: Aggregate
+  occupancy?: Aggregate
   bar?: TargetTile
   tiles: DashboardTile[]
   place?: Place
@@ -164,7 +164,7 @@ export function dashboard(devices: Device[], aggregates: Aggregate[], flags: Fla
       columns,
       climate: climateKinds.flatMap((k) => areaAggregate(area, k) ?? []),
       doors: areaAggregate(area, 'contact'),
-      presence: areaAggregate(area, 'occupancy'),
+      occupancy: areaAggregate(area, 'occupancy'),
       bar: bulb ?? (lights && aggregateTile(lights)),
       tiles: arrange(
         tiles(area.id, lone),

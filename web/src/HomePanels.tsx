@@ -87,7 +87,7 @@ export function AreaPanel({
           <legend className={legend}>Header</legend>
           {[
             ['light', 'Lights'],
-            ['occupancy', 'Presence'],
+            ['occupancy', 'Occupancy'],
             ['contact', 'Doors'],
             ['temperature', 'Temperature'],
             ['humidity', 'Humidity'],

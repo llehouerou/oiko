@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import guide from '../../docs/write-a-bridge.md?raw'
-import { byReading, co2Level, diagnosticKeys, healthKeys, lightAdjustments, mainControls, presses, readingOrder, roles, stateKeys, turns } from './roles'
+import { byReading, co2Level, diagnosticKeys, healthKeys, lightAdjustments, mainControls, presses, readingOrder, rests, roles, stateKeys, turns } from './roles'
 import type { Capability } from './types'
 
 const cap = (key: string, type: Capability['type'], more: Partial<Capability> = {}): Capability => ({
@@ -91,6 +91,10 @@ test('a contact and a motion sensor: a state, charted before any reading', () =>
   })
 })
 
+test("a phone's network: its connection is a state, charted", () => {
+  expect(of('network', cap('connected', 'binary'))).toEqual({ ...none, state: 'connected', charted: 'connected' })
+})
+
 test('a weather station: readings in reading order, the first charted', () => {
   expect(of('rain', cap('rain', 'numeric'), cap('rain_1h', 'numeric'), cap('rain_24h', 'numeric'))).toMatchObject({
     readings: ['rain', 'rain_1h', 'rain_24h'],
@@ -140,10 +144,17 @@ test("a Device's own Capabilities: health, diagnostics and settings", () => {
   ).toEqual({ ...none, health: ['battery'], diagnostics: ['linkquality'], settings: ['power_on_behavior'], charted: undefined })
 })
 
-test('a binary Value turns open, occupied or on', () => {
+test('a binary Value turns open, occupied, connected or on', () => {
   expect(turns(cap('contact', 'binary'))).toEqual(['open', 'Openings'])
   expect(turns(cap('presence', 'binary'))).toEqual(['occupied', 'Detections'])
+  expect(turns(cap('connected', 'binary'))).toEqual(['connected', 'Connections'])
   expect(turns(cap('state', 'binary'))).toEqual(['on', 'Times on'])
+})
+
+test('a binary Value at rest is closed, not connected or clear', () => {
+  expect(rests(cap('contact', 'binary'))).toBe('closed')
+  expect(rests(cap('connected', 'binary'))).toBe('not connected')
+  expect(rests(cap('occupancy', 'binary'))).toBe('clear')
 })
 
 test('readings come in a fixed order, unknown ones last', () => {

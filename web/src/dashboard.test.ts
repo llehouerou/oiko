@@ -23,7 +23,7 @@ const short = (s: DashboardSection) => ({
   area: s.area?.id,
   climate: s.climate.map((a) => a.id),
   doors: s.doors?.id,
-  presence: s.presence?.id,
+  occupancy: s.occupancy?.id,
   bar: s.bar && `${s.bar.fns.map((f) => f.target)} ${s.bar.shape.kind}`,
   tiles: s.tiles.map((t) => t.key),
 })
@@ -38,8 +38,8 @@ test("an Area's lone light is its bar, not a tile; two lights make their Aggrega
   ]
   const { sections } = dashboard(devices, aggregates, [], [area('living'), area('kitchen')], [])
   expect(sections.map(short)).toEqual([
-    { area: 'living', climate: ['living-temperature'], doors: 'living-contact', presence: undefined, bar: 'device:lamp/light bar', tiles: [] },
-    { area: 'kitchen', climate: [], doors: undefined, presence: undefined, bar: 'aggregate:kitchen-light bar', tiles: ['device:a', 'device:b'] },
+    { area: 'living', climate: ['living-temperature'], doors: 'living-contact', occupancy: undefined, bar: 'device:lamp/light bar', tiles: [] },
+    { area: 'kitchen', climate: [], doors: undefined, occupancy: undefined, bar: 'aggregate:kitchen-light bar', tiles: ['device:a', 'device:b'] },
   ])
 })
 
@@ -135,7 +135,7 @@ test('Flags without an Area are pills; Others opens with the manual Automations 
     area: undefined,
     climate: [],
     doors: undefined,
-    presence: undefined,
+    occupancy: undefined,
     bar: undefined,
     tiles: ['automation:bedtime', 'aggregate:g', 'device:lamp'],
   })
