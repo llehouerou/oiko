@@ -4,7 +4,7 @@ Anyone can add a type of Bridge to Oiko without changing it: a type is a Go pack
 
 The contract is the `bridge` package, which depends on the standard library only: a `Bridge` runs and sends Commands, and feeds Oiko through a `Port` (`SyncDevices`, `SetOnline`, `SetAvailability`, `Report`, `Replayed`), the methods Home already exposed to its Bridges. It also holds the terms a Bridge describes its Devices in. `Capability`, its types and categories, and `Availability` are Home's own, through aliases. A described `Device` and `Function` carry only what a Bridge knows: identity, Name, Icon and Areas stay Oiko's.
 
-The configuration names each Bridge under `bridges`; a Bridge's type is its section's `type`, or else its name, so several Bridges may share a type. Each gets its section as it is and a data directory of its own, `<data>/<name>`. A type may add commands, run as `oiko <bridge> <command>` while Oiko is not serving: pairing a HomeKit accessory is `oiko homekit pair <code>`.
+The configuration names each Bridge under `bridges`; a Bridge's type is its section's `type`, or else its name, so several Bridges may share a type. Each gets its section as it is and a data directory of its own, `<data>/<name>`. A type may add commands, run as `oiko <bridge> <command>` in a process of their own, beside an Oiko that may be serving, which nothing stops or locks; one that writes the Bridge's data takes effect once Oiko restarts: pairing a HomeKit accessory is `oiko homekit pair <code>`.
 
 ## Considered Options
 

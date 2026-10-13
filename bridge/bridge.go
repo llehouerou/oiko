@@ -275,7 +275,10 @@ type Module struct {
 	// env.Decode refuses unknown keys.
 	New func(env Env) (Bridge, error)
 	// Commands are run by name from the command line, on a Bridge of this
-	// type, while Oiko is not serving: `oiko <bridge> <command> [args]`.
+	// type: `oiko <bridge> <command> [args]`. A Command runs in its own
+	// process, beside an Oiko that may be serving: Oiko neither stops nor
+	// locks anything for it, and calls no New. A Command that writes the
+	// Bridge's data takes effect once Oiko restarts, and says so.
 	Commands map[string]func(env Env, args []string) error
 }
 

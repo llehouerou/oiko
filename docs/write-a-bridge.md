@@ -410,9 +410,10 @@ The reference is [oiko-arlo][arlo], cameras with Recordings in Arlo's cloud.
 
 ## More you may need
 
-- **Command-line commands.** A pairing or a sign-in the user runs once is a
-  [`Module.Commands`][Module] entry, run as `oiko <bridge> <command> [args]` while Oiko is not
-  serving, such as homekit's [`pair`](configure.md#homekit).
+- **Command-line commands.** A pairing, a sign-in or a lookup the user runs by hand is a
+  [`Module.Commands`][Module] entry, run as `oiko <bridge> <command> [args]` in its own process,
+  beside an Oiko that may be serving: nothing is stopped or locked for it. One that writes the
+  Bridge's data takes effect once Oiko restarts, as homekit's [`pair`](configure.md#homekit) does.
 - **Reconnecting.** When the system goes away, call `SetOnline(false)`, retry with a growing delay,
   and `SetOnline(true)` once back. `Run` never returns before its context ends.
 - **Never panic.** In `Run` or `Send`, a panic takes all of Oiko down: return an error, or log one.
