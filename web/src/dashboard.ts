@@ -336,15 +336,14 @@ export function shown(hash: string, dashboards: CustomDashboard[], list: ListEnt
 // built-in one unless an Admin turned it off, a custom one once its editor turned it on.
 export const presenceRowShown = (d: CustomDashboard | undefined, builtin: BuiltinDashboard) => (d ? d.presenceRow === true : builtin.presenceRow !== false)
 
+// What a duplicate holds of the Dashboard it copies.
+export type Copy = Pick<CustomDashboard, 'columns' | 'sections' | 'presenceRow'>
+
 // What a duplicate of Dashboard d, undefined for the built-in one, holds, built from what its viewer
 // sees (ADR 0041): a custom one's Sections and Tiles as they reach the viewer, the built-in one's
 // Areas' Sections two per row, in their order, without Others, and whether d shows the Presence
 // row. It never follows d.
-export function copied(
-  d: CustomDashboard | undefined,
-  areas: Area[],
-  builtin: BuiltinDashboard,
-): Pick<CustomDashboard, 'columns' | 'sections' | 'presenceRow'> {
+export function copied(d: CustomDashboard | undefined, areas: Area[], builtin: BuiltinDashboard): Copy {
   const row = presenceRowShown(d, builtin) ? { presenceRow: true as const } : {}
   if (d) return { columns: d.columns, sections: d.sections, ...row }
   return { columns: 2, sections: areas.map((a, i) => ({ area: a.id, col: i % 2, row: Math.floor(i / 2), width: 1 })), ...row }

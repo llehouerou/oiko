@@ -5,6 +5,7 @@ import { useRef, useState, type FormEvent } from 'react'
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { mdiChevronDown, mdiDrag, mdiFormatListBulleted, mdiPlus, mdiViewDashboardOutline } from '@mdi/js'
 import type { CustomDashboard, ListEntry } from './types'
+import type { Copy } from './dashboard'
 import { api, useAllows } from './access'
 import { edit } from './store'
 import { Switch } from './controls'
@@ -153,17 +154,7 @@ function ListRow({ entry, name, last, onShow }: { entry: ListEntry; name: string
 }
 // Asks for a Name, and an Admin whether it is shared or their own, creates a Dashboard of it, empty
 // or holding copy, opens it at its address and tells onCreated its id.
-export function CreateDashboard({
-  title,
-  copy,
-  onCreated,
-  onClose,
-}: {
-  title: string
-  copy?: Pick<CustomDashboard, 'columns' | 'sections' | 'presenceRow'>
-  onCreated: (id: string) => void
-  onClose: () => void
-}) {
+export function CreateDashboard({ title, copy, onCreated, onClose }: { title: string; copy?: Copy; onCreated: (id: string) => void; onClose: () => void }) {
   const admin = useAllows('admin')
   const [error, setError] = useState<string | null>(null)
   const submit = async (e: FormEvent<HTMLFormElement>) => {
