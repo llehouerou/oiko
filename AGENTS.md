@@ -5,6 +5,7 @@
 - Use the vocabulary defined in `GLOSSARY.md`; record hard-to-reverse decisions in `docs/adr/`.
 - Once Oiko is public (`v0.3.0` on), ADR 0019 overrides the global "no backward compatibility" rule: data Oiko owns is migrated, never broken; the `bridge` contract, the HTTP/WebSocket API, what Code Steps see and the configuration break only in a breaking release (a minor during v0, a major from `v1.0.0`), and a v0 patch neither breaks nor adds anything. Elsewhere, and before going public, the global rule holds.
 - Web client change: see it rendered in the browser before reporting it; `docs/agents/ui-check.md` says how to reach the dev server and sign in.
+- Done means `make test` passes. A visible change to the built-in Dashboard also reruns `make screenshots` (`CONTRIBUTING.md`).
 
 ## Agent skills
 

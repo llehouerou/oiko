@@ -2,6 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -19,6 +24,11 @@ func TestEachLevelSeesTheUpdatesADR0031Allows(t *testing.T) {
 		home.AvailabilityChanged, home.BridgeChanged, home.CommandChanged, home.AggregatesChanged,
 		home.FlagsChanged, home.PresencesChanged, home.AreasChanged, home.AutomationsChanged, home.TargetDeleted, home.DeviceReplaced}
 	hidden := []home.UpdateKind{home.RunEnded, "made-up"}
+	for _, kind := range updateKinds(t) {
+		if !slices.Contains(shown, kind) && !slices.Contains(hidden, kind) {
+			t.Errorf("a %q Update: decide whether a Guest sees it, in seen.go, then list it here", kind)
+		}
+	}
 
 	for _, l := range allLevels {
 		guest := l == access.Guest
@@ -43,6 +53,30 @@ func TestEachLevelSeesTheUpdatesADR0031Allows(t *testing.T) {
 			}
 		}
 	}
+}
+
+// updateKinds are the values of every UpdateKind constant internal/home
+// declares, read from its source.
+func updateKinds(t *testing.T) []home.UpdateKind {
+	t.Helper()
+	f, err := parser.ParseFile(token.NewFileSet(), "../home/home.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var kinds []home.UpdateKind
+	ast.Inspect(f, func(n ast.Node) bool {
+		if v, ok := n.(*ast.ValueSpec); ok {
+			if id, ok := v.Type.(*ast.Ident); ok && id.Name == "UpdateKind" {
+				s, _ := strconv.Unquote(v.Values[0].(*ast.BasicLit).Value)
+				kinds = append(kinds, home.UpdateKind(s))
+			}
+		}
+		return true
+	})
+	if len(kinds) < 10 {
+		t.Fatalf("read %d UpdateKind constants from home.go: has it moved?", len(kinds))
+	}
+	return kinds
 }
 
 func TestAGuestSeesTheTilesOfThePressableAutomationsAndNoOneWhoStartedARun(t *testing.T) {

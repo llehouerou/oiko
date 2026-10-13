@@ -8,11 +8,13 @@ A change to `web/` is done once you have seen it rendered: look at it with the b
 
 If nothing answers on `:5180` (`curl -sf localhost:5180`), start it in the background: `nohup make dev > /tmp/oiko-dev.log 2>&1 &`. Done when `localhost:5180` answers.
 
+Only the web client hot-reloads: after a Go change, restart it. `pkill -f '[m]ake dev'` stops it (the bracket keeps the pattern from matching the shell running it), then start it as above.
+
 ## 2. Signing in
 
 The Persons of the dev home sign in with Passkeys, which the agent's browser does not hold. Use the host command instead:
 
-1. Try the saved session first: open `http://localhost:5180`, `state load oiko-dev`, reload. Signed in if the page shows a Dashboard and not the sign-in screen.
+1. Try the saved session first: open `http://localhost:5180`, `state load oiko-dev`, reload. Signed in if the page shows a Dashboard and not the sign-in screen. Managing Persons, Programs or Kiosks needs a fresh Session, signed in within 10 minutes: for those, sign in with a new link (step 2).
 2. Otherwise, from the repo root, while the dev server runs: `go run ./cmd/oiko sign-in-link` lists the Persons; `go run ./cmd/oiko sign-in-link <id>` of an Admin prints a Sign-in link on `http://localhost:8080`, valid 15 minutes, once.
 3. Open the link, `Continue`, then `Not now` for the Passkey. The Session cookie is `localhost`'s, so it holds on `:5180` too.
 4. `state save oiko-dev`, for the next session.

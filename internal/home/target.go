@@ -27,6 +27,13 @@ type Target struct {
 	function string // of a Device's Function
 }
 
+// targetKind is what kind of Target one is. A new kind is wired, beyond this
+// file's Key, ParseTarget, Targets and lookupDirect, into:
+//   - Home's snapshot (its list and Availability), its Update kind for that
+//     list, and api's seen.go, which decides who sees that Update;
+//   - the automation engine's apply and nameOf;
+//   - the dashboard Store's known, which prunes Tiles of what is gone;
+//   - the web client's parseTarget (targets.ts) and store.ts.
 type targetKind uint8
 
 const (
