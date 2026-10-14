@@ -8,7 +8,8 @@ environment: the first proxy of `GOPROXY` (`proxy.golang.org` by default), none 
 `GOPROXY=off`; modules matching `GONOPROXY`, by default `GOPRIVATE`, are never asked about.
 
 It also tells how to apply them for its install, which `OIKO_INSTALL` names: `nixos` (set by
-the NixOS module), or unset for a plain binary; an unknown value stops Oiko at start.
+the NixOS module), `docker` (set by the catalogue's Dockerfile), `image` (set by Oiko's
+prebuilt image), or unset for a plain binary; an unknown value stops Oiko at start.
 
 ## Plain binary
 
@@ -20,6 +21,13 @@ previous one as `oiko.old`. Restart Oiko afterwards; to roll back, `mv oiko.old 
 A release that may break it is only named: upgrade to it by hand, following its release notes.
 `oiko upgrade` refuses with NixOS and Docker, where the dashboard tells what to change instead,
 and for a development build.
+
+## Docker
+
+With the prebuilt image, set the newer release's tag in `compose.yaml`
+(`image: ghcr.io/llehouerou/oiko:0.12.1`), then `docker compose pull && docker compose up -d`.
+With the catalogue's Dockerfile, replace its `oiko-build` command with the one the dashboard
+gives, then `docker compose up -d --build`.
 
 ## Releases
 

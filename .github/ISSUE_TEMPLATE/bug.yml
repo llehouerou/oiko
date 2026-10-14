@@ -43,6 +43,7 @@ body:
       label: How Oiko was installed
       options:
         - oiko-build
+        - Docker, prebuilt image
         - Docker, from the catalogue's Dockerfile
         - NixOS module
         - From source

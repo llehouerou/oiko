@@ -114,6 +114,10 @@ scripts/publish v0.3.1 notes.md    # pushes it, creates its GitHub Release, anno
 scripts/notices                    # its third-party notices, as a dry run, after npm run build
 ```
 
+Pushing the tag runs `.github/workflows/image.yml`, which publishes the release's stock image,
+`ghcr.io/llehouerou/oiko:X.Y.Z` and `:X.Y` (ADR 0057); run it by hand with the tag to publish one
+again.
+
 Release tags sit on no branch (ADR 0018), so `git describe` finds none: what is unreleased is
 `git log $(git merge-base vX.Y.Z main)..main`, which `scripts/release` prints too. Releases
 follow [the compatibility rules](docs/upgrade.md#releases) (ADR 0019).

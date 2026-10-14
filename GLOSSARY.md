@@ -17,7 +17,7 @@ _Avoid_: SDK, plugin API, framework
 What an Oiko executable is made of: Oiko's version and each type of Bridge compiled into it, built in or added, with the Go package registering it and the module and version that package comes from, as Go records them in the executable. A version is unknown for a development build or a module taken from a directory; an untagged commit has a pseudo-version.
 _Avoid_: recipe, manifest (reserved for a Bridge's), bill of materials
 **Install**:
-How an Oiko runs on its host: from Oiko's NixOS module, in a Docker image, or as a plain binary, as `OIKO_INSTALL` tells (`nixos`, `docker`, unset). It decides how a Release is applied: the web client tells what to change for each, and a plain binary rebuilds itself with `oiko upgrade`.
+How an Oiko runs on its host: from Oiko's NixOS module, in a Docker image built from the catalogue's Dockerfile, from Oiko's prebuilt image, or as a plain binary, as `OIKO_INSTALL` tells (`nixos`, `docker`, `image`, unset). It decides how a Release is applied: the web client tells what to change for each, and a plain binary rebuilds itself with `oiko upgrade`.
 _Avoid_: deployment, distribution, install method
 **Manifest**:
 What an added type of Bridge's module tells the catalogue about itself, in `oiko-bridge.json` at its root: each type its root package registers, with a description and an example of its section of the configuration. Its versions and the Oiko each needs are not in it: the module proxy and its `go.mod` say them (ADR 0020).

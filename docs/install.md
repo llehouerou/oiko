@@ -1,8 +1,8 @@
 # Install
 
-Oiko is one binary with its web client embedded. Build it with Go, build it in Docker from
-the catalogue's Dockerfile, or deploy it with the NixOS module. Then [configure](configure.md)
-it, give it a [Public URL](expose.md), and [sign in](sign-in.md).
+Oiko is one binary with its web client embedded. Run its prebuilt Docker image, build it with
+Go, build it in Docker from the catalogue's Dockerfile, or deploy it with the NixOS module. Then
+[configure](configure.md) it, give it a [Public URL](expose.md), and [sign in](sign-in.md).
 
 ## Plain binary
 
@@ -19,8 +19,32 @@ Then open http://localhost:8080. To build it with added types of Bridge, see
 
 ## Docker
 
-The [catalogue site](https://llehouerou.github.io/oiko-catalogue/)'s Docker tab gives a tested
-`Dockerfile` and `compose.yaml` building an Oiko with the types of Bridge you pick.
+Each release publishes `ghcr.io/llehouerou/oiko`, for `linux/amd64` and `linux/arm64`, with the
+built-in types of Bridge, zigbee2mqtt and homekit. It is tagged with the release's version
+without its `v`, `0.12.0`, and its minor, `0.12`, which follows the releases that cannot break
+it; there is no `latest`. A `compose.yaml`:
+
+```yaml
+services:
+  oiko:
+    image: ghcr.io/llehouerou/oiko:0.12.0
+    network_mode: host
+    user: "1000:1000"  # your id -u:id -g
+    volumes:
+      - ./data:/data
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+```
+
+`mkdir data`, write its `config.json` ([Configure](configure.md)), then `docker compose up -d`,
+and open http://localhost:8080. Host networking lets HomeKit find accessories over mDNS. `data`
+holds Oiko's own configuration and secrets: the user running the container must own it. The
+dashboard tells how to [upgrade](upgrade.md#docker).
+
+Other types of Bridge need a build: the [catalogue site](https://llehouerou.github.io/oiko-catalogue/)'s
+Docker tab gives a tested `Dockerfile` and `compose.yaml` building an Oiko with the types you
+pick. It runs the same way, with the same `/data`, so a home moves from the image to it keeping
+its data.
 
 ## Flags
 
