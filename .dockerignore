@@ -1,0 +1,6 @@
+.git
+.direnv
+data
+result
+oiko
+web/node_modules
