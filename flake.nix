@@ -56,6 +56,8 @@
             pkgs.mosquitto
             pkgs.gnumake
             pkgs.imagemagick # make icons
+            pkgs.actionlint # make test lints .github/workflows
+            pkgs.shellcheck # actionlint checks the workflows' run: scripts with it
             # scripts/check-licenses and scripts/notices; built with the shell's Go, which it must match.
             (pkgs.go-licenses.override {
               buildGoModule = pkgs.buildGo127Module;
