@@ -43,6 +43,9 @@ func upgrade(inst string, args []string, in io.Reader, out io.Writer) error {
 	if inst == "docker" {
 		return errors.New("upgrade: this Oiko runs from a Docker image: replace the oiko-build command of its Dockerfile, then rebuild the image, as the dashboard's banner tells")
 	}
+	if inst == "image" {
+		return errors.New("upgrade: this Oiko runs from Oiko's prebuilt image: pull the newer release's tag and recreate the container, as the dashboard's banner tells")
+	}
 	b := build.Current()
 	if err := released(b); err != nil {
 		return err

@@ -21,6 +21,12 @@ export function upgrade(build: Build, releases: ReleaseStatus[]): Upgrade | null
     return (s?.newer && s.newest) || current || s?.newest || '<version>'
   }
   const v = version(oiko, build.version)
+  // The prebuilt image is tagged with the Release's version without its v (ADR 0057).
+  if (build.install === 'image')
+    return {
+      text: 'Set this image in your compose.yaml, then run docker compose pull && docker compose up -d.',
+      code: `image: ghcr.io/llehouerou/oiko:${v.replace(/^v/, '')}`,
+    }
   // A rebuild takes every added type, each package once, newer or not.
   const added = [...new Map(build.types.filter((t) => !t.builtIn).map((t) => [t.package, version(t.module, t.version)]))].sort(([a], [b]) => a.localeCompare(b))
   if (build.install === 'nixos') {
@@ -36,6 +42,7 @@ export function upgrade(build: Build, releases: ReleaseStatus[]): Upgrade | null
       code: [`inputs.oiko.url = "github:llehouerou/oiko/${v}";`, ...(added.length ? override : [])].join('\n'),
     }
   }
+  // docker: built from the catalogue's Dockerfile.
   const code = [`go run ${oiko}/cmd/oiko-build@${v} \\`, ...added.map(([p, pv]) => `  -with ${p}@${pv} \\`), '  -o oiko'].join('\n')
   return { text: 'Replace the oiko-build command of your Dockerfile with this one, then rebuild the image and recreate the container.', code }
 }

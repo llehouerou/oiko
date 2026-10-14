@@ -246,7 +246,7 @@ export interface AutomationStatus {
 export interface Build {
   version?: string // Oiko's; none when unknown
   types: { type: string; builtIn: boolean; package: string; module?: string; version?: string }[]
-  install: 'nixos' | 'docker' | 'binary' // how this Oiko runs on its host (OIKO_INSTALL)
+  install: 'nixos' | 'docker' | 'image' | 'binary' // how this Oiko runs on its host (OIKO_INSTALL)
   bridges: Record<string, string> // each one's type, by name
 }
 // Mirrors release.Status: what the module proxy lists of a module built into Oiko, Oiko's first.

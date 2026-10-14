@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -209,5 +210,50 @@ func TestLoadCreatesAPrivateDataDirectory(t *testing.T) {
 		if fi, err := os.Stat(dir); err != nil || fi.Mode().Perm() != want {
 			t.Errorf("%s: %v, %v, want %v", dir, fi.Mode().Perm(), err, want)
 		}
+	}
+}
+
+// install accepts each Install the web client's Build names, and no other.
+func TestInstallsMatchTheWebClient(t *testing.T) {
+	types, err := os.ReadFile("web/src/types.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`\binstall: ('\w+'(?: \| '\w+')*)`).FindSubmatch(types)
+	if m == nil {
+		t.Fatal("no install union in web/src/types.ts")
+	}
+	web := strings.Split(strings.ReplaceAll(string(m[1]), "'", ""), " | ")
+	var accepted []string
+	for _, env := range append([]string{""}, installs...) {
+		inst, err := install(env)
+		if err != nil {
+			t.Fatal(err)
+		}
+		accepted = append(accepted, inst)
+	}
+	slices.Sort(web)
+	slices.Sort(accepted)
+	if !slices.Equal(accepted, web) {
+		t.Errorf("install accepts %v, web/src/types.ts names %v", accepted, web)
+	}
+	if _, err := install("snap"); err == nil {
+		t.Error("an unknown OIKO_INSTALL accepted")
+	}
+}
+
+// The Dockerfile builds with go.mod's Go: a release's image is built from its tag, never fixed after.
+func TestDockerfileGoMatchesGoMod(t *testing.T) {
+	mod, err := os.ReadFile("go.mod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dockerfile, err := os.ReadFile("Dockerfile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := regexp.MustCompile(`(?m)^go (\S+)$`).FindSubmatch(mod)
+	if v == nil || !strings.Contains(string(dockerfile), "golang:"+string(v[1])+" ") {
+		t.Error("the Dockerfile's golang image is not go.mod's Go")
 	}
 }

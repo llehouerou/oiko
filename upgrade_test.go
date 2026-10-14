@@ -60,6 +60,7 @@ func TestUpgradeRefuses(t *testing.T) {
 	for inst, want := range map[string]string{
 		"nixos":  "Nix manages",
 		"docker": "Docker image",
+		"image":  "prebuilt image",
 		"binary": "built from a checkout", // this test's executable
 	} {
 		var out bytes.Buffer

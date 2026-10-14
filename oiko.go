@@ -178,16 +178,19 @@ func parsePublicURL(s string) (*url.URL, error) {
 	return &url.URL{Scheme: "https", Host: strings.TrimSuffix(strings.ToLower(u.Host), ":443")}, nil
 }
 
+// installs are the values OIKO_INSTALL takes, besides unset for a plain binary.
+var installs = []string{"nixos", "docker", "image"}
+
 // install is how this Oiko runs on its host, its Install (see GLOSSARY.md), as
-// OIKO_INSTALL tells: nixos, docker, or a plain binary when unset.
+// OIKO_INSTALL tells: one of installs, or a plain binary when unset.
 func install(env string) (string, error) {
-	switch env {
-	case "":
+	if env == "" {
 		return "binary", nil
-	case "nixos", "docker":
+	}
+	if slices.Contains(installs, env) {
 		return env, nil
 	}
-	return "", fmt.Errorf("OIKO_INSTALL=%q: want nixos, docker, or unset for a plain binary", env)
+	return "", fmt.Errorf("OIKO_INSTALL=%q: want %s, or unset for a plain binary", env, strings.Join(installs, ", "))
 }
 
 // loadConfig decodes the configuration at path into c, refusing what it does

@@ -28,6 +28,13 @@ test('docker: the same command, for the Dockerfile', () => {
   expect(upgrade(build('docker'), releases)).toEqual({ text: expect.stringContaining('Dockerfile'), code: command })
 })
 
+test('image: the newer tag to pull, without its v', () => {
+  expect(upgrade(build('image', false), releases)).toEqual({
+    text: expect.stringContaining('docker compose pull && docker compose up -d'),
+    code: 'image: ghcr.io/llehouerou/oiko:0.3.0',
+  })
+})
+
 test('nixos: the flake input pinned to the Release, the override with each added type', () => {
   expect(upgrade(build('nixos'), releases)).toEqual({
     text: expect.stringContaining('nix flake update oiko'),
