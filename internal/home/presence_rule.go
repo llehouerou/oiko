@@ -68,18 +68,25 @@ func (h *Home) reachable(t Target) bool {
 	return true
 }
 
-// feeds is whether ref, a Value just recorded, is what Presence source t is read
-// through, directly or as a member of the Aggregate t is. Callers hold h.mu.
-func (h *Home) feeds(t Target, ref Ref) bool {
+// fed is whether rs, Values just recorded, feed what Presence source t is
+// read through, directly or as a member of the Aggregate t is, and whether
+// only by replayed Values. Callers hold h.mu.
+func (h *Home) fed(t Target, rs []recorded) (fed, initial bool) {
 	key, ok := h.sourceKey(t)
-	if !ok || ref.Capability != key {
-		return false
+	if !ok {
+		return false, true
 	}
+	from := []Target{t}
 	if a := h.aggregates[t.Aggregate()]; a != nil {
-		ms, _ := h.resolve(a)
-		return slices.Contains(ms, ref.Target)
+		from, _ = h.resolve(a)
 	}
-	return ref.Target == t
+	initial = true
+	for _, r := range rs {
+		if r.ref.Capability == key && slices.Contains(from, r.ref.Target) {
+			fed, initial = true, initial && r.initial
+		}
+	}
+	return fed, initial
 }
 
 // sourceKey is the Capability Presence source t is read through; false if t is

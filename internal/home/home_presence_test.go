@@ -255,6 +255,22 @@ func TestHomeBindingsAreChecked(t *testing.T) {
 	}
 }
 
+// Deleting the last Entrance door unbinds the Signs of life too: they need
+// one, and nothing would empty the box (ADR 0051).
+func TestTheLastEntranceDoorTakesTheSignsOfLife(t *testing.T) {
+	h, _, _, front, _, _ := boxed(t)
+	port(h).SyncDevices([]bridge.Device{entrance("0xback"), motion("0xhall"), thermometer("0xtherm")}) // the front door detached
+	if err := h.Delete(front.Device()); err != nil {
+		t.Fatal(err)
+	}
+	if b := snapshot(h).Presences[0].HomeBindings; len(b.EntranceDoors) != 0 || len(b.SignsOfLife) != 0 || b.ExitGrace != DefaultExitGrace {
+		t.Errorf("bindings %+v, want none", b)
+	}
+	if err := h.SetHomeBindings(HomeBindings{ExitGrace: 60}); err != nil {
+		t.Errorf("the bindings left refused: %v", err)
+	}
+}
+
 func TestTheHomePresenceSurvivesRestart(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		h, _, dir, _, _, _ := boxed(t)

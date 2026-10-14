@@ -60,10 +60,10 @@ type person struct {
 
 // presenceFunction is what every Person's Presence does. Callers never
 // modify it.
-var presenceFunction = Function{Key: "presence", Kind: "presence", Capabilities: []Capability{
+var presenceFunction = withRoles(Function{Key: "presence", Kind: "presence", Capabilities: []Capability{
 	{Key: "home", Label: "Home", Type: Binary, Access: Access{Observable: true, Settable: true}, Category: Primary},
 	{Key: "manual", Label: "Set by hand", Type: Binary, Access: Access{Observable: true}, Category: Primary},
-}}
+}})
 
 func homeRef(id PersonID) Ref   { return TargetPresence(id).Ref("home") }
 func manualRef(id PersonID) Ref { return TargetPresence(id).Ref("manual") }
@@ -146,12 +146,12 @@ func (h *Home) removePerson(id PersonID) {
 	h.emit(Update{Kind: TargetDeleted, Target: TargetPresence(id)})
 }
 
-// SetPresenceSources binds Presence sources to Person id's Presence, in place of
-// those it had (ADR 0054). Each must be a Function, Aggregate or Flag with a
-// binary state or main control, other than a Presence or an Aggregate of
-// them, and its delay not
-// negative; one listed twice is kept once, as first listed. The Presence then
-// follows them: an override ends if they agree with it.
+// SetPresenceSources binds Presence sources to Person id's Presence, in place
+// of those it had (ADR 0054). Each must be a Function, Aggregate or Flag with
+// a binary state or main control, other than a Presence or an Aggregate of
+// them, and its delay not negative; one listed twice is kept once, as first
+// listed. The Presence then follows them: an override ends if they agree
+// with it.
 func (h *Home) SetPresenceSources(id PersonID, sources []PresenceSource) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -185,10 +185,11 @@ func (h *Home) checkSource(s PresenceSource) error {
 // checkBinding refuses what cannot be bound to a Presence or the Home
 // presence (ADR 0054). Callers hold h.mu.
 func (h *Home) checkBinding(t Target) error {
+	a := h.aggregates[t.Aggregate()]
 	switch {
 	case t.IsZero():
 		return fmt.Errorf("%w: a binding names its target", ErrInvalid)
-	case t.Presence() != "" || h.aggregates[t.Aggregate()] != nil && h.aggregates[t.Aggregate()].Kind == presenceFunction.Kind:
+	case t.Presence() != "" || a != nil && a.Kind == presenceFunction.Kind:
 		return fmt.Errorf("%w: a presence, or an aggregate of them, cannot be bound to a presence", ErrInvalid) // none feeds what follows a Presence (propagate.go)
 	case t.Device() != "" && t.Function() == "":
 		return fmt.Errorf("%w: a binding is a function, not a device", ErrInvalid)
@@ -236,18 +237,6 @@ func (h *Home) reportToPresences(rs []recorded) {
 	}
 }
 
-// fed is whether rs, Values just recorded, feed what t is read through, and
-// whether only by replayed Values. Callers hold h.mu.
-func (h *Home) fed(t Target, rs []recorded) (fed, initial bool) {
-	initial = true
-	for _, r := range rs {
-		if h.feeds(t, r.ref) {
-			fed, initial = true, initial && r.initial
-		}
-	}
-	return fed, initial
-}
-
 // followRule sets Person id's Presence to what its rule computes now, unless
 // an override holds; it ends the override once the rule agrees with it. It
 // has the rule computed again when the earliest departure delay runs out.
@@ -290,27 +279,36 @@ func (h *Home) followRule(id PersonID, initial bool) {
 	}
 }
 
-// presenceTarget is Person id's Presence. A Command on it is an override
-// (ADR 0052), applied and confirmed at once.
+// presenceTarget is Person id's Presence, or the Home presence. A Command on a
+// Person's is an override (ADR 0052), applied and confirmed at once; one on
+// the Home presence is refused, as its home is not settable.
 type presenceTarget struct {
 	h  *Home
 	id PersonID
 }
 
-func (x presenceTarget) target() Target           { return TargetPresence(x.id) }
-func (presenceTarget) kind() string               { return presenceFunction.Kind }
-func (presenceTarget) capabilities() []Capability { return presenceFunction.Capabilities }
-func (presenceTarget) attached() bool             { return true }
-func (presenceTarget) availability() Availability { return Online }
-func (presenceTarget) accept(values map[string]any) error {
-	return checkValues(presenceFunction.Capabilities, values)
+// function is what the Presence does.
+func (x presenceTarget) function() Function {
+	if x.id == HomePresence {
+		return homePresenceFunction
+	}
+	return presenceFunction
+}
+
+func (x presenceTarget) target() Target             { return TargetPresence(x.id) }
+func (x presenceTarget) kind() string               { return x.function().Kind }
+func (x presenceTarget) capabilities() []Capability { return x.function().Capabilities }
+func (presenceTarget) attached() bool               { return true }
+func (presenceTarget) availability() Availability   { return Online }
+func (x presenceTarget) accept(values map[string]any) error {
+	return checkValues(x.function().Capabilities, values)
 }
 func (x presenceTarget) carry(req Request, key string) string { return x.h.issue(x, req, key) }
 func (presenceTarget) timeout() time.Duration                 { return 0 }
 
-// transmit forces home to the Value asked for: an override, unless the rule
-// computes that Value already. With no Presence source heard, nothing ends it but
-// the next Command.
+// transmit forces a Person's home to the Value asked for: an override, unless
+// the rule computes that Value already. With no Presence source heard, nothing
+// ends it but the next Command.
 func (x presenceTarget) transmit(req Request) {
 	h, at := x.h, time.Now()
 	forced := req.Values["home"]
@@ -353,7 +351,7 @@ func (h *Home) presenceList() []Presence {
 	list := make([]Presence, 0, len(h.presences))
 	for id, p := range h.presences {
 		list = append(list, Presence{ID: id, Name: p.name, Kind: presenceFunction.Kind, Capabilities: presenceFunction.Capabilities,
-			Roles: roles(presenceFunction.Kind, presenceFunction.Capabilities), Sources: append([]PresenceSource{}, p.sources...)})
+			Roles: presenceFunction.Roles, Sources: append([]PresenceSource{}, p.sources...)})
 	}
 	slices.SortFunc(list, func(a, b Presence) int {
 		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.ID, b.ID))

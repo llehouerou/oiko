@@ -85,6 +85,12 @@ func roles(kind string, caps []Capability) Roles {
 	return rs
 }
 
+// withRoles is fn, a Function Oiko defines itself, with its Roles.
+func withRoles(fn Function) Function {
+	fn.Roles = roles(fn.Kind, fn.Capabilities)
+	return fn
+}
+
 // readCapability is the Capability a Function of kind with caps is read
 // through as a Presence source (ADR 0049): its main control if binary,
 // otherwise its state.

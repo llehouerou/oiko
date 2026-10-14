@@ -220,19 +220,9 @@ type Bindings = { entranceDoors: Target[]; signsOfLife: Target[]; exitGrace: num
 function HomeBindings({ presence }: { presence: Presence }) {
   const admin = useAllows('admin')
   const targets = useCatalogue()
-  const [draft, setDraft] = useState<Bindings | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const { draft, setDraft, error, close, save } = useDraft<Bindings>(`presences/${presence.id}`, (d) => d)
   const saved: Bindings = { entranceDoors: presence.entranceDoors ?? [], signsOfLife: presence.signsOfLife ?? [], exitGrace: presence.exitGrace ?? 0 }
   const shown = draft ?? saved
-  const close = () => {
-    setDraft(null)
-    setError(null)
-  }
-  const save = async () => {
-    const err = await edit('PUT', `presences/${presence.id}`, draft)
-    if (err) setError(err)
-    else close()
-  }
   const list = (which: 'entranceDoors' | 'signsOfLife', title: string, one: string, none: string, editButton: boolean) => (
     <section className="space-y-2">
       <div className="flex items-center justify-between">
@@ -304,6 +294,23 @@ function AddBinding({ label, bound, onAdd }: { label: string; bound: Target[]; o
       ))}
     </select>
   )
+}
+
+// useDraft edits what path keeps in place: a draft while editing, saved whole as body makes it of
+// the draft; an error keeps it open.
+function useDraft<T>(path: string, body: (draft: T) => unknown) {
+  const [draft, setDraft] = useState<T | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const close = () => {
+    setDraft(null)
+    setError(null)
+  }
+  const save = async () => {
+    const err = draft === null ? null : await edit('PUT', path, body(draft))
+    if (err) setError(err)
+    else close()
+  }
+  return { draft, setDraft, error, close, save }
 }
 
 function SaveBar({ error, onSave, onCancel }: { error: string | null; onSave: () => void; onCancel: () => void }) {
@@ -380,19 +387,9 @@ function PersonSheet({ presence, onClose }: { presence: Presence; onClose: () =>
 function Sources({ presence }: { presence: Presence }) {
   const admin = useAllows('admin')
   const targets = useCatalogue()
-  const [draft, setDraft] = useState<PresenceSource[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const { draft, setDraft, error, close, save } = useDraft<PresenceSource[]>(`presences/${presence.id}`, (sources) => ({ sources }))
   const list = draft ?? presence.sources ?? []
   if (!list.length && !admin) return null
-  const close = () => {
-    setDraft(null)
-    setError(null)
-  }
-  const save = async () => {
-    const err = await edit('PUT', `presences/${presence.id}`, { sources: draft })
-    if (err) setError(err)
-    else close()
-  }
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between">

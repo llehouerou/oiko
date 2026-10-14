@@ -17,7 +17,7 @@ We chose this because a Presence is a Target, and Home owns Targets: it alone ca
 
 ## Consequences
 
-- A binding saved is refused when a Target does not exist, is not a Function, has no binary state or main-control Capability, or is a Presence or the Home presence; when a delay or the grace is negative; or when Signs of life are bound with no Entrance door (ADR 0051). A Target listed twice is kept once. A Target deleted later is unbound at once and the list resent; a Detached Device or a vanished Function stays bound (ADR 0049).
+- A binding saved is refused when a Target does not exist, is not a Function, has no binary state or main-control Capability, or is a Presence or the Home presence; when a delay or the grace is negative; or when Signs of life are bound with no Entrance door (ADR 0051). A Target listed twice is kept once. A Target deleted later is unbound at once and the list resent, the Signs of life with the last Entrance door; a Detached Device or a vanished Function stays bound (ADR 0049).
 - The access store gives Home the Persons at start and tells it of each Person created, renamed or removed. An entry left for a Person gone, after a crash between two document writes, is dropped on load (ADR 0032, ADR 0045). A Person with no entry has a Presence with no binding and no Value.
 - There is no `POST` or `DELETE`: Oiko derives every Presence (ADR 0048, ADR 0051).
 - Guests receive the `presences` Update and list (ADR 0053).

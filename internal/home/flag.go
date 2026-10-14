@@ -31,9 +31,9 @@ type SavedFlag struct {
 }
 
 // flagFunction is what every Flag does. Callers never modify it.
-var flagFunction = Function{Key: "flag", Kind: "flag", Capabilities: []Capability{
+var flagFunction = withRoles(Function{Key: "flag", Kind: "flag", Capabilities: []Capability{
 	{Key: "on", Label: "On", Type: Binary, Access: Access{Observable: true, Settable: true}, Category: Primary},
-}}
+}})
 
 func flagRef(id FlagID) Ref { return TargetFlag(id).Ref("on") }
 
@@ -146,7 +146,7 @@ func (h *Home) saveFlagList() error {
 func (h *Home) flagList() []Flag {
 	list := make([]Flag, 0, len(h.flags))
 	for _, f := range h.flags {
-		f.Kind, f.Capabilities, f.Roles = flagFunction.Kind, flagFunction.Capabilities, roles(flagFunction.Kind, flagFunction.Capabilities)
+		f.Kind, f.Capabilities, f.Roles = flagFunction.Kind, flagFunction.Capabilities, flagFunction.Roles
 		list = append(list, f)
 	}
 	slices.SortFunc(list, func(a, b Flag) int {

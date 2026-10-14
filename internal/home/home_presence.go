@@ -36,9 +36,9 @@ type box struct {
 
 // homePresenceFunction is what the Home presence does: home is a state, set
 // by no Command. Callers never modify it.
-var homePresenceFunction = Function{Key: "presence", Kind: "presence", Capabilities: []Capability{
+var homePresenceFunction = withRoles(Function{Key: "presence", Kind: "presence", Capabilities: []Capability{
 	{Key: "home", Label: "Home", Type: Binary, Access: Access{Observable: true}, Category: Primary},
-}}
+}})
 
 var homePresenceRef = TargetPresence(HomePresence).Ref("home")
 
@@ -105,11 +105,15 @@ func (h *Home) bindBox(b HomeBindings) {
 }
 
 // dropFromBox unbinds the Entrance doors and Signs of life drop selects,
-// reporting whether any was. Callers hold h.mu.
+// reporting whether any was. With no Entrance door left, the Signs of life go
+// too: SetHomeBindings refuses them alone. Callers hold h.mu.
 func (h *Home) dropFromBox(drop func(Target) bool) bool {
 	b := h.box.HomeBindings
 	doors := slices.DeleteFunc(slices.Clone(b.EntranceDoors), drop)
 	signs := slices.DeleteFunc(slices.Clone(b.SignsOfLife), drop)
+	if len(doors) == 0 {
+		signs = []Target{}
+	}
 	if len(doors) == len(b.EntranceDoors) && len(signs) == len(b.SignsOfLife) {
 		return false
 	}
@@ -213,22 +217,6 @@ func (h *Home) followHome(initial bool) {
 func (h *Home) homePresence() Presence {
 	b := h.box.HomeBindings
 	return Presence{ID: HomePresence, Name: "Home", Kind: homePresenceFunction.Kind, Capabilities: homePresenceFunction.Capabilities,
-		Roles:        roles(homePresenceFunction.Kind, homePresenceFunction.Capabilities),
+		Roles:        homePresenceFunction.Roles,
 		HomeBindings: &HomeBindings{EntranceDoors: append([]Target{}, b.EntranceDoors...), SignsOfLife: append([]Target{}, b.SignsOfLife...), ExitGrace: b.ExitGrace}}
-}
-
-// homePresenceTarget is the Home presence: a Command on it is refused, as
-// home is not settable.
-type homePresenceTarget struct{ h *Home }
-
-func (homePresenceTarget) target() Target                         { return TargetPresence(HomePresence) }
-func (homePresenceTarget) kind() string                           { return homePresenceFunction.Kind }
-func (homePresenceTarget) capabilities() []Capability             { return homePresenceFunction.Capabilities }
-func (homePresenceTarget) attached() bool                         { return true }
-func (homePresenceTarget) availability() Availability             { return Online }
-func (homePresenceTarget) timeout() time.Duration                 { return 0 }
-func (homePresenceTarget) transmit(Request)                       {} // never reached: accept refuses every Command
-func (x homePresenceTarget) carry(req Request, key string) string { return x.h.issue(x, req, key) }
-func (homePresenceTarget) accept(values map[string]any) error {
-	return checkValues(homePresenceFunction.Capabilities, values)
 }

@@ -201,10 +201,7 @@ func (h *Home) lookupDirect(t Target) (direct, bool) {
 			return flagTarget{h, t.Flag()}, true
 		}
 	case presenceKind:
-		if t.Presence() == HomePresence {
-			return homePresenceTarget{h}, true
-		}
-		if _, ok := h.presences[t.Presence()]; ok {
+		if _, ok := h.presences[t.Presence()]; ok || t.Presence() == HomePresence {
 			return presenceTarget{h, t.Presence()}, true
 		}
 	case deviceKind:
